@@ -9,9 +9,10 @@ import shutil
 from pathlib import Path
 import httpx
 
-SERVER_MODS_DIR = Path("D:/Dev/servidor-minecraft/server/mods")
-POINTBLANK_DIR = Path("D:/Dev/servidor-minecraft/server/pointblank")
-CLIENT_ONLY_DIR = Path("D:/Dev/servidor-minecraft/server/client_only_mods")
+ROOT = Path(__file__).resolve().parent.parent
+SERVER_MODS_DIR = ROOT / "server" / "mods"
+POINTBLANK_DIR = ROOT / "server" / "pointblank"
+CLIENT_ONLY_DIR = ROOT / "server" / "client_only_mods"
 
 # Slugs de Modrinth para mods de SERVIDOR (compartidos o server-side)
 MODRINTH_SERVER_MODS = [
