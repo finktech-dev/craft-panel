@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es" class="bg-zinc-950">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}">{% endif %}
+  <title>{% block title %}Servidor local{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/panel-v2.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          boxShadow: { glow: '0 0 0 1px rgba(16,185,129,.18), 0 12px 32px rgba(0,0,0,.28)' }
+        }
+      }
+    }
+  </script>
+  <script defer src="/static/js/app.js"></script>
+</head>
+<body data-page="{{ current_page }}" class="panel-shell min-h-screen bg-zinc-950 font-sans text-zinc-100 antialiased">
+  <a class="skip-link" href="#main-content">Saltar al contenido</a>
+  <div id="toast-region" class="pointer-events-none fixed right-4 top-4 z-[70] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3" aria-live="polite"></div>
+  {% if is_admin %}
+    <header class="panel-topbar sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/90 px-4 backdrop-blur lg:px-8">
+      <div class="mx-auto flex min-h-16 max-w-7xl items-center gap-3">
+        <a href="/" class="flex min-h-11 items-center gap-2 rounded-lg px-2 text-zinc-100 hover:bg-zinc-900" aria-label="Ir al inicio"><span class="brand-mark grid h-8 w-8 place-items-center rounded-lg text-sm" aria-hidden="true">◆</span><span class="hidden font-semibold sm:inline">Servidor local</span></a>
+        <nav class="topnav-links hidden items-center gap-1 lg:flex" aria-label="Navegación principal"><a href="/" class="topnav-link {% if current_page == 'dashboard' %}topnav-link-active{% endif %}">Inicio</a><a href="/console" class="topnav-link {% if current_page == 'console' %}topnav-link-active{% endif %}">Actividad</a><a href="/worlds" class="topnav-link {% if current_page == 'worlds' %}topnav-link-active{% endif %}">Mundo</a><a href="/mods" class="topnav-link {% if current_page == 'mods' %}topnav-link-active{% endif %}">Mods</a><a href="/backups" class="topnav-link {% if current_page == 'backups' %}topnav-link-active{% endif %}">Copias</a><a href="/administration" class="topnav-link {% if current_page == 'administration' %}topnav-link-active{% endif %}">Configurar</a></nav>
+        <div class="ml-auto flex items-center gap-2"><span id="nav-dev-badge" class="hidden items-center gap-1.5 rounded-full border border-purple-500/50 bg-purple-950/70 px-2.5 py-1 text-xs font-bold text-purple-300"><span>🛠️</span><span class="hidden sm:inline">MODO DEV</span></span><div id="server-status" class="hidden items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-300 sm:flex" aria-live="polite"><span class="h-2.5 w-2.5 rounded-full bg-amber-400" aria-hidden="true"></span><span>Verificando estado…</span></div><button id="logout-button" type="button" class="min-h-11 rounded-lg px-3 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100">Salir</button><button id="topnav-toggle" type="button" class="grid h-11 w-11 place-items-center rounded-lg text-zinc-300 hover:bg-zinc-900 lg:hidden" aria-label="Abrir navegación" aria-expanded="false" aria-controls="mobile-nav">☰</button></div>
+      </div>
+      <div id="mobile-nav" class="hidden border-t border-zinc-800 py-3 lg:hidden"><nav class="grid grid-cols-2 gap-1" aria-label="Navegación móvil"><a href="/" class="topnav-link">Inicio</a><a href="/console" class="topnav-link">Actividad</a><a href="/worlds" class="topnav-link">Mundo</a><a href="/mods" class="topnav-link">Mods</a><a href="/backups" class="topnav-link">Copias</a><a href="/administration" class="topnav-link">Configurar</a></nav></div>
+    </header>
+    <main id="main-content" class="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">  {% else %}
+    <main id="main-content" class="grid min-h-screen place-items-center p-4">
+  {% endif %}
+  {% block content %}{% endblock %}
+  {% if is_admin %}
+    </main>
+  {% else %}
+    </main>
+  {% endif %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

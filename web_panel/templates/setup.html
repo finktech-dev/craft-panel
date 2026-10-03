@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Preparar el servidor · Panel Minecraft{% endblock %}
+{% block content %}
+<section class="mx-auto max-w-5xl" aria-labelledby="setup-title">
+  <div class="mb-8 flex flex-col gap-5 border-b border-zinc-800 pb-7 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-sm font-semibold text-emerald-300">Primera vez o revisión rápida</p>
+      <h1 id="setup-title" class="mt-1 text-3xl font-bold tracking-tight text-zinc-50">Prepará tu servidor</h1>
+      <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Una vista simple para saber si la computadora está lista antes de invitar amigos. Esta pantalla sólo revisa la configuración: no inicia, detiene ni modifica tu servidor.</p>
+    </div>
+    <a href="/" class="v2-button inline-flex items-center justify-center border border-zinc-700 bg-zinc-900 text-sm text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800">Volver al inicio</a>
+  </div>
+
+  <div class="mb-6 flex items-start gap-3 rounded-xl border border-sky-400/20 bg-sky-400/5 p-4 text-sm text-sky-100">
+    <span class="mt-0.5 text-lg" aria-hidden="true">◌</span>
+    <div><p class="font-semibold">Revisión segura</p><p class="mt-1 text-sky-100/75">El panel detecta el sistema operativo, Java, la instalación de Minecraft y la protección de acceso. Nunca lee cuentas, contraseñas, mundos ni copias de seguridad.</p></div>
+  </div>
+
+  <div id="setup-loading" class="grid gap-4 sm:grid-cols-2" aria-live="polite">
+    {% for label in ["Computadora", "Java", "Minecraft", "Acceso de amigos"] %}
+    <article class="v2-card animate-pulse p-5"><p class="text-sm font-medium text-zinc-400">{{ label }}</p><div class="mt-4 h-6 w-3/4 rounded bg-zinc-800"></div><div class="mt-3 h-4 w-full rounded bg-zinc-900"></div></article>
+    {% endfor %}
+  </div>
+
+  <div id="setup-results" class="hidden">
+    <div class="grid gap-4 sm:grid-cols-2" aria-label="Estado de preparación">
+      <article class="v2-card p-5" data-check="system"><div class="flex items-start justify-between gap-4"><div><p class="text-sm font-medium text-zinc-400">Computadora</p><h2 class="mt-2 text-lg font-bold text-zinc-100" data-title>—</h2></div><span data-icon class="grid h-9 w-9 place-items-center rounded-full bg-zinc-800 text-zinc-300" aria-hidden="true">◌</span></div><p class="mt-3 text-sm leading-6 text-zinc-400" data-message>—</p></article>
+      <article class="v2-card p-5" data-check="java"><div class="flex items-start justify-between gap-4"><div><p class="text-sm font-medium text-zinc-400">Java</p><h2 class="mt-2 text-lg font-bold text-zinc-100" data-title>—</h2></div><span data-icon class="grid h-9 w-9 place-items-center rounded-full bg-zinc-800 text-zinc-300" aria-hidden="true">◌</span></div><p class="mt-3 text-sm leading-6 text-zinc-400" data-message>—</p><p class="mt-3 break-all font-mono text-xs text-zinc-500" data-detail></p></article>
+      <article class="v2-card p-5" data-check="minecraft"><div class="flex items-start justify-between gap-4"><div><p class="text-sm font-medium text-zinc-400">Servidor de Minecraft</p><h2 class="mt-2 text-lg font-bold text-zinc-100" data-title>—</h2></div><span data-icon class="grid h-9 w-9 place-items-center rounded-full bg-zinc-800 text-zinc-300" aria-hidden="true">◌</span></div><p class="mt-3 text-sm leading-6 text-zinc-400" data-message>—</p><p class="mt-3 break-all font-mono text-xs text-zinc-500" data-detail></p></article>
+      <article class="v2-card p-5" data-check="accounts"><div class="flex items-start justify-between gap-4"><div><p class="text-sm font-medium text-zinc-400">Acceso de amigos</p><h2 class="mt-2 text-lg font-bold text-zinc-100" data-title>—</h2></div><span data-icon class="grid h-9 w-9 place-items-center rounded-full bg-zinc-800 text-zinc-300" aria-hidden="true">◌</span></div><p class="mt-3 text-sm leading-6 text-zinc-400" data-message>—</p></article>
+    </div>
+
+    <section class="v2-card mt-6 p-5 sm:p-6" aria-labelledby="launch-title">
+      <p class="text-sm font-semibold text-emerald-300">Paso final</p>
+      <h2 id="launch-title" class="mt-1 text-xl font-bold text-zinc-100">Elegí la memoria y empezá a jugar</h2>
+      <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Playit prepara el acceso para amigos de forma predeterminada. Sólo vinculás tu cuenta una vez; el panel descarga y arranca el agente cuando iniciás.</p>
+      <div class="mt-5 grid gap-4 sm:grid-cols-2">
+        <label class="block" for="launch-ram"><span class="text-sm font-semibold text-zinc-200">RAM para Minecraft</span><select id="launch-ram" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-zinc-100"></select><span id="launch-ram-hint" class="mt-2 block text-xs text-zinc-500"></span></label>
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-4"><input id="local-only" type="checkbox" class="mt-1 h-4 w-4 accent-amber-400"><span><span class="block text-sm font-semibold text-zinc-200">Solo red local</span><span class="mt-1 block text-xs leading-5 text-zinc-500">Desactiva Playit. Usalo sólo si nadie se va a conectar desde otra red.</span></span></label>
+      </div>
+      <div id="playit-connect" class="mt-4 rounded-lg border border-sky-400/20 bg-sky-400/5 p-4"><p class="text-sm font-semibold text-sky-100">Conectá Playit una sola vez</p><p class="mt-1 text-xs leading-5 text-sky-100/70">Pegá la clave de agente de tu cuenta. Nunca se muestra ni se sube al repositorio.</p><div class="mt-3 flex flex-col gap-2 sm:flex-row"><input id="playit-secret" type="password" autocomplete="off" placeholder="Clave de agente de Playit" class="min-h-11 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"><button id="connect-playit" type="button" class="v2-button border border-sky-400/30 bg-sky-400/10 text-sky-100 hover:bg-sky-400/20">Conectar Playit</button></div></div>
+      <div class="mt-5 flex flex-col gap-3 sm:flex-row"><button id="save-launch-ram" type="button" class="v2-button border border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800">Guardar preferencias</button><button id="launch-server" type="button" class="v2-button bg-emerald-400 text-emerald-950 hover:bg-emerald-300">Preparar y encender</button></div><p id="launch-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p>
+    </section>
+    <section class="v2-card mt-6 p-5 sm:p-6" aria-labelledby="next-steps-title">
+      <p class="text-sm font-semibold text-emerald-300">Para seguir</p>
+      <h2 id="next-steps-title" class="mt-1 text-xl font-bold text-zinc-100">Un servidor fácil de compartir</h2>
+      <ol class="mt-5 grid gap-4 md:grid-cols-3">
+        <li class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4"><span class="text-xs font-bold text-emerald-300">01</span><p class="mt-2 font-semibold text-zinc-200">Confirmá lo esencial</p><p class="mt-1 text-sm leading-6 text-zinc-500">Java y el servidor deben aparecer como listos antes de iniciar.</p></li>
+        <li class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4"><span class="text-xs font-bold text-emerald-300">02</span><p class="mt-2 font-semibold text-zinc-200">Protegé a tu grupo</p><p class="mt-1 text-sm leading-6 text-zinc-500">Si no usás cuentas online, activá una lista blanca antes de compartir una dirección pública.</p></li>
+        <li class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4"><span class="text-xs font-bold text-emerald-300">03</span><p class="mt-2 font-semibold text-zinc-200">Compartí con Playit.gg</p><p class="mt-1 text-sm leading-6 text-zinc-500">Configurá el túnel desde Administración y mandá la dirección que muestre el panel.</p></li>
+      </ol>
+    </section>
+  </div>
+
+  <div id="setup-error" class="hidden rounded-xl border border-rose-400/30 bg-rose-950/30 p-5 text-sm text-rose-100" role="alert"><p class="font-semibold">No se pudo hacer la revisión.</p><p class="mt-1 text-rose-100/80">Probá actualizar la página. El servidor no fue modificado.</p></div>
+</section>
+{% endblock %}
+{% block scripts %}<script defer src="/static/js/setup.js"></script>{% endblock %}

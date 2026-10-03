@@ -1,0 +1,466 @@
+{% extends "base.html" %}
+{% block title %}Mundos y Ajustes · Panel Minecraft{% endblock %}
+{% block content %}
+<section class="space-y-6" aria-labelledby="worlds-title">
+  <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-sm font-medium text-emerald-300">Gestión del Servidor</p>
+      <h1 id="worlds-title" class="mt-1 text-2xl font-bold sm:text-3xl">Mundos y Configuración</h1>
+      <p class="mt-2 text-sm text-zinc-400">Administrá tus mundos, modificá server.properties con ayuda paso a paso y gestioná accesos.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button id="tab-btn-worlds" class="tab-btn active rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950">🌍 Mundos</button>
+      <button id="tab-btn-props" class="tab-btn rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-300 hover:border-emerald-400/60">⚙ server.properties</button>
+      <button id="tab-btn-whitelist" class="tab-btn rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-300 hover:border-emerald-400/60">🛡 Whitelist & Waypoints</button>
+      <button id="tab-btn-advancements" class="tab-btn rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-300 hover:border-emerald-400/60">🏆 Logros & Progresos</button>
+      <button id="tab-btn-luckperms" class="tab-btn rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-300 hover:border-emerald-400/60">⭐ LuckPerms & Mods</button>
+    </div>
+  </header>
+
+  <!-- SECCIÓN 1: GESTOR DE MUNDOS -->
+  <div id="tab-content-worlds" class="space-y-6">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+      <div>
+        <h2 class="text-lg font-semibold">Mundos disponibles en el servidor</h2>
+        <p class="mt-1 text-xs text-zinc-400">Cambiá de mundo activo con 1 clic o creá una nueva aventura con semilla personalizada.</p>
+      </div>
+      <button id="open-create-world-modal" class="rounded-lg bg-emerald-400 px-4 py-2 text-sm font-bold text-zinc-950 hover:bg-emerald-300">+ Crear nuevo mundo</button>
+    </div>
+
+    <div id="worlds-grid" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <!-- Se llena dinámicamente con las tarjetas de mundos -->
+      <div class="p-8 text-center text-sm text-zinc-500 col-span-full">Cargando mundos...</div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN 2: EDITOR DE SERVER.PROPERTIES -->
+  <div id="tab-content-props" class="hidden space-y-6">
+    <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold">Ajustes visuales de server.properties</h2>
+          <p class="mt-1 text-xs text-zinc-400">Cada opción cuenta con su botón <span class="inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40">?</span> explicando qué hace y el valor recomendado.</p>
+        </div>
+        <button id="save-properties-btn" class="rounded-lg bg-emerald-400 px-5 py-2.5 text-sm font-bold text-zinc-950 hover:bg-emerald-300 shadow-lg transition">Guardar cambios</button>
+      </div>
+
+      <!-- Previsualizador de MOTD -->
+      <div class="mt-5 rounded-lg border border-zinc-800 bg-black/60 p-4">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-400">Vista previa del mensaje en la lista de servidores (MOTD)</label>
+        <div id="motd-preview" class="mt-2 rounded bg-zinc-950 p-3 font-mono text-sm leading-relaxed border border-zinc-800">
+          <!-- Preview renderizado -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtro de categorías de server.properties -->
+    <div id="props-categories-nav" class="flex flex-wrap gap-2 border-b border-zinc-800 pb-3">
+      <!-- Botones de categoría -->
+    </div>
+
+    <div id="props-container" class="space-y-4">
+      <!-- Se llena dinámicamente con los campos y tooltips '?' -->
+    </div>
+  </div>
+
+  <!-- SECCIÓN 3: WHITELIST Y WAYPOINTS -->
+  <div id="tab-content-whitelist" class="hidden space-y-6">
+    <div class="grid gap-6 lg:grid-cols-2">
+      <!-- Tarjeta Whitelist -->
+      <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 sm:p-6 space-y-5">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-semibold">Lista Blanca (Whitelist)</h2>
+              <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-tooltip="Si la Whitelist está activa, solo los jugadores que agregues a esta lista podrán entrar al servidor. Todos los demás serán bloqueados al intentar conectarse.">?</button>
+            </div>
+            <p class="mt-1 text-xs text-zinc-400">Gestioná qué amigos tienen acceso al servidor.</p>
+          </div>
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input id="whitelist-toggle" type="checkbox" class="peer sr-only">
+            <div class="h-6 w-11 rounded-full bg-zinc-800 peer-checked:bg-emerald-400 peer-focus:outline-none after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:bg-zinc-100 after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+          </label>
+        </div>
+
+        <form id="whitelist-add-form" class="flex gap-2">
+          <input id="whitelist-player-input" type="text" placeholder="Nombre de usuario del amigo" class="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-400 focus:outline-none" required pattern="^[a-zA-Z0-9_]{3,16}$">
+          <button type="submit" class="rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300">Agregar</button>
+        </form>
+
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Jugadores autorizados (<span id="whitelist-count">0</span>)</p>
+          <div id="whitelist-players-list" class="mt-3 grid gap-2 sm:grid-cols-2 max-h-72 overflow-y-auto pr-1">
+            <!-- Items de jugadores con avatar -->
+          </div>
+        </div>
+      </article>
+
+      <!-- Tarjeta Waypoints y Teletransporte -->
+      <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 sm:p-6 space-y-5">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-semibold">Marcadores y Teletransporte</h2>
+              <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-tooltip="Guardá lugares clave como el Coliseo Romano, bases de amigos o granjas para teletransportar a todos o a un jugador con 1 solo clic.">?</button>
+            </div>
+            <p class="mt-1 text-xs text-zinc-400">Teletransportá jugadores inmediatamente por consola.</p>
+          </div>
+          <button id="open-create-waypoint-btn" class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:border-emerald-400/60">+ Nuevo marcador</button>
+        </div>
+
+        <div id="waypoints-list" class="space-y-3 max-h-96 overflow-y-auto pr-1">
+          <!-- Lista de waypoints -->
+        </div>
+      </article>
+    </div>
+  </div>
+
+  <!-- SECCIÓN 4: LUCKPERMS Y MODS -->
+  <div id="tab-content-luckperms" class="hidden space-y-6">
+    <div class="grid gap-6 lg:grid-cols-2">
+      <!-- Editor Web de LuckPerms -->
+      <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 sm:p-6 space-y-4">
+        <div class="flex items-center gap-3">
+          <div class="grid h-10 w-10 place-items-center rounded-xl bg-amber-400/15 text-xl text-amber-300 ring-1 ring-amber-400/30">⭐</div>
+          <div>
+            <h2 class="text-lg font-semibold">Editor Web Oficial de LuckPerms</h2>
+            <p class="text-xs text-zinc-400">Gestioná rangos, prefijos y permisos visualmente en luckperms.net.</p>
+          </div>
+        </div>
+
+        <p class="text-sm text-zinc-300">Hacé clic abajo para ejecutar <code class="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-amber-300">/lp editor</code> en el servidor. El panel obtendrá tu enlace seguro único para abrir el editor visual.</p>
+
+        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+          <button id="btn-luckperms-editor" class="rounded-lg bg-amber-400 px-4 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-300 transition">Generar enlace del editor web</button>
+          <a id="link-luckperms-editor" href="#" target="_blank" class="hidden items-center justify-center rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-2.5 text-sm font-semibold text-amber-200 hover:bg-amber-400/20">Abrir editor en pestaña nueva ↗</a>
+        </div>
+
+        <p id="luckperms-status-msg" class="text-xs text-zinc-500"></p>
+      </article>
+
+      <!-- Comandos Rápidos de Roles y Permisos -->
+      <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 sm:p-6 space-y-4">
+        <h2 class="text-lg font-semibold">Acciones rápidas de LuckPerms</h2>
+        <p class="text-xs text-zinc-400">Asigná rangos y permisos sin escribir la sintaxis completa.</p>
+
+        <div class="space-y-3">
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input id="lp-user-target" placeholder="Nombre del jugador" class="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100">
+            <input id="lp-group-target" placeholder="Grupo (ej: admin, vip)" class="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100">
+            <button id="btn-lp-assign-group" class="rounded-lg bg-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-200 hover:bg-zinc-700">Asignar grupo</button>
+          </div>
+
+          <div class="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+            <p class="text-xs font-semibold text-zinc-400">Configuración de mods y plugins</p>
+            <p class="mt-1 text-xs text-zinc-500">Para editar archivos <code class="text-zinc-300">luckperms.conf</code>, <code class="text-zinc-300">pointblank</code>, o <code class="text-zinc-300">create</code>, utilizá el editor de mods del panel.</p>
+            <a href="/administration" class="mt-3 inline-block rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-400/20">Ir al editor de archivos de mods ➔</a>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+
+  <!-- SECCIÓN 5: GESTOR DE LOGROS Y PROGRESOS -->
+  <div id="tab-content-advancements" class="hidden space-y-6">
+    <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 class="text-lg font-semibold">Gestor de Logros y Progresos</h2>
+            <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-title="Gestor de Logros" data-tooltip="Permite reiniciar todos los logros de un jugador o remover un logro específico. Si el servidor está encendido, ejecuta /advancement por consola; si está apagado, modifica directamente el archivo del mundo sin corromperlo." data-rec="Usar para desbugear logros o reiniciar el progreso de un amigo.">?</button>
+          </div>
+          <p class="mt-1 text-xs text-zinc-400">Seleccioná un jugador para inspeccionar sus logros completados, reiniciarlos o quitar logros específicos.</p>
+        </div>
+
+        <!-- Selector de Mundo y Jugador -->
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-1.5">
+            <label for="adv-world-select" class="text-xs font-semibold text-zinc-400">Mundo:</label>
+            <select id="adv-world-select" class="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-emerald-300 font-semibold min-w-[9rem]">
+              <!-- Se llena dinámicamente con los mundos -->
+            </select>
+            <button type="button" class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-title="Elegir mundo" data-tooltip="Podés elegir cualquier mundo del servidor (esté o no activo). Si el mundo no está activo, el panel edita directamente los archivos JSON de logros en el disco sin necesidad de activarlo ni reiniciar el servidor.">?</button>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <label for="adv-player-select" class="text-xs font-semibold text-zinc-400">Jugador:</label>
+            <select id="adv-player-select" class="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 font-semibold min-w-[10rem]">
+              <!-- Se llena dinámicamente -->
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarjeta resumen del jugador seleccionado -->
+      <div id="adv-player-summary" class="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+        <div class="flex items-center gap-3">
+          <img id="adv-player-avatar" src="" alt="Avatar" class="h-12 w-12 rounded-lg border border-zinc-700 bg-zinc-900 object-cover">
+          <div>
+            <h3 id="adv-player-name" class="font-bold text-base text-zinc-100">Seleccionando jugador...</h3>
+            <p class="text-xs text-zinc-400 mt-0.5">
+              🏆 <span id="adv-total-count" class="font-bold text-emerald-300">0</span> logros completados · 
+              📜 <span id="adv-recipes-count" class="font-bold text-cyan-300">0</span> recetas
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btn-adv-revoke-all" class="rounded-lg bg-rose-500/20 border border-rose-400/40 px-3 py-1.5 text-xs font-bold text-rose-200 hover:bg-rose-500/30 transition">
+            ⚠ Reiniciar TODOS los logros
+          </button>
+          <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-rose-500/20 text-[10px] font-bold text-rose-300 ring-1 ring-rose-400/40" data-title="Reiniciar TODOS los logros" data-tooltip="Ejecuta /advancement revoke <jugador> everything. Borra todos los progresos de Vanilla y de todos los mods para el jugador seleccionado. Si el servidor está apagado, limpia su archivo JSON en advancements/.">?</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTONES CON COMANDOS PRELLENADOS -->
+    <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-3">
+      <div class="flex items-center gap-2">
+        <h3 class="text-sm font-semibold text-zinc-200">Acciones y Comandos Rápidos Prellenados</h3>
+        <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-title="Comandos Prellenados" data-tooltip="Botones de 1 clic configurados con los logros más comunes de Vanilla y mods. Al hacer clic, se ejecuta el comando de consola o se aplica inmediatamente.">?</button>
+      </div>
+
+      <div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+        <!-- Botón 1: Recetas -->
+        <div class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+          <div>
+            <p class="text-xs font-bold text-zinc-200">Reiniciar solo recetas de crafteo</p>
+            <p class="text-[11px] text-zinc-500">Borra las recetas desbloqueadas en el libro</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-400 ring-1 ring-zinc-700" data-title="Reiniciar recetas" data-tooltip="Ejecuta: /advancement revoke <jugador> from minecraft:recipes/root. Obliga al jugador a volver a descubrir las recetas de mods y de vanilla.">?</button>
+            <button data-adv-quick="revoke:minecraft:recipes/root" class="rounded bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-200 hover:bg-zinc-700">Aplicar</button>
+          </div>
+        </div>
+
+        <!-- Botón 2: Dragón -->
+        <div class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+          <div>
+            <p class="text-xs font-bold text-zinc-200">Quitar logro del Dragón del End</p>
+            <p class="text-[11px] text-zinc-500">Permite volver a completar "Liberar el End"</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-400 ring-1 ring-zinc-700" data-title="Quitar logro Dragón" data-tooltip="Ejecuta: /advancement revoke <jugador> only minecraft:end/kill_dragon. Remueve el logro de haber matado al Ender Dragón.">?</button>
+            <button data-adv-quick="revoke:minecraft:end/kill_dragon" class="rounded bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-200 hover:bg-zinc-700">Aplicar</button>
+          </div>
+        </div>
+
+        <!-- Botón 3: Netherite -->
+        <div class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+          <div>
+            <p class="text-xs font-bold text-zinc-200">Quitar logro de Netherite</p>
+            <p class="text-[11px] text-zinc-500">"Cúbreme de escombros"</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-400 ring-1 ring-zinc-700" data-title="Quitar logro Netherite" data-tooltip="Ejecuta: /advancement revoke <jugador> only minecraft:nether/netherite_armor. Quita el logro de conseguir armadura de inframundita completa.">?</button>
+            <button data-adv-quick="revoke:minecraft:nether/netherite_armor" class="rounded bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-200 hover:bg-zinc-700">Aplicar</button>
+          </div>
+        </div>
+
+        <!-- Botón 4: Cataclysm Root -->
+        <div class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+          <div>
+            <p class="text-xs font-bold text-zinc-200">Reiniciar logros de Cataclysm</p>
+            <p class="text-[11px] text-zinc-500">Jefes y mazmorras del mod Cataclysm</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-400 ring-1 ring-zinc-700" data-title="Cataclysm" data-tooltip="Ejecuta: /advancement revoke <jugador> from cataclysm:root. Quita todos los logros de jefes vencidos en L.End_Cataclysm.">?</button>
+            <button data-adv-quick="revoke:cataclysm:root" class="rounded bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-200 hover:bg-zinc-700">Aplicar</button>
+          </div>
+        </div>
+
+        <!-- Botón 5: Otorgar todo -->
+        <div class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+          <div>
+            <p class="text-xs font-bold text-emerald-300">Desbloquear TODOS los logros</p>
+            <p class="text-[11px] text-zinc-500">Otorga el 100% de logros al jugador</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-400 ring-1 ring-zinc-700" data-title="Desbloquear todo" data-tooltip="Ejecuta: /advancement grant <jugador> everything. Desbloquea todos los progresos disponibles de Vanilla y mods. Requiere servidor encendido.">?</button>
+            <button data-adv-quick="grant:everything" class="rounded bg-emerald-400 px-2.5 py-1 text-xs font-bold text-zinc-950 hover:bg-emerald-300">Desbloquear</button>
+          </div>
+        </div>
+
+        <!-- Formulario por ID manual -->
+        <div class="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+          <div class="flex items-center gap-1.5">
+            <p class="text-xs font-bold text-zinc-200">Acción por ID personalizado</p>
+            <button class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-400 ring-1 ring-zinc-700" data-title="Logro personalizado" data-tooltip="Ingresá cualquier ID de logro como minecraft:story/mine_stone, create:root, o undergarden:undergarden/root.">?</button>
+          </div>
+          <div class="mt-2 flex gap-1.5">
+            <input id="adv-custom-id" placeholder="ej: minecraft:story/mine_stone" class="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100">
+            <button id="btn-adv-custom-revoke" class="rounded bg-rose-500/20 px-2 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/30">Quitar</button>
+            <button id="btn-adv-custom-grant" class="rounded bg-emerald-500/20 px-2 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/30">Dar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LISTA DE LOGROS COMPLETADOS -->
+    <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 class="text-base font-semibold">Logros completados por el jugador</h3>
+          <p class="text-xs text-zinc-400">Tocá "Quitar logro" en cualquiera de ellos para removerlo individualmente.</p>
+        </div>
+        <input id="adv-search-input" type="search" placeholder="Buscar logro por nombre o mod..." class="w-full sm:w-72 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-100">
+      </div>
+
+      <div id="adv-list-container" class="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+        <div class="p-8 text-center text-xs text-zinc-500">Cargando logros del jugador...</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MODAL CREAR NUEVO MUNDO -->
+<dialog id="modal-create-world" class="m-auto w-[min(94vw,36rem)] rounded-xl border border-zinc-700 bg-zinc-950 p-6 text-zinc-100 shadow-2xl backdrop:bg-black/75">
+  <div class="flex items-start justify-between">
+    <div>
+      <h3 class="text-lg font-bold">Crear nuevo mundo</h3>
+      <p class="mt-1 text-xs text-zinc-400">Configurá los parámetros iniciales de generación del mundo.</p>
+    </div>
+    <button id="close-create-world-modal" class="text-zinc-400 hover:text-zinc-100 text-xl font-bold">×</button>
+  </div>
+
+  <form id="create-world-form" class="mt-5 space-y-4">
+    <div>
+      <div class="flex items-center gap-1.5">
+        <label for="new-world-name" class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Nombre de la carpeta del mundo</label>
+        <button type="button" class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-tooltip="Nombre único de la carpeta en server/ donde se guardarán todos los chunks y dimensiones. Solo letras, números y guiones.">?</button>
+      </div>
+      <input id="new-world-name" required pattern="^[a-zA-Z0-9_\-]+$" placeholder="ej: mundo_aventura_2" class="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+    </div>
+
+    <div>
+      <div class="flex items-center gap-1.5">
+        <label for="new-world-seed" class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Semilla (Seed) - Opcional</label>
+        <button type="button" class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-tooltip="Código numérico o de texto que determina el mapa. Si lo dejás vacío, Minecraft elegirá una semilla aleatoria.">?</button>
+      </div>
+      <input id="new-world-seed" placeholder="ej: -43928193821 o dejalo vacío" class="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <div class="flex items-center gap-1.5">
+          <label for="new-world-gamemode" class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Modo de juego</label>
+          <button type="button" class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-tooltip="Modo por defecto para los nuevos jugadores que entren.">?</button>
+        </div>
+        <select id="new-world-gamemode" class="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+          <option value="survival">Supervivencia</option>
+          <option value="creative">Creativo</option>
+          <option value="adventure">Aventura</option>
+          <option value="spectator">Espectador</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="flex items-center gap-1.5">
+          <label for="new-world-difficulty" class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Dificultad</label>
+          <button type="button" class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-tooltip="Dificultad de los combates contra jefes de mods y daño recibido.">?</button>
+        </div>
+        <select id="new-world-difficulty" class="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+          <option value="normal" selected>Normal</option>
+          <option value="easy">Fácil</option>
+          <option value="hard">Difícil</option>
+          <option value="peaceful">Pacífico</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-4 pt-2">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input id="new-world-structures" type="checkbox" checked class="h-4 w-4 accent-emerald-400">
+        <span class="text-sm text-zinc-300">Generar estructuras (aldeas, mazmorras)</span>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input id="new-world-hardcore" type="checkbox" class="h-4 w-4 accent-emerald-400">
+        <span class="text-sm text-zinc-300">Modo Hardcore</span>
+      </label>
+    </div>
+
+    <div class="mt-6 flex justify-end gap-3 border-t border-zinc-800 pt-4">
+      <button type="button" id="cancel-create-world" class="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-900">Cancelar</button>
+      <button type="submit" class="rounded-lg bg-emerald-400 px-4 py-2 text-sm font-bold text-zinc-950 hover:bg-emerald-300">Crear y Activar Mundo</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- MODAL CREAR WAYPOINT -->
+<dialog id="modal-create-waypoint" class="m-auto w-[min(94vw,32rem)] rounded-xl border border-zinc-700 bg-zinc-950 p-6 text-zinc-100 shadow-2xl backdrop:bg-black/75">
+  <div class="flex items-start justify-between">
+    <h3 class="text-lg font-bold">Nuevo marcador de teletransporte</h3>
+    <button id="close-create-waypoint-modal" class="text-zinc-400 hover:text-zinc-100 text-xl font-bold">×</button>
+  </div>
+
+  <form id="create-waypoint-form" class="mt-5 space-y-4">
+    <div>
+      <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Nombre del lugar</label>
+      <input id="wp-name" required placeholder="ej: Base Subterránea" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+    </div>
+
+    <div class="grid grid-cols-3 gap-2">
+      <div>
+        <label class="text-xs font-semibold text-zinc-400">Coord X</label>
+        <input id="wp-x" type="number" step="0.5" required placeholder="0" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-zinc-400">Coord Y (Altura)</label>
+        <input id="wp-y" type="number" step="0.5" required placeholder="70" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-zinc-400">Coord Z</label>
+        <input id="wp-z" type="number" step="0.5" required placeholder="0" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+      </div>
+    </div>
+
+    <div>
+      <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Dimensión</label>
+      <select id="wp-dim" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+        <option value="minecraft:overworld">Overworld (Mundo normal)</option>
+        <option value="minecraft:the_nether">The Nether (Inframundo)</option>
+        <option value="minecraft:the_end">The End (El Fin)</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Descripción (Opcional)</label>
+      <input id="wp-desc" placeholder="ej: Casa y cofres principales" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+    </div>
+
+    <div class="mt-6 flex justify-end gap-3 border-t border-zinc-800 pt-4">
+      <button type="button" id="cancel-create-waypoint" class="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-900">Cancelar</button>
+      <button type="submit" class="rounded-lg bg-emerald-400 px-4 py-2 text-sm font-bold text-zinc-950 hover:bg-emerald-300">Guardar Marcador</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- MODAL POPOVER PARA TOOLTIP EXPLICATIVO '?' -->
+<dialog id="modal-tooltip-info" class="m-auto w-[min(90vw,28rem)] rounded-xl border border-emerald-500/40 bg-zinc-950 p-5 text-zinc-100 shadow-2xl backdrop:bg-black/75">
+  <div class="flex items-start justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <span class="grid h-6 w-6 place-items-center rounded-full bg-emerald-400/20 text-xs font-bold text-emerald-300 ring-1 ring-emerald-400/40">?</span>
+      <h4 id="tooltip-title" class="font-semibold text-sm text-emerald-200">Explicación del ajuste</h4>
+    </div>
+    <button id="close-tooltip-modal" class="text-zinc-400 hover:text-zinc-100 text-lg font-bold leading-none">×</button>
+  </div>
+  <div class="mt-3 space-y-3 text-xs leading-relaxed text-zinc-300">
+    <div>
+      <p class="font-semibold text-zinc-400 uppercase tracking-wider text-[10px]">¿Qué es?</p>
+      <p id="tooltip-desc" class="mt-1 text-zinc-200"></p>
+    </div>
+    <div id="tooltip-rec-box" class="rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
+      <p class="font-semibold text-emerald-300 text-[10px] uppercase tracking-wider">💡 Valor recomendado</p>
+      <p id="tooltip-rec" class="mt-1 text-emerald-100 font-medium"></p>
+    </div>
+    <div id="tooltip-impact-box">
+      <p class="font-semibold text-zinc-400 uppercase tracking-wider text-[10px]">Impacto en el servidor</p>
+      <p id="tooltip-impact" class="mt-1 text-zinc-400"></p>
+    </div>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/worlds.js"></script>
+{% endblock %}

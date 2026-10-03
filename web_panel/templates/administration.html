@@ -1,0 +1,1304 @@
+{% extends "base.html" %}
+{% block title %}Centro de control · Panel Minecraft{% endblock %}
+{% block content %}
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<style>
+  @keyframes mc-obf-pulse {
+    0%, 100% { filter: drop-shadow(0 0 1px currentColor); opacity: 0.92; }
+    50% { filter: drop-shadow(0 0 5px currentColor); opacity: 1; }
+  }
+  .administration-page .admin-module {
+    border-color: rgb(63 63 70 / 0.9) !important;
+    background: rgb(24 24 27 / 0.86) !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  .administration-page .admin-module [class*="bg-gradient"] { background-image: none !important; }
+  .administration-page .admin-module > div:first-child { border-color: rgb(63 63 70 / 0.75); }
+  .administration-page .admin-module h2 { letter-spacing: -0.015em; }
+  .administration-page .admin-action-card { border-color: rgb(63 63 70); background: rgb(24 24 27 / 0.72); }
+  .administration-page .admin-action-card:hover { border-color: rgb(82 82 91); background: rgb(39 39 42 / 0.72); }
+  .mc-obfuscated {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    letter-spacing: 0.05em;
+    animation: mc-obf-pulse 1.2s ease-in-out infinite;
+    user-select: none;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+<section class="administration-page space-y-10" aria-labelledby="admin-title">
+  <header class="max-w-2xl">
+    <p class="text-sm font-medium text-emerald-300">Configuración</p>
+    <h1 id="admin-title" class="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Ajustá tu servidor</h1>
+    <p class="mt-3 text-sm leading-6 text-zinc-400">Empezá por lo necesario. Las herramientas técnicas quedan aparte y nunca cambian tu servidor sin que lo confirmes.</p>
+  </header>
+
+  <nav class="grid gap-3 md:grid-cols-3" aria-label="Áreas de configuración">
+    <a href="#ranks" data-luckperms-module class="admin-action-card rounded-xl border p-5 transition">
+      <p class="text-sm font-semibold text-zinc-100">Jugadores y rangos</p>
+      <p class="mt-2 text-sm leading-6 text-zinc-400">Asigná permisos y roles sin escribir comandos.</p>
+    </a>
+    <a href="#restrictions-hub" data-tab-target="items" class="nav-shortcut-tab admin-action-card rounded-xl border p-5 transition">
+      <p class="text-sm font-semibold text-zinc-100">Reglas del servidor</p>
+      <p class="mt-2 text-sm leading-6 text-zinc-400">Controlá ítems, mobs y profesiones que querés permitir.</p>
+    </a>
+    <a href="#discord" class="admin-action-card rounded-xl border p-5 transition">
+      <p class="text-sm font-semibold text-zinc-100">Avisos para el grupo</p>
+      <p class="mt-2 text-sm leading-6 text-zinc-400">Conectá Discord sólo si querés recibir notificaciones.</p>
+    </a>
+  </nav>
+
+  <details id="advanced-tools" class="rounded-xl border border-zinc-800 bg-zinc-900/40 px-5 py-4">
+    <summary class="cursor-pointer font-semibold text-zinc-200">Herramientas avanzadas</summary>
+    <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">No necesitás usar nada de esta sección para jugar. Son opciones para cuando quieras administrar el mundo con más detalle.</p>
+    <div class="mt-4 grid gap-3 md:grid-cols-3">
+      <a href="#world" class="admin-action-card rounded-xl border p-4 transition"><p class="font-semibold text-zinc-100">Mundo y jugadores</p><p class="mt-1 text-sm text-zinc-400">Reglas, moderación y ajustes del mundo.</p></a>
+      <a href="#health" class="admin-action-card rounded-xl border p-4 transition"><p class="font-semibold text-zinc-100">Rendimiento y copias</p><p class="mt-1 text-sm text-zinc-400">Revisá lag y la frecuencia de backups.</p></a>
+      <a id="worldedit-tools" href="#worldedit" data-tab-target="worldedit" class="nav-shortcut-tab admin-action-card rounded-xl border p-4 transition"><p class="font-semibold text-zinc-100">WorldEdit <span class="ml-1 text-xs font-normal text-zinc-500">opcional</span></p><p class="mt-1 text-sm text-zinc-400">Disponible sólo si instalaste WorldEdit.</p></a>
+    </div>
+  </details>
+
+  <!-- SECCIÓN GESTIÓN DE RANGOS LUCKPERMS -->
+  <section id="ranks" data-luckperms-module class="admin-module rounded-2xl border p-5 sm:p-7 transition-all">
+    <!-- Header de Rangos -->
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-5">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl sm:text-3xl">👑</span>
+          <h2 class="text-xl font-bold tracking-tight text-zinc-100 sm:text-2xl">Gestión Visual de Rangos (LuckPerms)</h2>
+          <span class="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-300 ring-1 ring-amber-500/40">1-Clic</span>
+        </div>
+        <p class="mt-1 text-sm text-zinc-400">Asigná rangos y roles a cualquier jugador al instante sin escribir comandos en la consola.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2.5">
+        <button id="btn-toggle-create-rank" type="button" class="flex items-center gap-1.5 rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition shadow-sm" title="Crear un nuevo rango o grupo personalizado">
+          <span>➕</span> Crear Rango
+        </button>
+        <button id="btn-lp-sync" type="button" class="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/90 px-3.5 py-2 text-xs font-semibold text-zinc-300 hover:bg-zinc-700 hover:text-white transition" title="Sincronizar cambios de LuckPerms">
+          <span>🔄</span> Sincronizar (/lp sync)
+        </button>
+        <button id="btn-lp-editor" type="button" class="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-3.5 py-2 text-xs font-bold text-zinc-950 hover:brightness-110 transition shadow-sm" title="Abrir editor web oficial de LuckPerms">
+          <span>🌐</span> Abrir Web Editor
+        </button>
+      </div>
+    </div>
+
+    <!-- PANEL CREAR NUEVO RANGO O ROL (COLAPSABLE) -->
+    <div id="lp-create-rank-panel" class="hidden mt-6 rounded-xl border border-emerald-500/40 bg-gradient-to-br from-emerald-950/30 via-zinc-950 to-zinc-900/90 p-5 shadow-xl transition-all">
+      <div class="flex items-center justify-between border-b border-zinc-800 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">➕</span>
+          <h3 class="font-bold text-emerald-200 text-base">Crear Nuevo Rango o Rol en Servidor</h3>
+          <span class="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">LUCKPERMS CREATOR</span>
+        </div>
+        <button id="btn-close-create-rank" type="button" class="rounded-lg bg-zinc-800 hover:bg-zinc-700 px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-200 transition">
+          ✕ Cerrar
+        </button>
+      </div>
+
+      <div class="grid gap-6 lg:grid-cols-12">
+        <!-- Formulario de Configuración -->
+        <div class="space-y-4 lg:col-span-7">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label for="lp-new-id" class="block text-xs font-bold text-zinc-300 mb-1">Identificador Único (ID):</label>
+              <input id="lp-new-id" type="text" placeholder="ej. vip, streamer, campeon" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono text-emerald-200 outline-none focus:border-emerald-400 transition" />
+              <span class="text-[10px] text-zinc-500 block mt-1">Minúsculas sin espacios (ej. vip_oro).</span>
+            </div>
+            <div>
+              <label for="lp-new-name" class="block text-xs font-bold text-zinc-300 mb-1">Nombre Visible (Display):</label>
+              <input id="lp-new-name" type="text" placeholder="ej. VIP Oro, Streamer" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100 outline-none focus:border-emerald-400 transition" />
+              <span class="text-[10px] text-zinc-500 block mt-1">Cómo se llamará en el panel web.</span>
+            </div>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label for="lp-new-type" class="block text-xs font-bold text-zinc-300 mb-1">Tipo de Rango:</label>
+              <select id="lp-new-type" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-emerald-400">
+                <option value="primary">👑 Jerarquía Principal (Rango Primario)</option>
+                <option value="secondary">✨ Rol Secundario (Cosmético / Acumulativo)</option>
+              </select>
+              <span class="text-[10px] text-zinc-500 block mt-1">La jerarquía define el rango base del jugador.</span>
+            </div>
+            <div>
+              <label for="lp-new-weight" class="block text-xs font-bold text-zinc-300 mb-1">Peso / Prioridad (Weight):</label>
+              <div class="flex items-center gap-2">
+                <input id="lp-new-weight" type="number" min="1" max="100" value="55" class="w-20 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-100 outline-none focus:border-emerald-400" />
+                <div class="flex flex-wrap gap-1">
+                  <button type="button" class="btn-quick-weight rounded bg-zinc-800 px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-emerald-300 hover:bg-zinc-700 transition" data-val="25">25</button>
+                  <button type="button" class="btn-quick-weight rounded bg-zinc-800 px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-emerald-300 hover:bg-zinc-700 transition" data-val="55">55</button>
+                  <button type="button" class="btn-quick-weight rounded bg-zinc-800 px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-emerald-300 hover:bg-zinc-700 transition" data-val="75">75</button>
+                  <button type="button" class="btn-quick-weight rounded bg-zinc-800 px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-emerald-300 hover:bg-zinc-700 transition" data-val="85">85</button>
+                  <button type="button" class="btn-quick-weight rounded bg-zinc-800 px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-emerald-300 hover:bg-zinc-700 transition" data-val="95">95</button>
+                </div>
+              </div>
+              <span class="text-[10px] text-zinc-500 block mt-1">Mayor peso = mayor prioridad en chat y TAB.</span>
+            </div>
+          </div>
+
+          <!-- Selector de Prefijo y Códigos de Color -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label for="lp-new-prefix" class="block text-xs font-bold text-zinc-300">Prefijo en Chat y TAB:</label>
+              <span class="text-[11px] text-zinc-400 font-mono">Usá códigos &amp; de Minecraft</span>
+            </div>
+            <input id="lp-new-prefix" type="text" value="&amp;6[VIP]&amp;r " placeholder="ej. &amp;6[VIP]&amp;r  o &amp;b[Mod]&amp;r " class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono text-amber-200 outline-none focus:border-emerald-400 transition" />
+            
+            <!-- Paleta de Códigos de Color Rápidos y Formatos de Minecraft -->
+            <div class="mt-2 space-y-2">
+              <!-- Fila 1: Colores Oficiales 0-F y Selector HEX RGB -->
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[10px] text-zinc-400 font-bold mr-1">Colores:</span>
+                <button type="button" data-mc-code="&amp;0" class="mc-color-btn h-5 w-5 rounded bg-black border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;0 Negro (#000000)"></button>
+                <button type="button" data-mc-code="&amp;1" class="mc-color-btn h-5 w-5 rounded bg-[#0000aa] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;1 Azul Oscuro (#0000AA)"></button>
+                <button type="button" data-mc-code="&amp;2" class="mc-color-btn h-5 w-5 rounded bg-[#00aa00] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;2 Verde Oscuro (#00AA00)"></button>
+                <button type="button" data-mc-code="&amp;3" class="mc-color-btn h-5 w-5 rounded bg-[#00aaaa] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;3 Cian Oscuro (#00AAAA)"></button>
+                <button type="button" data-mc-code="&amp;4" class="mc-color-btn h-5 w-5 rounded bg-[#aa0000] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;4 Rojo Oscuro (#AA0000)"></button>
+                <button type="button" data-mc-code="&amp;5" class="mc-color-btn h-5 w-5 rounded bg-[#aa00aa] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;5 Morado (#AA00AA)"></button>
+                <button type="button" data-mc-code="&amp;6" class="mc-color-btn h-5 w-5 rounded bg-[#ffaa00] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;6 Dorado (#FFAA00)"></button>
+                <button type="button" data-mc-code="&amp;7" class="mc-color-btn h-5 w-5 rounded bg-[#aaaaaa] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;7 Gris Claro (#AAAAAA)"></button>
+                <button type="button" data-mc-code="&amp;8" class="mc-color-btn h-5 w-5 rounded bg-[#555555] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;8 Gris Oscuro (#555555)"></button>
+                <button type="button" data-mc-code="&amp;9" class="mc-color-btn h-5 w-5 rounded bg-[#5555ff] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;9 Azul Claro (#5555FF)"></button>
+                <button type="button" data-mc-code="&amp;a" class="mc-color-btn h-5 w-5 rounded bg-[#55ff55] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;a Verde Lima (#55FF55)"></button>
+                <button type="button" data-mc-code="&amp;b" class="mc-color-btn h-5 w-5 rounded bg-[#55ffff] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;b Cian Claro (#55FFFF)"></button>
+                <button type="button" data-mc-code="&amp;c" class="mc-color-btn h-5 w-5 rounded bg-[#ff5555] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;c Rojo Claro (#FF5555)"></button>
+                <button type="button" data-mc-code="&amp;d" class="mc-color-btn h-5 w-5 rounded bg-[#ff55ff] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;d Rosa / Magenta (#FF55FF)"></button>
+                <button type="button" data-mc-code="&amp;e" class="mc-color-btn h-5 w-5 rounded bg-[#ffff55] border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;e Amarillo (#FFFF55)"></button>
+                <button type="button" data-mc-code="&amp;f" class="mc-color-btn h-5 w-5 rounded bg-white border border-zinc-700 shadow hover:scale-110 transition-transform" title="&amp;f Blanco (#FFFFFF)"></button>
+                
+                <span class="text-[10px] text-zinc-600 mx-0.5">|</span>
+                
+                <!-- Selector HEX personalizado RGB -->
+                <div class="flex items-center gap-1">
+                  <input type="color" id="mc-hex-picker" value="#ff0077" class="h-5 w-6 cursor-pointer rounded border border-zinc-700 bg-zinc-900 p-0" title="Elegir color Hex personalizado (RGB)" />
+                  <button type="button" id="btn-insert-hex" class="rounded bg-zinc-800 hover:bg-zinc-700 px-1.5 py-0.5 text-[10px] font-mono text-cyan-300 border border-zinc-700 hover:text-white transition" title="Insertar código HEX (ej: &#FF0077)">
+                    + Hex (&#)
+                  </button>
+                </div>
+              </div>
+
+              <!-- Fila 2: Formatos y Estilos de Texto (&k, &l, &m, &n, &o, &r) -->
+              <div class="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-zinc-800/80">
+                <span class="text-[10px] text-zinc-400 font-bold mr-1">Formatos:</span>
+                <!-- Letras que se mueven (Mágico &k) -->
+                <button type="button" data-mc-code="&amp;k" class="mc-color-btn rounded-md bg-purple-950/80 hover:bg-purple-900 border border-purple-500/50 px-2 py-0.5 text-[10px] font-extrabold text-purple-200 shadow-sm flex items-center gap-1.5 ring-1 ring-purple-500/40 transition hover:scale-105" title="&amp;k Mágico: Letras aleatorias que cambian sin parar a toda velocidad (Glitch / Matrix)">
+                  <span>🌀</span>
+                  <span>&amp;k Mágico</span>
+                  <span class="mc-obfuscated rounded bg-purple-900/70 px-1 font-mono text-purple-300 border border-purple-400/40" data-orig-length="3">XYZ</span>
+                </button>
+                <!-- Negrita &l -->
+                <button type="button" data-mc-code="&amp;l" class="mc-color-btn rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-0.5 text-[10px] font-black text-zinc-100 border border-zinc-700 transition" title="&amp;l Negrita (Bold)">
+                  <b>&amp;l Negrita</b>
+                </button>
+                <!-- Tachado &m -->
+                <button type="button" data-mc-code="&amp;m" class="mc-color-btn rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-0.5 text-[10px] text-zinc-300 border border-zinc-700 transition" title="&amp;m Tachado (Strikethrough)">
+                  <span class="line-through">&amp;m Tachado</span>
+                </button>
+                <!-- Subrayado &n -->
+                <button type="button" data-mc-code="&amp;n" class="mc-color-btn rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-0.5 text-[10px] text-zinc-300 border border-zinc-700 transition" title="&amp;n Subrayado (Underline)">
+                  <span class="underline">&amp;n Subrayado</span>
+                </button>
+                <!-- Cursiva &o -->
+                <button type="button" data-mc-code="&amp;o" class="mc-color-btn rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-0.5 text-[10px] text-zinc-300 border border-zinc-700 transition" title="&amp;o Cursiva (Italic)">
+                  <i class="italic">&amp;o Cursiva</i>
+                </button>
+                <!-- Reset &r -->
+                <button type="button" data-mc-code="&amp;r" class="mc-color-btn rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 border border-zinc-700 transition" title="&amp;r Restablecer todos los estilos y colores a blanco">
+                  &amp;r Reset
+                </button>
+              </div>
+
+              <!-- Fila 3: Plantillas / Efectos Rápidos -->
+              <div class="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-zinc-800/80">
+                <span class="text-[10px] text-zinc-400 font-bold mr-1">Plantillas:</span>
+                <!-- Preset Matrix &k -->
+                <button type="button" class="btn-mc-preset rounded-lg bg-zinc-950 px-2.5 py-1 text-[10px] font-mono text-purple-300 border border-purple-500/50 hover:border-purple-300 hover:bg-purple-950/40 transition flex items-center gap-1.5 shadow-sm" data-template="&amp;5&amp;k||&amp;r&amp;d&amp;l[{name}]&amp;r&amp;5&amp;k||&amp;r " title="Bordes con letras mágicas cambiantes aleatorias (&amp;k)">
+                  <span class="mc-obfuscated text-purple-400 font-black" data-orig-length="2">||</span>
+                  <span class="font-bold text-fuchsia-300">🌀 Mágico Matrix (&amp;k)</span>
+                  <span class="mc-obfuscated text-purple-400 font-black" data-orig-length="2">||</span>
+                </button>
+                <!-- Preset Rúnico &k -->
+                <button type="button" class="btn-mc-preset rounded-lg bg-zinc-950 px-2.5 py-1 text-[10px] font-mono text-cyan-300 border border-cyan-500/50 hover:border-cyan-300 hover:bg-cyan-950/40 transition flex items-center gap-1.5 shadow-sm" data-template="&amp;3&amp;k##&amp;r&amp;b&amp;l[{name}]&amp;r&amp;3&amp;k##&amp;r " title="Bordes con glitch rúnico cambiante (&amp;k)">
+                  <span class="mc-obfuscated text-cyan-400 font-black" data-orig-length="2">##</span>
+                  <span class="font-bold text-cyan-200">⚡ Rúnico Glitch (&amp;k)</span>
+                  <span class="mc-obfuscated text-cyan-400 font-black" data-orig-length="2">##</span>
+                </button>
+                <!-- Preset Dorado VIP -->
+                <button type="button" class="btn-mc-preset rounded-lg bg-zinc-950 px-2.5 py-1 text-[10px] font-mono text-amber-300 border border-amber-500/50 hover:border-amber-300 hover:bg-amber-950/40 transition flex items-center gap-1 shadow-sm" data-template="&amp;6&amp;l★ [{name}] ★&amp;r ">
+                  ⭐ Dorado VIP
+                </button>
+                <!-- Preset Carmesí Élite -->
+                <button type="button" class="btn-mc-preset rounded-lg bg-zinc-950 px-2.5 py-1 text-[10px] font-mono text-rose-300 border border-rose-500/50 hover:border-rose-300 hover:bg-rose-950/40 transition flex items-center gap-1 shadow-sm" data-template="&amp;4&amp;l⚔ [{name}] ⚔&amp;r ">
+                  ⚔ Carmesí Élite
+                </button>
+                <!-- Preset Diamante Neón -->
+                <button type="button" class="btn-mc-preset rounded-lg bg-zinc-950 px-2.5 py-1 text-[10px] font-mono text-cyan-300 border border-cyan-500/50 hover:border-cyan-300 hover:bg-cyan-950/40 transition flex items-center gap-1 shadow-sm" data-template="&amp;b&amp;l✦ [{name}] ✦&amp;r ">
+                  💎 Diamante Neón
+                </button>
+                <!-- Preset Corona Real -->
+                <button type="button" class="btn-mc-preset rounded-lg bg-zinc-950 px-2.5 py-1 text-[10px] font-mono text-yellow-300 border border-yellow-500/50 hover:border-yellow-300 hover:bg-yellow-950/40 transition flex items-center gap-1 shadow-sm" data-template="&amp;e&amp;l👑 [{name}] 👑&amp;r ">
+                  👑 Corona Real
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vista Previa en Vivo y Permisos Iniciales -->
+        <div class="space-y-4 lg:col-span-5">
+          <!-- Tarjeta de Previsualización en Vivo -->
+          <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-amber-400">👁️ Vista Previa en Tiempo Real:</span>
+              <span class="text-[10px] text-purple-300 bg-purple-950/70 border border-purple-500/40 px-2 py-0.5 rounded-full font-mono flex items-center gap-1">
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Animación en vivo (&amp;k, HEX)</span>
+              </span>
+            </div>
+            <div class="space-y-2">
+              <div>
+                <span class="text-[10px] text-zinc-500 block mb-1">En el Chat de Minecraft:</span>
+                <div class="rounded-lg bg-black/90 p-2.5 font-mono text-xs border border-zinc-800 shadow-inner flex items-center gap-1.5">
+                  <span id="lp-preview-chat-prefix"></span>
+                  <span class="text-white font-semibold">Steve:</span>
+                  <span class="text-zinc-200">¡Hola a todos en el server!</span>
+                </div>
+              </div>
+              <div>
+                <span class="text-[10px] text-zinc-500 block mb-1">En la Lista de Jugadores (TAB):</span>
+                <div class="rounded-lg bg-zinc-900/90 p-2 font-mono text-xs border border-zinc-800 flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <img src="https://mc-heads.net/avatar/steve/20" class="h-4 w-4 rounded" alt="avatar" />
+                    <span id="lp-preview-tab-prefix"></span>
+                    <span class="text-zinc-200">Steve</span>
+                  </div>
+                  <span class="text-[10px] text-emerald-400 font-bold">● 24ms</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Permisos Iniciales -->
+          <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+            <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 block mb-2">⚡ Permisos Iniciales Sugeridos:</span>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <label class="flex items-center gap-2 text-zinc-300 hover:text-white cursor-pointer">
+                <input type="checkbox" id="init-perm-fly" class="rounded accent-emerald-400 h-4 w-4" />
+                <span>✈️ Vuelo (/fly)</span>
+              </label>
+              <label class="flex items-center gap-2 text-zinc-300 hover:text-white cursor-pointer">
+                <input type="checkbox" id="init-perm-tp" class="rounded accent-emerald-400 h-4 w-4" />
+                <span>🧭 Teleport (/tp)</span>
+              </label>
+              <label class="flex items-center gap-2 text-zinc-300 hover:text-white cursor-pointer">
+                <input type="checkbox" id="init-perm-gm" class="rounded accent-emerald-400 h-4 w-4" />
+                <span>🎮 Gamemode (/gm)</span>
+              </label>
+              <label class="flex items-center gap-2 text-zinc-300 hover:text-white cursor-pointer">
+                <input type="checkbox" id="init-perm-voice" class="rounded accent-emerald-400 h-4 w-4" />
+                <span>🎙️ VoiceChat Grupos</span>
+              </label>
+              <label class="flex items-center gap-2 text-zinc-300 hover:text-white cursor-pointer">
+                <input type="checkbox" id="init-perm-pointblank" class="rounded accent-emerald-400 h-4 w-4" />
+                <span>🔫 Armas Point Blank</span>
+              </label>
+              <label class="flex items-center gap-2 text-zinc-300 hover:text-red-300 cursor-pointer">
+                <input type="checkbox" id="init-perm-all" class="rounded accent-red-500 h-4 w-4" />
+                <span class="text-red-400 font-bold">👑 Permisos Totales (*)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botón Enviar Crear -->
+      <div class="mt-5 border-t border-zinc-800/80 pt-4 flex items-center justify-end gap-3">
+        <button id="btn-cancel-create-rank" type="button" class="rounded-lg bg-zinc-800 hover:bg-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-300 transition">
+          Cancelar
+        </button>
+        <button id="btn-submit-create-rank" type="button" class="rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 font-bold px-5 py-2 text-xs transition shadow-md flex items-center gap-1.5">
+          <span>✨</span> Crear Rango en Servidor
+        </button>
+      </div>
+    </div>
+
+    <!-- PASO 1: SELECCIONAR JUGADOR -->
+    <div class="mt-6 rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-4 sm:p-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-amber-400">Paso 1: ¿A quién le querés dar rango?</p>
+          <p class="text-sm text-zinc-300">Elegí un jugador conectado o escribí el nombre del jugador:</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="lp-online-count" class="text-xs font-medium text-emerald-400">Cargando jugadores en línea...</span>
+        </div>
+      </div>
+
+      <!-- Chips de Jugadores Conectados en Vivo -->
+      <div class="mb-4">
+        <p class="text-xs text-zinc-400 mb-2">Jugadores conectados ahora (hacé clic para seleccionarlo):</p>
+        <div id="lp-online-chips" class="flex flex-wrap gap-2">
+          <p class="text-xs text-zinc-500 italic">Buscando jugadores en línea...</p>
+        </div>
+      </div>
+
+      <!-- Selector y Búsqueda -->
+      <div class="grid gap-3 sm:grid-cols-12">
+        <div class="sm:col-span-8 relative">
+          <label for="lp-target-player" class="sr-only">Nombre del jugador</label>
+          <div class="relative flex items-center">
+            <span class="absolute left-3 text-zinc-500">🧑</span>
+            <input
+              id="lp-target-player"
+              type="text"
+              placeholder="Escribí o seleccioná un jugador..."
+              class="min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-900 pl-10 pr-24 text-sm font-semibold text-zinc-100 placeholder-zinc-500 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition"
+            />
+            <button id="btn-inspect-player" type="button" class="absolute right-1.5 rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700 hover:text-white transition">
+              🔍 Consultar
+            </button>
+          </div>
+        </div>
+
+        <div class="sm:col-span-4 flex items-center gap-2">
+          <select id="lp-known-players" class="min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-300 outline-none focus:border-amber-400">
+            <option value="">-- Todos los jugadores registrados --</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Tarjeta de Jugador Activo Seleccionado -->
+      <div id="lp-selected-card" class="mt-4 hidden items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 sm:p-4">
+        <div class="flex items-center gap-3">
+          <img id="lp-selected-avatar" src="https://mc-heads.net/avatar/steve/40" alt="Skin" class="h-10 w-10 rounded-lg bg-zinc-800 ring-1 ring-amber-400/40" onerror="this.src='https://mc-heads.net/avatar/steve/40'" />
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-zinc-400">Jugador seleccionado:</span>
+              <b id="lp-selected-name" class="font-mono text-base font-bold text-amber-200"></b>
+              <span id="lp-selected-online-badge" class="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-bold text-emerald-300">ONLINE</span>
+            </div>
+            <p id="lp-selected-info-text" class="text-xs text-zinc-400 mt-0.5">Listo para asignar rango o rol.</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btn-lp-promote" type="button" class="flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition" title="Subir de rango en la jerarquía">
+            ▲ Subir Rango
+          </button>
+          <button id="btn-lp-demote" type="button" class="flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-500/20 transition" title="Bajar de rango en la jerarquía">
+            ▼ Bajar Rango
+          </button>
+          <button id="btn-lp-reset-default" type="button" class="flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/70 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition" title="Restablecer a rango Turista inicial">
+            Restablecer
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASO 2: RANGO PRINCIPAL (JERARQUÍA) -->
+    <div class="mt-7">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-amber-400">Paso 2: Rango Principal (Jerarquía)</p>
+          <p class="text-sm text-zinc-400">Define el rango primario y prefijo principal del jugador en chat y TAB. Hacé clic en "⭐ Asignar Rango":</p>
+        </div>
+        <span class="text-xs font-mono text-zinc-500">Track: jerarquia</span>
+      </div>
+
+      <!-- Grid de Tarjetas de Rango Principal -->
+      <div id="lp-ranks-grid" class="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <!-- Renderizado dinámicamente con estilos de lujo para cada rango -->
+      </div>
+    </div>
+
+    <!-- PASO 3: ROLES SECUNDARIOS Y COSMÉTICOS -->
+    <div class="mt-8 border-t border-zinc-800 pt-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-fuchsia-400">Paso 3: Roles Secundarios & Cosméticos</p>
+          <p class="text-sm text-zinc-400">Podés otorgar o quitar estos roles sin modificar el rango principal del jugador:</p>
+        </div>
+        <span class="text-xs font-mono text-zinc-500">Roles complementarios</span>
+      </div>
+
+      <!-- Grid de Roles Secundarios -->
+      <div id="lp-roles-grid" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <!-- Renderizado dinámicamente -->
+      </div>
+    </div>
+
+    <!-- PASO 4: INSPECTOR Y GESTOR INTERACTIVO DE COMANDOS Y PERMISOS POR RANGO -->
+    <div id="lp-inspector-section" class="mt-8 border-t border-zinc-800 pt-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-cyan-400">Paso 4: Inspector y Gestor de Comandos por Rango</p>
+          <p class="text-sm text-zinc-400">Seleccioná cualquier rango para ver y gestionar sus comandos interactivos con 1 clic en vivo:</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="rounded bg-cyan-500/20 px-2.5 py-0.5 text-[10px] font-bold text-cyan-300 ring-1 ring-cyan-500/30">INTERACTIVO 1-CLIC</span>
+        </div>
+      </div>
+
+      <!-- Selector y Acciones de Rango a Inspeccionar -->
+      <div class="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex-1">
+            <label for="lp-inspect-select" class="block text-xs font-bold text-zinc-400 mb-1">Elegí el Rango a Gestionar:</label>
+            <select id="lp-inspect-select" class="min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 outline-none focus:border-cyan-400">
+              <!-- Opciones generadas dinámicamente -->
+            </select>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 pt-1 md:pt-4">
+            <button id="btn-inspect-lp-info" type="button" class="rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 transition flex items-center gap-1.5" title="Ver todos los permisos activos en la terminal">
+              <span>📋</span> Ver Permisos (/lp info)
+            </button>
+            <button id="btn-inspect-lp-members" type="button" class="rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 transition flex items-center gap-1.5" title="Listar jugadores que tienen este rango">
+              <span>👥</span> Ver Jugadores
+            </button>
+            <button id="btn-inspect-lp-delete" type="button" class="rounded-lg border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2 text-xs font-semibold text-rose-300 transition flex items-center gap-1.5" title="Eliminar este rango de LuckPerms">
+              <span>🗑️</span> Eliminar Rango
+            </button>
+          </div>
+        </div>
+
+        <!-- Tarjeta de Información del Rango Seleccionado -->
+        <div id="lp-inspect-summary-card" class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <span id="lp-inspect-icon" class="text-3xl">⭐</span>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <b id="lp-inspect-name" class="text-base text-zinc-100">Cargando...</b>
+                <span id="lp-inspect-id-badge" class="rounded bg-zinc-800 px-2 py-0.5 font-mono text-xs text-cyan-300"></span>
+                <span id="lp-inspect-type-badge" class="rounded bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-400">Jerarquía</span>
+              </div>
+              <div class="mt-1 flex items-center gap-3 text-xs text-zinc-400 flex-wrap">
+                <span>Peso / Prioridad: <b id="lp-inspect-weight" class="font-mono text-zinc-200"></b></span>
+                <span>·</span>
+                <span>Prefijo: <span id="lp-inspect-prefix-badge" class="font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700"></span></span>
+              </div>
+            </div>
+          </div>
+          <div class="text-xs text-zinc-400 sm:text-right">
+            <span class="block font-semibold text-zinc-300">Modificación rápida con 1 clic:</span>
+            <span class="text-[11px] text-zinc-500">Los permisos se guardan de inmediato en LuckPerms sin reiniciar.</span>
+          </div>
+        </div>
+
+        <!-- Matriz de Comandos Interactivos (4 Categorías) -->
+        <div class="mt-5 space-y-4">
+          <!-- Categoría 1: Movimiento y Supervivencia -->
+          <div class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3.5">
+            <div class="flex items-center justify-between mb-2.5">
+              <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                <span>🏃</span> Movimiento & Supervivencia
+              </span>
+              <span class="text-[11px] text-zinc-500 font-mono">essentialcommands / vanilla</span>
+            </div>
+            <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              <!-- Fly -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">✈️</span>
+                    <b class="text-xs text-zinc-200">/fly (Vuelo libre)</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Permite volar en supervivencia.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="fly" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="fly" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- God -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🛡️</span>
+                    <b class="text-xs text-zinc-200">/god (Invulnerabilidad)</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Inmune a daño de caídas y lava.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="god" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="god" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- Heal & Feed -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">💖</span>
+                    <b class="text-xs text-zinc-200">/heal & /feed</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Curación y comida instantánea.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="heal" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="heal" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- Speed -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">⚡</span>
+                    <b class="text-xs text-zinc-200">/speed (Velocidad)</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Ajustar velocidad al correr.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="speed" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="speed" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Categoría 2: Teletransporte & Hogar -->
+          <div class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3.5">
+            <div class="flex items-center justify-between mb-2.5">
+              <span class="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                <span>🧭</span> Teletransporte & Hogares
+              </span>
+              <span class="text-[11px] text-zinc-500 font-mono">teleportation</span>
+            </div>
+            <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+              <!-- /tp -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">📍</span>
+                    <b class="text-xs text-zinc-200">/tp (Directo)</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">TP a jugadores o coordenadas.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="tp" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="tp" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- /tpa -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🤝</span>
+                    <b class="text-xs text-zinc-200">/tpa & /tpaccept</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Peticiones de teletransporte.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="tpa" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="tpa" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- /home -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🏠</span>
+                    <b class="text-xs text-zinc-200">/home & /sethome</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Guardar y volver a bases.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="home" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="home" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- /back -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🔄</span>
+                    <b class="text-xs text-zinc-200">/back (Retorno)</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Regresar al punto de muerte.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="back" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="back" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- /spawn -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🚩</span>
+                    <b class="text-xs text-zinc-200">/spawn</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Ir al spawn del mundo.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="spawn" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="spawn" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Categoría 3: Modo de Juego & Utilidades -->
+          <div class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3.5">
+            <div class="flex items-center justify-between mb-2.5">
+              <span class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <span>🛠️</span> Modos de Juego & Utilidades Portátiles
+              </span>
+              <span class="text-[11px] text-zinc-500 font-mono">utilities / commands</span>
+            </div>
+            <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+              <!-- /gamemode -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🎮</span>
+                    <b class="text-xs text-zinc-200">/gamemode</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Cambiar modo de juego.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="gamemode" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="gamemode" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- /time & /weather -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">☀️</span>
+                    <b class="text-xs text-zinc-200">/time & /weather</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Control de hora y clima.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="time_weather" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="time_weather" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- /workbench -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🪓</span>
+                    <b class="text-xs text-zinc-200">/workbench</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Mesa de crafteo portátil.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="workbench" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="workbench" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- /enderchest -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">📦</span>
+                    <b class="text-xs text-zinc-200">/enderchest</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Cofre de Ender donde sea.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="enderchest" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="enderchest" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- /anvil -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🔨</span>
+                    <b class="text-xs text-zinc-200">/anvil</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Yunque portátil para reparar.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="anvil" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="anvil" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Categoría 4: Mods & Permisos Avanzados -->
+          <div class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3.5">
+            <div class="flex items-center justify-between mb-2.5">
+              <span class="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                <span>⚡</span> Mods Instalados & Super Permisos
+              </span>
+              <span class="text-[11px] text-zinc-500 font-mono">pointblank / voicechat / op</span>
+            </div>
+            <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              <!-- Armas Point Blank -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🔫</span>
+                    <b class="text-xs text-zinc-200">Point Blank (Armas)</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Acceso libre al arsenal militar.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="pointblank" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="pointblank" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- VoiceChat Grupos -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🎙️</span>
+                    <b class="text-xs text-zinc-200">VoiceChat (Salas)</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Crear canales y grupos privados.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="voice_groups" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="voice_groups" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- VoiceChat Hablar -->
+              <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">🗣️</span>
+                    <b class="text-xs text-zinc-200">VoiceChat (Hablar)</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-500 mt-1">Transmitir voz por proximidad.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="voice_speak" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="voice_speak" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                </div>
+              </div>
+              <!-- Super Permiso * -->
+              <div class="rounded-lg border border-red-500/30 bg-red-950/20 p-2.5 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base">👑</span>
+                    <b class="text-xs text-red-200">Permisos * (Totales / OP)</b>
+                  </div>
+                  <p class="text-[11px] text-zinc-400 mt-1">Poder absoluto sobre todo el server.</p>
+                </div>
+                <div class="mt-3 flex gap-1.5">
+                  <button type="button" data-cmd-perm="all" data-perm-action="grant" class="flex-1 rounded bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-[11px] font-bold text-red-200 py-1 transition">+ Dar *</button>
+                  <button type="button" data-cmd-perm="all" data-perm-action="revoke" class="flex-1 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-[11px] font-bold text-zinc-300 py-1 transition">- Quitar *</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agregar Permiso Personalizado -->
+        <div class="mt-5 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+          <p class="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">➕ Agregar o Quitar Permiso Manualmente:</p>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input id="lp-custom-perm-input" list="lp-perm-suggestions" type="text" placeholder="Escribí o elegí un nodo (ej. worldedit.*, minecraft.command.give)..." class="min-h-11 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm font-mono text-zinc-100 placeholder-zinc-500 outline-none focus:border-cyan-400" />
+            <datalist id="lp-perm-suggestions">
+              <option value="essentialcommands.fly"></option>
+              <option value="essentialcommands.god"></option>
+              <option value="essentialcommands.heal"></option>
+              <option value="essentialcommands.feed"></option>
+              <option value="essentialcommands.tpa"></option>
+              <option value="essentialcommands.home"></option>
+              <option value="essentialcommands.back"></option>
+              <option value="essentialcommands.workbench"></option>
+              <option value="essentialcommands.enderchest"></option>
+              <option value="minecraft.command.gamemode"></option>
+              <option value="minecraft.command.tp"></option>
+              <option value="minecraft.command.time"></option>
+              <option value="minecraft.command.weather"></option>
+              <option value="voicechat.groups"></option>
+              <option value="voicechat.speak"></option>
+              <option value="pointblank.*"></option>
+              <option value="worldedit.*"></option>
+              <option value="*"></option>
+            </datalist>
+            <div class="flex items-center gap-2">
+              <button id="btn-custom-perm-grant" type="button" class="min-h-11 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 px-3.5 text-xs font-bold text-emerald-300 transition">
+                + Conceder (true)
+              </button>
+              <button id="btn-custom-perm-deny" type="button" class="min-h-11 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-3 text-xs font-bold text-amber-300 transition">
+                ✕ Denegar (false)
+              </button>
+              <button id="btn-custom-perm-unset" type="button" class="min-h-11 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 text-xs font-semibold text-zinc-300 transition">
+                🗑️ Quitar
+              </button>
+            </div>
+          </div>
+          <div class="mt-2 flex flex-wrap gap-1.5 items-center">
+            <span class="text-[11px] text-zinc-500">Sugerencias rápidas:</span>
+            <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="essentialcommands.fly">essentialcommands.fly</button>
+            <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="minecraft.command.gamemode">minecraft.command.gamemode</button>
+            <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="pointblank.*">pointblank.*</button>
+            <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="voicechat.groups">voicechat.groups</button>
+            <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="worldedit.*">worldedit.*</button>
+            <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-red-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="*">* (Totales)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MINI CONSOLA DE RESULTADOS DE LUCKPERMS -->
+    <div class="mt-8 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+      <div class="flex items-center justify-between border-b border-zinc-800/80 pb-2 mb-3">
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-emerald-400" id="lp-terminal-dot"></span>
+          <span class="font-mono text-xs font-bold uppercase text-zinc-300">Terminal en Vivo · Respuesta LuckPerms</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="lp-last-cmd-badge" class="font-mono text-[11px] text-zinc-500">Listo para ejecutar</span>
+          <button id="btn-clear-lp-log" type="button" class="text-xs text-zinc-500 hover:text-zinc-300">Limpiar</button>
+        </div>
+      </div>
+      <div id="lp-output-console" class="max-h-40 overflow-y-auto font-mono text-xs text-zinc-300 space-y-1 pr-1">
+        <p class="text-zinc-500 italic">Hacé clic en cualquier rango para ver la confirmación del servidor aquí.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CENTRO DE RESTRICCIONES AGNÓSTICO & CONTROL EN CALIENTE -->
+  <section id="restrictions-hub" class="admin-module rounded-2xl border p-5 sm:p-7 space-y-8 transition-all">
+    <!-- Header del Centro de Restricciones -->
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-5">
+      <div>
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <span class="text-2xl sm:text-3xl">🛡️</span>
+          <h2 class="text-xl font-bold tracking-tight text-zinc-100 sm:text-2xl">Centro de Restricciones & Control en Vivo</h2>
+          <span class="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/40">100% SIN PNGs</span>
+          <span class="rounded-full bg-purple-500/20 px-2.5 py-0.5 text-xs font-bold text-purple-300 ring-1 ring-purple-500/40">/reload en Caliente</span>
+        </div>
+        <p class="mt-1 text-sm text-zinc-400">Control unificado y agnóstico de Ítems, Spawns de Mobs por Bioma, Aldeanos/Mesas, WorldEdit y Configs TOML.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2.5">
+        <span id="restrictions-quick-summary" class="rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-1.5 text-xs font-mono text-zinc-300">
+          Cargando resumen…
+        </span>
+        <button id="btn-restrictions-reload" type="button" class="flex items-center gap-1.5 rounded-lg bg-emerald-400 hover:bg-emerald-300 px-3.5 py-2 text-xs font-bold text-zinc-950 transition shadow-sm" title="Ejecutar /reload en el servidor encendido para aplicar cambios en caliente">
+          <span>🔄</span> Recargar (/reload)
+        </button>
+      </div>
+    </div>
+
+    <!-- Barra de Pestañas (Tabs) -->
+    <div class="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-3" role="tablist">
+      <button type="button" class="tab-btn active flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" data-tab="items">
+        <span>📦</span> Ítems & Armas
+        <span id="tab-count-items" class="ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">0</span>
+      </button>
+      <button type="button" class="tab-btn flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" data-tab="mobs">
+        <span>👾</span> Spawns de Mobs
+        <span id="tab-count-mobs" class="ml-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">0</span>
+      </button>
+      <button type="button" class="tab-btn flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" data-tab="villagers">
+        <span>👨‍🌾</span> Aldeanos & Mesas
+        <span id="tab-count-villagers" class="ml-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">0</span>
+      </button>
+      <details id="worldedit-optional-tab" class="relative"><summary class="cursor-pointer rounded-lg px-4 py-2 text-xs font-semibold text-zinc-500 hover:text-zinc-300">Más herramientas</summary><button type="button" id="tab-btn-worldedit" class="tab-btn flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" data-tab="worldedit">
+        WorldEdit <span class="text-zinc-500">(opcional)</span>
+        <span id="tab-badge-worldedit" class="ml-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">OFF</span>
+      </button>
+      </details><button type="button" class="tab-btn flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" data-tab="configs">
+        <span>⚙️</span> Configs TOML
+      </button>
+    </div>
+
+    <!-- PESTAÑA 1: ÍTEMS & ARMAS -->
+    <div id="tab-panel-items" class="tab-panel space-y-4">
+      <div class="grid gap-6 lg:grid-cols-12">
+        <!-- Columna Izquierda: Explorador dinámico sin PNGs (7 cols) -->
+        <div class="space-y-3 lg:col-span-7">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h3 class="text-sm font-bold text-zinc-200 flex items-center gap-2">
+              <span>🔍</span> Catálogo Detectado en Mods
+            </h3>
+            <span class="text-xs text-zinc-500">100% tipográfico · Sin descargar imágenes</span>
+          </div>
+
+          <!-- Filtros rápidos por mod -->
+          <div id="items-mod-filters" class="flex flex-wrap gap-1.5">
+            <button type="button" data-mod="all" class="mod-filter-btn active rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 text-[11px] font-bold">Todos</button>
+            <button type="button" data-mod="pointblank" class="mod-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Point Blank</button>
+            <button type="button" data-mod="cataclysm" class="mod-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Cataclysm</button>
+            <button type="button" data-mod="create" class="mod-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Create</button>
+            <button type="button" data-mod="simplyswords" class="mod-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Simply Swords</button>
+          </div>
+
+          <div class="relative">
+            <input id="items-catalog-search" type="search" placeholder="Buscar ítem por nombre o ID (ej. ak47, netherite, canon, create:track)..." class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-xs text-zinc-200 outline-none focus:border-emerald-400 transition" />
+          </div>
+
+          <!-- Grid de ítems sin imágenes con scroll -->
+          <div id="items-catalog-container" class="max-h-96 overflow-y-auto space-y-1.5 pr-1" role="region" aria-label="Catálogo de ítems">
+            <p class="text-xs text-zinc-500 italic p-4 text-center">Cargando catálogo dinámico...</p>
+          </div>
+        </div>
+
+        <!-- Columna Derecha: Ítems Bloqueados y Formulario de Comodines (5 cols) -->
+        <div class="space-y-4 lg:col-span-5">
+          <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-rose-300 flex items-center gap-1.5">
+                <span>🚫</span> Ítems Bloqueados
+              </h3>
+              <span id="badge-blocked-items-count" class="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300">0 bloqueados</span>
+            </div>
+
+            <!-- Formulario para agregar con comodín -->
+            <form id="form-add-item-custom" class="flex gap-2">
+              <input id="input-item-custom" type="text" required placeholder="mod:item o !mod:.*" class="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-200 outline-none focus:border-emerald-400 transition" />
+              <button type="submit" class="rounded-lg bg-rose-500 hover:bg-rose-400 px-3.5 py-2 text-xs font-bold text-white transition shadow-sm">
+                Bloquear
+              </button>
+            </form>
+            <p class="text-[11px] text-zinc-400 leading-relaxed">
+              💡 Podés escribir un ítem único como <code class="font-mono text-emerald-300">pointblank:ak47</code> o usar el comodín <code class="font-mono text-emerald-300">!pointblank:.*</code> para bloquear todo el mod con <b>Item Obliterator</b>.
+            </p>
+
+            <!-- Lista de ítems bloqueados -->
+            <ul id="list-blocked-items" class="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+              <li class="text-xs text-zinc-500 italic p-3 text-center">No hay ítems restringidos actualmente.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PESTAÑA 2: SPAWNS DE MOBS (BIOME MODIFIERS) -->
+    <div id="tab-panel-mobs" class="tab-panel hidden space-y-4">
+      <div class="rounded-xl border border-purple-500/30 bg-purple-950/20 p-4 text-xs text-zinc-300 leading-relaxed">
+        <p class="font-semibold text-purple-200 flex items-center gap-1.5 mb-1">
+          <span>🧬</span> Modificador de Biomas Nativo de NeoForge 1.21.1
+        </p>
+        Los mobs seleccionados aquí son suprimidos a nivel de generación en biomas (<code>neoforge:remove_spawns</code>) en <b>#minecraft:is_overworld</b>, <b>#minecraft:is_nether</b> y <b>#minecraft:is_end</b> dentro del datapack del servidor. Al guardar, se ejecuta <code>/reload</code> en caliente.
+      </div>
+
+      <div class="grid gap-6 lg:grid-cols-12">
+        <!-- Columna Izquierda: Selector de Mobs (7 cols) -->
+        <div class="space-y-3 lg:col-span-7">
+          <div class="flex flex-wrap gap-1.5" id="mobs-mod-filters">
+            <button type="button" data-mob-mod="all" class="mob-filter-btn active rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 text-[11px] font-bold">Todos</button>
+            <button type="button" data-mob-mod="cataclysm" class="mob-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Cataclysm</button>
+            <button type="button" data-mob-mod="mowziesmobs" class="mob-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Mowzie's Mobs</button>
+            <button type="button" data-mob-mod="aether" class="mob-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Aether</button>
+            <button type="button" data-mob-mod="minecraft" class="mob-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Vanilla</button>
+          </div>
+
+          <input id="mobs-catalog-search" type="search" placeholder="Buscar mob por nombre o ID (ej. ignis, frostmaw, creeper, ender_guardian)..." class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-xs text-zinc-200 outline-none focus:border-purple-400 transition" />
+
+          <div id="mobs-catalog-container" class="max-h-96 overflow-y-auto space-y-1.5 pr-1">
+            <p class="text-xs text-zinc-500 italic p-4 text-center">Cargando mobs...</p>
+          </div>
+        </div>
+
+        <!-- Columna Derecha: Spawns Suprimidos Activos (5 cols) -->
+        <div class="space-y-4 lg:col-span-5">
+          <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-purple-300 flex items-center gap-1.5">
+                <span>👾</span> Spawns Suprimidos
+              </h3>
+              <span id="badge-blocked-mobs-count" class="rounded bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">0 suprimidos</span>
+            </div>
+
+            <!-- Formulario para agregar mob manual -->
+            <form id="form-add-mob-custom" class="flex gap-2">
+              <input id="input-mob-custom" type="text" required placeholder="mod:entidad (ej. cataclysm:ignis)" class="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-200 outline-none focus:border-purple-400 transition" />
+              <button type="submit" class="rounded-lg bg-purple-600 hover:bg-purple-500 px-3.5 py-2 text-xs font-bold text-white transition shadow-sm">
+                Suprimir
+              </button>
+            </form>
+
+            <ul id="list-blocked-mobs" class="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+              <li class="text-xs text-zinc-500 italic p-3 text-center">No hay spawns de mobs suprimidos actualmente.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PESTAÑA 3: ALDEANOS Y PROFESIONES (POI) -->
+    <div id="tab-panel-villagers" class="tab-panel hidden space-y-4">
+      <div class="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-xs text-zinc-300 leading-relaxed">
+        <p class="font-semibold text-amber-200 flex items-center gap-1.5 mb-1">
+          <span>👨‍🌾</span> Desactivación de Mesas de Trabajo (POI Tag Removal)
+        </p>
+        Al desactivar una profesión, se remueve su punto de interés (POI) de <code>acquirable_job_site.json</code> vía datapack nativo, impidiendo que los aldeanos reclamen esa mesa de trabajo. Para <b>Point Blank</b>, se sincroniza <code>armsDealerHouse = 0</code> en <code>pointblank-common.toml</code> para que no aparezca la casa del traficante.
+      </div>
+
+      <div id="villagers-grid" class="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+        <p class="text-xs text-zinc-500 italic p-4 col-span-3 text-center">Cargando profesiones...</p>
+      </div>
+    </div>
+
+    <!-- PESTAÑA 4: WORLDEDIT EN CALIENTE -->
+    <div id="tab-panel-worldedit" class="tab-panel hidden space-y-6">
+      <div class="rounded-2xl border border-teal-500/40 bg-gradient-to-br from-teal-950/30 via-zinc-950 to-zinc-900 p-6 sm:p-8 shadow-xl">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div class="space-y-2 max-w-2xl">
+            <div class="flex items-center gap-3">
+              <span class="text-3xl">🏗️</span>
+              <div>
+                <h3 class="text-xl font-bold text-zinc-100">WorldEdit es opcional</h3>
+                <p class="text-xs text-zinc-500">Control de permisos para instalaciones que ya usan WorldEdit y LuckPerms.</p>
+              </div>
+            </div>
+            <p class="text-xs sm:text-sm text-zinc-300 leading-relaxed pt-2">
+              Este panel no instala WorldEdit ni lo requiere para jugar. Si ya lo instalaste, podés permitirlo o bloquearlo para administradores sin reiniciar el servidor.
+            </p>
+            <div class="space-y-1.5 text-xs text-zinc-400 bg-zinc-900/80 p-3.5 rounded-xl border border-zinc-800">
+              <p>• <b>WorldEdit OFF</b>: Ejecuta en vivo <code>/lp group default permission set worldedit.* false</code> y <code>/lp group admin permission set worldedit.* false</code>. La varita y hacha de madera vuelven a ser comunes y los comandos <code>//</code> quedan bloqueados.</p>
+              <p>• <b>WorldEdit ON</b>: Ejecuta <code>/lp group admin permission set worldedit.* true</code>, habilitando la varita, schematics y construcción al instante para administradores.</p>
+            </div>
+          </div>
+
+          <div class="flex flex-col items-center justify-center gap-3 shrink-0 p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 min-w-56">
+            <span class="text-xs font-bold text-zinc-400 uppercase tracking-wider">Estado en Memoria:</span>
+            <span id="we-live-badge" class="rounded-full px-4 py-1.5 text-sm font-black tracking-wide shadow bg-zinc-800 text-zinc-400 border border-zinc-700">
+              DESACTIVADO
+            </span>
+            <button id="btn-toggle-worldedit" type="button" class="w-full mt-2 rounded-xl py-3 px-5 text-xs font-bold transition shadow-lg flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950">
+              <span>⚡</span> Activar WorldEdit
+            </button>
+            <span id="we-feedback-msg" class="text-[11px] text-zinc-500 text-center font-mono">Responde en 0.1s</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PESTAÑA 5: CONFIGS TOML -->
+    <div id="tab-panel-configs" class="tab-panel hidden space-y-4">
+      <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 sm:p-5">
+        <p class="text-sm font-medium text-emerald-300">Editor de Configuraciones</p>
+        <h3 class="mt-1 text-base font-semibold text-zinc-100">Ajustes TOML y JSON de Mods</h3>
+        <p class="mt-1 text-xs text-zinc-400">Buscá un archivo de configuración. Las opciones visuales preservan comentarios y formato original.</p>
+        <input id="config-search" type="search" class="mt-4 min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs" placeholder="Ej. armas, pointblank, rendimiento, create…" />
+        <div id="config-picker" class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3"></div>
+        <div id="config-workspace" class="mt-5 hidden border-t border-zinc-800 pt-5">
+          <div class="flex justify-between gap-3">
+            <div>
+              <p id="selected-config-name" class="font-semibold text-sm text-zinc-200"></p>
+              <p id="selected-config-help" class="mt-1 text-xs text-zinc-500"></p>
+            </div>
+            <button id="close-config" class="min-h-9 rounded-lg px-3 text-xs text-zinc-400 hover:bg-zinc-800">Cambiar</button>
+          </div>
+          <div id="config-form" class="mt-4 space-y-3"></div>
+          <details class="mt-5 rounded-lg border border-zinc-800 p-4">
+            <summary class="cursor-pointer text-xs font-medium text-zinc-300">Modo avanzado: editar archivo completo</summary>
+            <textarea id="config-code" class="mt-3 h-64 w-full rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs"></textarea>
+            <button id="save-config" class="mt-3 min-h-10 rounded-lg border border-emerald-400/50 px-4 text-xs text-emerald-100 bg-emerald-500/10 hover:bg-emerald-500/20">Validar y guardar</button>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section id="world" class="grid gap-5 xl:grid-cols-2"><article class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5"><p class="text-sm font-medium text-emerald-300">Mundo</p><h2 class="mt-1 text-xl font-semibold">Reglas del mundo</h2><p class="mt-1 text-sm text-zinc-400">Cambios inmediatos, con el servidor encendido.</p><div id="gamerules-list" class="mt-4 space-y-2"></div></article><article class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5"><p class="text-sm font-medium text-emerald-300">Jugadores</p><h2 class="mt-1 text-xl font-semibold">Moderación rápida</h2><div id="players-list" class="mt-4 space-y-2"></div></article></section>
+  <section id="health" class="grid gap-5 xl:grid-cols-2"><article class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5"><p class="text-sm font-medium text-emerald-300">Rendimiento</p><h2 class="mt-1 text-xl font-semibold">Auditar lag</h2><p id="spark-note" class="mt-2 text-sm text-zinc-400">Spark revisa qué está consumiendo recursos durante 30 segundos.</p><button id="spark-audit" class="mt-5 min-h-11 rounded-lg bg-emerald-400 px-4 text-sm font-semibold text-zinc-950">Iniciar auditoría</button></article><article class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5"><p class="text-sm font-medium text-emerald-300">Automático</p><h2 class="mt-1 text-xl font-semibold">Copias periódicas</h2><div class="mt-5 flex gap-2"><select id="backup-hours" class="min-h-11 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm"><option value="3">Cada 3 horas</option><option value="6">Cada 6 horas</option><option value="12">Cada 12 horas</option><option value="24">Una vez al día</option></select><button id="save-schedule" class="min-h-11 rounded-lg border border-emerald-400/50 px-4 text-sm text-emerald-100">Activar</button></div><p id="schedule-status" class="mt-3 text-xs text-zinc-500"></p></article></section>
+
+  <!-- SECCIÓN WEBHOOKS Y ALERTAS DE DISCORD -->
+  <section id="discord" class="admin-module rounded-2xl border p-5 sm:p-7 transition-all">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-5">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl sm:text-3xl">💬</span>
+          <h2 class="text-xl font-bold tracking-tight text-zinc-100 sm:text-2xl">Integración y Alertas de Discord</h2>
+          <span class="rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-xs font-bold text-indigo-300 ring-1 ring-indigo-500/40">Webhooks</span>
+        </div>
+        <p class="mt-1 text-sm text-zinc-400">Conectá tu servidor de Discord para recibir avisos en vivo de estado, muertes graciosas, conexiones y backups.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2.5">
+        <button id="btn-discord-test" type="button" class="flex items-center gap-1.5 rounded-lg border border-indigo-500/50 bg-indigo-500/10 px-4 py-2 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20 transition shadow-sm" title="Enviar una alerta de prueba al webhook">
+          <span>🔔</span> Enviar Prueba
+        </button>
+        <button id="btn-discord-save" type="button" class="flex items-center gap-1.5 rounded-lg bg-emerald-400 hover:bg-emerald-300 px-4 py-2 text-xs font-bold text-zinc-950 transition shadow-sm" title="Guardar la configuración de Discord">
+          <span>💾</span> Guardar Cambios
+        </button>
+      </div>
+    </div>
+
+    <!-- CUERPO PRINCIPAL EN 2 COLUMNAS -->
+    <div class="mt-6 grid gap-6 lg:grid-cols-12">
+      <!-- Columna Izquierda: Webhooks y Mención (7 cols) -->
+      <div class="space-y-4 lg:col-span-7">
+        <!-- Webhook Principal -->
+        <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="discord-webhook-url" class="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
+              <span>🟢</span> URL del Webhook Principal (Canal de Estado / Alertas):
+            </label>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] text-emerald-400 font-semibold">Obligatorio</span>
+              <button type="button" id="btn-test-main-webhook" class="flex items-center gap-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300 transition shadow-sm" title="Probar el Webhook Principal de Estado">
+                <span>🔔</span> Probar Estado
+              </button>
+            </div>
+          </div>
+          <div class="relative">
+            <input id="discord-webhook-url" type="password" placeholder="https://discord.com/api/webhooks/..." class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-100 outline-none focus:border-indigo-400 transition pr-16" />
+            <button type="button" id="btn-toggle-webhook-view" class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-800 px-2 py-0.5 rounded transition">
+              Mostrar
+            </button>
+          </div>
+          <p class="mt-1.5 text-[11px] text-zinc-500">Recibe notificaciones cuando el servidor inicia, se apaga, cae (crash) o hace un backup.</p>
+        </div>
+
+        <!-- Webhook Secundario (Feed de Jugadores & Muertes) -->
+        <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="discord-events-url" class="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
+              <span>💀</span> Webhook de Jugadores y Muertes (Opcional):
+            </label>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] text-zinc-500">Opcional</span>
+              <button type="button" id="btn-test-events-webhook" class="flex items-center gap-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 px-2 py-0.5 text-[10px] font-bold text-rose-300 transition shadow-sm" title="Probar el Webhook de Jugadores y Muertes con una muerte y avatar 3D simulados">
+                <span>💀</span> Probar Feed
+              </button>
+            </div>
+          </div>
+          <div class="relative">
+            <input id="discord-events-url" type="password" placeholder="https://discord.com/api/webhooks/... (dejar vacío para usar el principal)" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-100 outline-none focus:border-indigo-400 transition pr-16" />
+            <button type="button" id="btn-toggle-events-view" class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-800 px-2 py-0.5 rounded transition">
+              Mostrar
+            </button>
+          </div>
+          <p class="mt-1.5 text-[11px] text-zinc-500">Si querés un canal aparte (ej. <code>#muertes-y-feed</code>) para no llenar el canal principal de mensajes.</p>
+        </div>
+
+        <!-- Mención de Rol -->
+        <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="discord-mention-role" class="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
+              <span>📢</span> Mención al Encender el Servidor:
+            </label>
+            <button type="button" id="btn-test-mention" class="flex items-center gap-1 rounded bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 px-2 py-0.5 text-[10px] font-bold text-indigo-300 transition shadow-sm" title="Enviar mensaje de prueba etiquetando a este rol en Discord">
+              <span>📢</span> Probar Mención
+            </button>
+          </div>
+          <input id="discord-mention-role" type="text" placeholder="Ej. @everyone o <@&123456789012345678>" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-indigo-400 transition" />
+          <p class="mt-1.5 text-[11px] text-zinc-500">Se etiquetará a este rol únicamente cuando el servidor pase a estado <b>ONLINE</b> para avisar a tus amigos.</p>
+        </div>
+
+        <details class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 text-xs text-zinc-400">
+          <summary class="cursor-pointer font-semibold text-zinc-200">Identidad de las alertas</summary>
+          <p class="mt-2 text-[11px] leading-5 text-zinc-500">Estos datos son propios de tu host y se guardan localmente. Dejalos vacíos para usar las variables de entorno del panel.</p>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <label class="grid gap-1 text-[11px] font-semibold text-zinc-300">Nombre del servidor
+              <input id="discord-server-name" type="text" maxlength="80" placeholder="Mi servidor" class="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-normal text-zinc-100 outline-none focus:border-indigo-400" />
+            </label>
+            <label class="grid gap-1 text-[11px] font-semibold text-zinc-300">Software o versión
+              <input id="discord-server-software" type="text" maxlength="120" placeholder="Minecraft 1.21.1" class="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-normal text-zinc-100 outline-none focus:border-indigo-400" />
+            </label>
+            <label class="grid gap-1 text-[11px] font-semibold text-zinc-300">Mundo mostrado
+              <input id="discord-world-name" type="text" maxlength="80" placeholder="world" class="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-normal text-zinc-100 outline-none focus:border-indigo-400" />
+            </label>
+            <label class="grid gap-1 text-[11px] font-semibold text-zinc-300">Jugador ficticio de prueba
+              <input id="discord-test-player-name" type="text" maxlength="64" placeholder="Jugador de prueba" class="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-normal text-zinc-100 outline-none focus:border-indigo-400" />
+            </label>
+          </div>
+          <label class="mt-3 grid gap-1 text-[11px] font-semibold text-zinc-300">Plantilla de avatar (opcional)
+            <input id="discord-avatar-url-template" type="url" maxlength="500" placeholder="https://ejemplo/avatar/{player_name}.png" class="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono font-normal text-zinc-100 outline-none focus:border-indigo-400" />
+          </label>
+        </details>
+
+        <!-- Guía rápida desplegable -->
+        <details class="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3.5 text-xs text-zinc-400">
+          <summary class="cursor-pointer font-semibold text-zinc-300 hover:text-indigo-300 transition flex items-center gap-1.5">
+            <span>💡</span> ¿Cómo crear un Webhook en Discord en 1 minuto?
+          </summary>
+          <ol class="mt-2.5 space-y-1.5 pl-4 list-decimal text-[11px] text-zinc-400">
+            <li>En tu servidor de Discord, hacé clic derecho en el canal deseado (ej. <code>#estado-server</code>) y elegí <b>Editar canal</b>.</li>
+            <li>Andá a la pestaña <b>Integraciones</b> ➔ <b>Webhooks</b> ➔ <b>Nuevo webhook</b>.</li>
+            <li>Ponele un nombre (ej. <i>Servidor Minecraft</i>) y hacé clic en <b>Copiar URL del webhook</b>.</li>
+            <li>Pegalo acá arriba y tocá <b>Guardar Cambios</b> y luego <b>Enviar Prueba</b>.</li>
+          </ol>
+        </details>
+      </div>
+
+      <!-- Columna Derecha: Toggles y Filtros de Eventos (5 cols) -->
+      <div class="space-y-3 lg:col-span-5">
+        <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Eventos que se enviarán:</h3>
+
+        <!-- Toggle 1: Servidor Encendido/Apagado -->
+        <label class="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 hover:border-zinc-700 transition cursor-pointer">
+          <div class="flex items-center gap-2.5">
+            <span class="text-lg">🟢</span>
+            <div>
+              <b class="text-xs text-zinc-200 block">Ciclo de Vida del Servidor</b>
+              <span class="text-[10px] text-zinc-500">Avisos de ONLINE, OFFLINE y reinicios.</span>
+            </div>
+          </div>
+          <input type="checkbox" id="discord-toggle-lifecycle" checked class="h-4 w-4 accent-emerald-400 cursor-pointer" />
+        </label>
+
+        <!-- Toggle 2: Caídas / Crashes -->
+        <label class="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 hover:border-zinc-700 transition cursor-pointer">
+          <div class="flex items-center gap-2.5">
+            <span class="text-lg">🚨</span>
+            <div>
+              <b class="text-xs text-zinc-200 block">Reportes de Caídas (Crash)</b>
+              <span class="text-[10px] text-zinc-500">Diagnóstico automático con mod causante.</span>
+            </div>
+          </div>
+          <input type="checkbox" id="discord-toggle-crashes" checked class="h-4 w-4 accent-emerald-400 cursor-pointer" />
+        </label>
+
+        <!-- Toggle 3: Backups -->
+        <label class="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 hover:border-zinc-700 transition cursor-pointer">
+          <div class="flex items-center gap-2.5">
+            <span class="text-lg">💾</span>
+            <div>
+              <b class="text-xs text-zinc-200 block">Copias de Seguridad</b>
+              <span class="text-[10px] text-zinc-500">Confirmación de backups con tamaño en MB.</span>
+            </div>
+          </div>
+          <input type="checkbox" id="discord-toggle-backups" checked class="h-4 w-4 accent-emerald-400 cursor-pointer" />
+        </label>
+
+        <!-- Toggle 4: Entradas y Salidas -->
+        <label class="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 hover:border-zinc-700 transition cursor-pointer">
+          <div class="flex items-center gap-2.5">
+            <span class="text-lg">👤</span>
+            <div>
+              <b class="text-xs text-zinc-200 block">Conexiones de Jugadores</b>
+              <span class="text-[10px] text-zinc-500">Logins y logouts con avatar 3D de la skin.</span>
+            </div>
+          </div>
+          <input type="checkbox" id="discord-toggle-joinleave" checked class="h-4 w-4 accent-emerald-400 cursor-pointer" />
+        </label>
+
+        <!-- Toggle 5: Muertes en Juego -->
+        <label class="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 hover:border-zinc-700 transition cursor-pointer">
+          <div class="flex items-center gap-2.5">
+            <span class="text-lg">💀</span>
+            <div>
+              <b class="text-xs text-zinc-200 block">Feed de Muertes en Vivo</b>
+              <span class="text-[10px] text-zinc-500">Mensajes de bajas, explosiones y PvP.</span>
+            </div>
+          </div>
+          <input type="checkbox" id="discord-toggle-deaths" checked class="h-4 w-4 accent-emerald-400 cursor-pointer" />
+        </label>
+
+        <!-- Toggle 6: Logros y Desafíos -->
+        <label class="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 hover:border-zinc-700 transition cursor-pointer">
+          <div class="flex items-center gap-2.5">
+            <span class="text-lg">🏆</span>
+            <div>
+              <b class="text-xs text-zinc-200 block">Logros y Desafíos</b>
+              <span class="text-[10px] text-zinc-500">Notificaciones de avances desbloqueados.</span>
+            </div>
+          </div>
+          <input type="checkbox" id="discord-toggle-advancements" checked class="h-4 w-4 accent-emerald-400 cursor-pointer" />
+        </label>
+      </div>
+    </div>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/admin-configs.js"></script>
+<script src="/static/js/admin-restrictions.js"></script>
+<script src="/static/js/admin-ranks.js"></script>
+<script src="/static/js/admin-discord.js"></script>
+{% endblock %}

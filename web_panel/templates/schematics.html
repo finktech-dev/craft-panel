@@ -1,0 +1,705 @@
+{% extends "base.html" %}
+{% block title %}Esquemas Create · Panel Minecraft{% endblock %}
+
+{% block content %}
+<section class="space-y-6" aria-labelledby="schematics-title">
+  <!-- Encabezado -->
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-sm font-medium text-emerald-300">Create · Schematicannon</p>
+      <h1 id="schematics-title" class="mt-1 text-2xl font-bold tracking-tight">Esquemas del Reino</h1>
+      <p class="mt-2 max-w-2xl text-sm text-zinc-400">
+        Generá estructuras ferroviarias, inspeccionalas en tiempo real con el visor 3D Voxel y descargalas en formato NBT para imprimirlas con el Schematicannon.
+      </p>
+    </div>
+  </div>
+
+  <!-- Visor 3D Interactivo de Voxels -->
+  <section class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-glow" aria-labelledby="viewer-title">
+    <div class="flex flex-col gap-3 border-b border-zinc-800/80 pb-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <h2 id="viewer-title" class="text-lg font-semibold tracking-tight text-zinc-100">Visor 3D Voxel Interactivo</h2>
+          <span id="viewer-badge" class="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300">WebGL</span>
+        </div>
+        <p class="mt-1 text-xs text-zinc-400">
+          Rotá (click izq.), desplazá (click der.) y hacé zoom (rueda) para inspeccionar los bloques antes de imprimir.
+        </p>
+      </div>
+
+      <!-- Barra de herramientas de cámara y controles -->
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center rounded-lg border border-zinc-700 bg-zinc-950 p-0.5 text-xs">
+          <button id="btn-view-iso" type="button" class="rounded px-2.5 py-1 text-zinc-200 transition hover:bg-zinc-800 active:scale-95" title="Vista isométrica de 45°">Isométrica</button>
+          <button id="btn-view-top" type="button" class="rounded px-2.5 py-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200 active:scale-95" title="Vista aérea cenital">Superior</button>
+          <button id="btn-view-side" type="button" class="rounded px-2.5 py-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200 active:scale-95" title="Vista lateral / perfil">Frontal</button>
+        </div>
+
+        <button id="btn-toggle-rotate" type="button" class="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-emerald-400/60 hover:text-emerald-300" title="Alternar rotación continua">
+          <span id="rotate-icon">🔄</span> <span id="rotate-text">Auto-rotar</span>
+        </button>
+
+        <button id="btn-reset-cam" type="button" class="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-zinc-500 hover:text-white" title="Centrar cámara sobre el modelo">
+          <span>🎯</span> <span>Centrar</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Viewport 3D con Canvas WebGL -->
+    <div class="relative mt-4 h-[380px] sm:h-[460px] w-full overflow-hidden rounded-lg border border-zinc-800 bg-[#0c0d12]">
+      <div id="three-container" class="h-full w-full cursor-grab active:cursor-grabbing"></div>
+
+      <!-- Pantalla de carga superpuesta -->
+      <div id="viewer-loading" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950/80 backdrop-blur-sm transition-opacity duration-300">
+        <div class="h-9 w-9 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent"></div>
+        <p id="loading-text" class="mt-3 text-xs font-medium text-emerald-300">Cargando esquema en 3D…</p>
+      </div>
+
+      <!-- Tarjeta HUD de telemetría (esquina superior izquierda) -->
+      <div class="pointer-events-none absolute left-3 top-3 z-10 rounded-lg border border-zinc-800/90 bg-zinc-950/85 px-3.5 py-2.5 shadow-xl backdrop-blur">
+        <div class="flex items-center gap-2">
+          <span class="text-xs">📦</span>
+          <span id="hud-filename" class="font-mono text-xs font-medium text-zinc-100">Cargando…</span>
+        </div>
+        <div class="mt-1 flex items-center gap-3 text-[11px] text-zinc-400">
+          <span>Dim: <strong id="hud-dimensions" class="font-mono text-zinc-300">—</strong></span>
+          <span>·</span>
+          <span>Bloques: <strong id="hud-blocks" class="font-mono text-emerald-400">—</strong></span>
+        </div>
+      </div>
+
+      <!-- Ayuda de navegación (esquina inferior izquierda) -->
+      <div class="pointer-events-none absolute bottom-3 left-3 z-10 hidden rounded border border-zinc-800/80 bg-zinc-950/70 px-2.5 py-1 text-[11px] text-zinc-400 backdrop-blur sm:block">
+        🖱️ Click izq: Rotar · Click der: Mover · Rueda: Zoom
+      </div>
+    </div>
+
+    <!-- Desglose de paleta de bloques de Minecraft -->
+    <div class="mt-4 pt-3 border-t border-zinc-800/80">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Composición de bloques detectados</p>
+        <span id="palette-count" class="text-xs text-zinc-500">—</span>
+      </div>
+      <div id="palette-tags" class="flex flex-wrap gap-2 text-xs" aria-live="polite">
+        <span class="text-zinc-500 italic text-xs">Cargando composición de materiales…</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Generadores de esquemas -->
+  <div class="grid gap-4 lg:grid-cols-2">
+    <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 shadow-glow">
+      <div class="flex items-center justify-between">
+        <p class="text-xs font-semibold uppercase tracking-wider text-emerald-300">Infraestructura</p>
+        <span class="rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-mono text-emerald-300">Create Tracks</span>
+      </div>
+      <h2 class="mt-2 text-lg font-semibold">Viaducto ferroviario</h2>
+      <p class="mt-2 text-sm leading-6 text-zinc-400">
+        Pilares de pizarra profunda, arcos góticos de piedra labrada, balasto de grava y tendido de dos vías de Create con andamios de soporte.
+      </p>
+      <label for="viaduct-length" class="mt-5 block text-sm text-zinc-300">
+        Longitud de vía: <output id="viaduct-length-output" class="font-mono font-semibold text-emerald-300">60</output> bloques
+      </label>
+      <input id="viaduct-length" type="range" min="20" max="256" value="60" class="mt-2 w-full accent-emerald-400" aria-describedby="viaduct-length-output">
+      <div class="mt-1 flex justify-between text-[11px] text-zinc-500 font-mono">
+        <span>20 blq</span>
+        <span>128 blq</span>
+        <span>256 blq</span>
+      </div>
+      <button id="generate-viaduct" type="button" class="mt-4 min-h-11 w-full rounded-lg bg-emerald-400 px-4 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-300 disabled:cursor-wait disabled:opacity-60">
+        Generar e Inspeccionar en 3D
+      </button>
+    </article>
+
+    <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 shadow-glow">
+      <div class="flex items-center justify-between">
+        <p class="text-xs font-semibold uppercase tracking-wider text-amber-300">Terminal</p>
+        <span class="rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-mono text-amber-300">Estación Central</span>
+      </div>
+      <h2 class="mt-2 text-lg font-semibold">Estación medieval</h2>
+      <p class="mt-2 text-sm leading-6 text-zinc-400">
+        Andenes dobles de andesita pulida, marquesina con baldosas de pizarra y barras de hierro forjado, techumbre de roble oscuro, faroles cálidos y vías de tren.
+      </p>
+      <div class="mt-6 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 text-xs text-zinc-400">
+        <div class="flex items-center gap-2">
+          <span class="text-amber-400">⚡</span>
+          <span>Estructura prefabricada de 35×18×25 bloques lista para imprimir.</span>
+        </div>
+      </div>
+      <button id="generate-station" type="button" class="mt-6 min-h-11 w-full rounded-lg border border-amber-300/50 bg-amber-300/10 px-4 text-sm font-semibold text-amber-100 transition hover:bg-amber-300/20 disabled:cursor-wait disabled:opacity-60">
+        Generar Estación Medieval
+      </button>
+    </article>
+  </div>
+
+  <!-- Listado de archivos NBT y Banner público -->
+  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_21rem]">
+    <section class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60" aria-labelledby="files-title">
+      <div class="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+        <div>
+          <h2 id="files-title" class="font-semibold">Archivos disponibles</h2>
+          <p class="mt-1 text-xs text-zinc-500">Hacé click en "Ver 3D" para cargar cualquier esquema en el visor.</p>
+        </div>
+        <span id="schematic-count" class="rounded-full bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300">—</span>
+      </div>
+      <div id="schematics-list" class="divide-y divide-zinc-800" aria-live="polite">
+        <p class="px-5 py-8 text-center text-sm text-zinc-500">Cargando esquemas…</p>
+      </div>
+    </section>
+
+    <aside class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5" aria-labelledby="banner-title">
+      <p class="text-xs font-semibold uppercase tracking-wider text-emerald-300">Enlace público</p>
+      <h2 id="banner-title" class="mt-2 text-lg font-semibold">Banner de estado</h2>
+      <img id="status-banner" src="/api/server/banner.png" alt="Estado actual del servidor" class="mt-4 w-full rounded-lg border border-amber-300/30 bg-zinc-950" width="600" height="160">
+      <button id="copy-banner-markdown" type="button" class="mt-4 min-h-11 w-full rounded-lg border border-zinc-700 px-4 text-sm font-medium text-zinc-200 transition hover:border-emerald-400/60 hover:bg-emerald-400/10">
+        Copiar enlace Markdown
+      </button>
+      <p class="mt-3 text-xs leading-5 text-zinc-500">El PNG no requiere sesión y se puede insertar en Discord o foros.</p>
+    </aside>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<!-- Three.js y OrbitControls desde CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // Referencias DOM
+    const list = document.querySelector('#schematics-list');
+    const count = document.querySelector('#schematic-count');
+    const lengthInput = document.querySelector('#viaduct-length');
+    const lengthOutput = document.querySelector('#viaduct-length-output');
+    const banner = document.querySelector('#status-banner');
+    const container = document.querySelector('#three-container');
+    const loadingOverlay = document.querySelector('#viewer-loading');
+    const loadingText = document.querySelector('#loading-text');
+    const hudFilename = document.querySelector('#hud-filename');
+    const hudDimensions = document.querySelector('#hud-dimensions');
+    const hudBlocks = document.querySelector('#hud-blocks');
+    const paletteTags = document.querySelector('#palette-tags');
+    const paletteCount = document.querySelector('#palette-count');
+
+    // Botones de control del visor
+    const btnIso = document.querySelector('#btn-view-iso');
+    const btnTop = document.querySelector('#btn-view-top');
+    const btnSide = document.querySelector('#btn-view-side');
+    const btnToggleRotate = document.querySelector('#btn-toggle-rotate');
+    const btnResetCam = document.querySelector('#btn-reset-cam');
+    const rotateText = document.querySelector('#rotate-text');
+
+    lengthInput.addEventListener('input', () => {
+      lengthOutput.textContent = lengthInput.value;
+    });
+
+    // -------------------------------------------------------------
+    // Paleta de Texturas Oficiales de Minecraft y Create
+    // -------------------------------------------------------------
+    const textureLoader = new THREE.TextureLoader();
+    const textureCache = {};
+    const materialCache = {};
+
+    const TEXTURE_MAP = {
+      'stone_bricks': '/static/textures/blocks/stone_bricks.png',
+      'cracked_stone_bricks': '/static/textures/blocks/cracked_stone_bricks.png',
+      'mossy_stone_bricks': '/static/textures/blocks/mossy_stone_bricks.png',
+      'chiseled_stone_bricks': '/static/textures/blocks/chiseled_stone_bricks.png',
+      'deepslate_bricks': '/static/textures/blocks/deepslate_bricks.png',
+      'cracked_deepslate_bricks': '/static/textures/blocks/cracked_deepslate_bricks.png',
+      'deepslate_tiles': '/static/textures/blocks/deepslate_tiles.png',
+      'polished_deepslate': '/static/textures/blocks/polished_deepslate.png',
+      'polished_andesite': '/static/textures/blocks/polished_andesite.png',
+      'andesite': '/static/textures/blocks/andesite.png',
+      'gravel': '/static/textures/blocks/gravel.png',
+      'dark_oak_planks': '/static/textures/blocks/dark_oak_planks.png',
+      'oak_planks': '/static/textures/blocks/oak_planks.png',
+      'spruce_planks': '/static/textures/blocks/spruce_planks.png',
+      'lantern': '/static/textures/blocks/lantern.png',
+      'iron_bars': '/static/textures/blocks/iron_bars.png',
+      'glass': '/static/textures/blocks/glass.png',
+      'chain': '/static/textures/blocks/chain.png',
+      'track': '/static/textures/blocks/create_track.png',
+      'andesite_scaffolding': '/static/textures/blocks/create_andesite_scaffold.png',
+      'andesite_casing': '/static/textures/blocks/create_andesite_casing.png'
+    };
+
+    const BLOCK_PALETTE_DEFS = {
+      'stone_bricks': { color: '#888b8d', name: 'Ladrillos de piedra' },
+      'cracked_stone_bricks': { color: '#737677', name: 'Ladrillos agrietados' },
+      'mossy_stone_bricks': { color: '#68795c', name: 'Ladrillos musgosos' },
+      'chiseled_stone_bricks': { color: '#7c7f81', name: 'Piedra labrada cincelada' },
+      'deepslate_bricks': { color: '#3a3b40', name: 'Ladrillos de pizarra profunda' },
+      'deepslate_tiles': { color: '#303136', name: 'Baldosas de pizarra' },
+      'cracked_deepslate_bricks': { color: '#2b2c30', name: 'Pizarra agrietada' },
+      'polished_deepslate': { color: '#45464c', name: 'Pizarra pulida' },
+      'polished_andesite': { color: '#898c8c', name: 'Andesita pulida' },
+      'andesite_scaffolding': { color: '#61676d', name: 'Andamio de andesita (Create)' },
+      'andesite_casing': { color: '#5b6167', name: 'Revestimiento de andesita (Create)' },
+      'gravel': { color: '#827d76', name: 'Balasto de grava' },
+      'track': { color: '#d97706', name: 'Vías de tren (Create)' },
+      'lantern': { color: '#fbbf24', name: 'Farol' },
+      'chain': { color: '#374151', name: 'Cadena de hierro' },
+      'iron_bars': { color: '#94a3b8', name: 'Barras de hierro' },
+      'dark_oak_planks': { color: '#3f2818', name: 'Tablones de roble oscuro' },
+      'spruce_planks': { color: '#6b4e2d', name: 'Tablones de abeto' },
+      'oak_planks': { color: '#9d7c4c', name: 'Tablones de roble' },
+      'glass': { color: '#93c5fd', name: 'Cristal' }
+    };
+
+    function resolveBlockInfo(rawId) {
+      const clean = String(rawId || '').replace(/^[^:]+:/, '').split('[')[0].toLowerCase();
+      for (const [key, val] of Object.entries(BLOCK_PALETTE_DEFS)) {
+        if (clean.includes(key)) {
+          return { color: val.color, name: val.name, key };
+        }
+      }
+      let hash = 0;
+      for (let i = 0; i < clean.length; i++) hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+      const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+      const hex = '#' + '00000'.substring(0, 6 - c.length) + c;
+      const formatted = clean.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      return { color: hex, name: formatted, key: clean };
+    }
+
+    function getBlockTexture(cleanKey) {
+      if (!textureCache[cleanKey]) {
+        let path = null;
+        for (const [k, p] of Object.entries(TEXTURE_MAP)) {
+          if (cleanKey.includes(k)) {
+            path = p;
+            break;
+          }
+        }
+        if (!path) return null;
+        const tex = textureLoader.load(path);
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
+        tex.generateMipmaps = false;
+        textureCache[cleanKey] = tex;
+      }
+      return textureCache[cleanKey];
+    }
+
+    function getBlockMaterial(cleanKey, rawName) {
+      if (!materialCache[cleanKey]) {
+        const tex = getBlockTexture(cleanKey);
+        const info = resolveBlockInfo(rawName);
+
+        const options = {
+          roughness: 0.8,
+          metalness: 0.1
+        };
+
+        if (tex) {
+          options.map = tex;
+        } else {
+          options.color = new THREE.Color(info.color);
+        }
+
+        if (cleanKey.includes('glass')) {
+          options.transparent = true;
+          options.opacity = 0.65;
+        } else if (cleanKey.includes('iron_bars') || cleanKey.includes('chain') || cleanKey.includes('scaffolding')) {
+          options.transparent = true;
+          options.alphaTest = 0.25;
+        } else if (cleanKey.includes('lantern')) {
+          options.transparent = true;
+          options.alphaTest = 0.2;
+          options.emissive = new THREE.Color(0xfbbf24);
+          options.emissiveIntensity = 0.75;
+        }
+
+        materialCache[cleanKey] = new THREE.MeshStandardMaterial(options);
+      }
+      return materialCache[cleanKey];
+    }
+
+    // -------------------------------------------------------------
+    // Inicialización del Motor WebGL Three.js
+    // -------------------------------------------------------------
+    let scene, camera, renderer, controls;
+    let currentMesh = null;
+    let currentGrid = null;
+    let isAutoRotating = false;
+    let activeSchematicFilename = null;
+    let currentBounds = { width: 1, height: 1, length: 1 };
+
+    function initThree() {
+      const width = container.clientWidth || 800;
+      const height = container.clientHeight || 450;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0c0d12);
+
+      camera = new THREE.PerspectiveCamera(45, width / height, 0.5, 2000);
+      camera.position.set(40, 30, 45);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.07;
+      controls.maxPolarAngle = Math.PI / 2 + 0.08;
+      controls.minDistance = 3;
+      controls.maxDistance = 500;
+
+      // Luces direccionales y hemisféricas calibradas para texturas de bloques Minecraft
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+
+      const hemiLight = new THREE.HemisphereLight(0xbae6fd, 0x1e293b, 0.45);
+      scene.add(hemiLight);
+
+      const sunLight = new THREE.DirectionalLight(0xfffaed, 0.85);
+      sunLight.position.set(60, 100, 50);
+      scene.add(sunLight);
+
+      const fillLight = new THREE.DirectionalLight(0x94a3b8, 0.35);
+      fillLight.position.set(-60, 40, -50);
+      scene.add(fillLight);
+
+      // Render Loop
+      function animate() {
+        requestAnimationFrame(animate);
+        if (isAutoRotating && controls) {
+          controls.autoRotate = true;
+          controls.autoRotateSpeed = 1.6;
+        } else if (controls) {
+          controls.autoRotate = false;
+        }
+        controls.update();
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      // Ajuste dinámico al redimensionar
+      const resizeObserver = new ResizeObserver(() => {
+        if (!container || !renderer || !camera) return;
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      });
+      resizeObserver.observe(container);
+    }
+
+    // -------------------------------------------------------------
+    // Posicionamiento de Cámara
+    // -------------------------------------------------------------
+    function setCameraPreset(preset) {
+      const { width: w, height: h, length: l } = currentBounds;
+      const maxDim = Math.max(w, h, l, 15);
+      const targetY = h * 0.4;
+      controls.target.set(0, targetY, 0);
+
+      if (preset === 'iso') {
+        camera.position.set(maxDim * 0.95, maxDim * 0.75, maxDim * 0.95);
+      } else if (preset === 'top') {
+        camera.position.set(0.01, maxDim * 1.5, 0.01);
+      } else if (preset === 'side') {
+        camera.position.set(maxDim * 1.25, targetY, 0);
+      }
+      controls.update();
+    }
+
+    btnIso.addEventListener('click', () => setCameraPreset('iso'));
+    btnTop.addEventListener('click', () => setCameraPreset('top'));
+    btnSide.addEventListener('click', () => setCameraPreset('side'));
+    btnResetCam.addEventListener('click', () => setCameraPreset('iso'));
+
+    btnToggleRotate.addEventListener('click', () => {
+      isAutoRotating = !isAutoRotating;
+      if (isAutoRotating) {
+        btnToggleRotate.classList.add('border-emerald-400', 'text-emerald-300', 'bg-emerald-950/40');
+        rotateText.textContent = 'Rotando';
+      } else {
+        btnToggleRotate.classList.remove('border-emerald-400', 'text-emerald-300', 'bg-emerald-950/40');
+        rotateText.textContent = 'Auto-rotar';
+      }
+    });
+
+    // -------------------------------------------------------------
+    // Carga e Instanciación de Voxels desde la API
+    // -------------------------------------------------------------
+    async function loadSchematicPreview(filename) {
+      if (!filename) return;
+      activeSchematicFilename = filename;
+      highlightActiveFile(filename);
+
+      loadingText.textContent = `Cargando ${filename}…`;
+      loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
+      hudFilename.textContent = filename;
+
+      try {
+        const data = await Panel.api(`/api/schematics/${encodeURIComponent(filename)}/preview`);
+        renderVoxels(data);
+      } catch (err) {
+        console.error('Error al cargar vista 3D:', err);
+        Panel.toast(`No se pudo cargar la vista 3D de ${filename}: ${err.message}`, 'error');
+        loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    function renderVoxels(data) {
+      // 1. Limpiar geometría previa de la escena
+      if (currentMesh) {
+        scene.remove(currentMesh);
+        currentMesh.traverse((child) => {
+          if (child.geometry) child.geometry.dispose();
+        });
+        currentMesh = null;
+      }
+      if (currentGrid) {
+        scene.remove(currentGrid);
+        currentGrid.geometry.dispose();
+        currentGrid = null;
+      }
+
+      const { width: w, height: h, length: l, voxels, palette } = data;
+      currentBounds = { width: w, height: h, length: l };
+
+      // Actualizar HUD
+      hudDimensions.textContent = `${w} × ${h} × ${l}`;
+      hudBlocks.textContent = voxels.length.toLocaleString('es-AR');
+
+      // 2. Construir cuadrícula de apoyo en el suelo
+      const maxXZ = Math.max(w, l, 20);
+      const gridSize = Math.ceil(maxXZ * 1.35);
+      currentGrid = new THREE.GridHelper(gridSize, Math.min(gridSize, 50), 0x334155, 0x181e29);
+      currentGrid.position.y = -0.02;
+      scene.add(currentGrid);
+
+      // 3. Agrupar voxels por tipo de bloque para aplicar texturas reales
+      const count = voxels.length;
+      if (count === 0) {
+        loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
+        paletteTags.innerHTML = '<span class="text-zinc-500 italic text-xs">El archivo no contiene bloques sólidos.</span>';
+        return;
+      }
+
+      const voxelsByPalette = {};
+      for (let i = 0; i < count; i++) {
+        const pid = voxels[i][3];
+        if (!voxelsByPalette[pid]) voxelsByPalette[pid] = [];
+        voxelsByPalette[pid].push(voxels[i]);
+      }
+
+      const containerGroup = new THREE.Group();
+      const geometry = new THREE.BoxGeometry(0.98, 0.98, 0.98);
+      const dummy = new THREE.Object3D();
+      const blockStats = {};
+
+      for (const [pidStr, list] of Object.entries(voxelsByPalette)) {
+        const rawName = palette[pidStr] || 'minecraft:air';
+        if (rawName === 'minecraft:air' || list.length === 0) continue;
+
+        const info = resolveBlockInfo(rawName);
+        const mat = getBlockMaterial(info.key, rawName);
+        const instMesh = new THREE.InstancedMesh(geometry, mat, list.length);
+        instMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+
+        for (let j = 0; j < list.length; j++) {
+          const [vx, vy, vz] = list[j];
+          dummy.position.set(
+            vx - w / 2 + 0.5,
+            vy + 0.5,
+            vz - l / 2 + 0.5
+          );
+          dummy.updateMatrix();
+          instMesh.setMatrixAt(j, dummy.matrix);
+        }
+        instMesh.instanceMatrix.needsUpdate = true;
+        containerGroup.add(instMesh);
+
+        blockStats[info.name] = {
+          count: list.length,
+          color: info.color,
+          name: info.name,
+          key: info.key
+        };
+      }
+
+      scene.add(containerGroup);
+      currentMesh = containerGroup;
+
+      // 4. Centrar cámara de manera óptima
+      setCameraPreset('iso');
+
+      // 5. Renderizar tags de desglose de paleta con vista previa de textura
+      renderPaletteTags(blockStats, count);
+
+      // Ocultar pantalla de carga
+      window.setTimeout(() => {
+        loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
+      }, 120);
+    }
+
+    function renderPaletteTags(blockStats, totalBlocks) {
+      const sorted = Object.values(blockStats).sort((a, b) => b.count - a.count);
+      paletteCount.textContent = `${sorted.length} tipos de bloque`;
+
+      paletteTags.innerHTML = sorted.map(stat => {
+        const pct = ((stat.count / totalBlocks) * 100).toFixed(1);
+        const tex = TEXTURE_MAP[stat.key];
+        const iconHtml = tex
+          ? `<img src="${tex}" class="h-4 w-4 shrink-0 rounded-sm shadow-sm" style="image-rendering: pixelated;" alt="" />`
+          : `<span class="h-2.5 w-2.5 shrink-0 rounded-sm shadow-sm" style="background-color: ${stat.color};"></span>`;
+
+        return `
+          <div class="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/80 px-2.5 py-1 text-xs text-zinc-300 shadow-sm">
+            ${iconHtml}
+            <span class="font-medium text-zinc-200">${Panel.escapeHtml(stat.name)}</span>
+            <span class="font-mono text-zinc-500">×${stat.count.toLocaleString('es-AR')}</span>
+            <span class="rounded bg-zinc-800 px-1 py-0.2 text-[10px] text-zinc-400 font-mono">${pct}%</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function highlightActiveFile(filename) {
+      document.querySelectorAll('.schematic-row').forEach(row => {
+        const isCurrent = row.dataset.filename === filename;
+        if (isCurrent) {
+          row.classList.add('bg-emerald-500/5', 'border-l-2', 'border-l-emerald-400');
+          const btn = row.querySelector('.btn-preview-3d');
+          if (btn) {
+            btn.classList.add('bg-emerald-400', 'text-zinc-950', 'border-emerald-400');
+            btn.classList.remove('bg-emerald-500/10', 'text-emerald-300', 'border-emerald-500/40');
+            btn.innerHTML = '<span>✓</span> <span>En visor 3D</span>';
+          }
+        } else {
+          row.classList.remove('bg-emerald-500/5', 'border-l-2', 'border-l-emerald-400');
+          const btn = row.querySelector('.btn-preview-3d');
+          if (btn) {
+            btn.classList.remove('bg-emerald-400', 'text-zinc-950', 'border-emerald-400');
+            btn.classList.add('bg-emerald-500/10', 'text-emerald-300', 'border-emerald-500/40');
+            btn.innerHTML = '<span>👁️</span> <span>Ver 3D</span>';
+          }
+        }
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Listado y Descarga de Esquemas
+    // -------------------------------------------------------------
+    const renderList = (items) => {
+      count.textContent = `${items.length} archivo${items.length === 1 ? '' : 's'}`;
+      if (!items.length) {
+        list.innerHTML = '<p class="px-5 py-8 text-center text-sm text-zinc-500">Todavía no hay esquemas generados.</p>';
+        return;
+      }
+
+      list.innerHTML = items.map((item) => `
+        <div class="schematic-row flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 transition hover:bg-zinc-800/30" data-filename="${Panel.escapeHtml(item.filename)}">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-400/10 text-emerald-300 font-mono text-sm" aria-hidden="true">▧</div>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium text-zinc-100">${Panel.escapeHtml(item.filename)}</p>
+              <p class="mt-0.5 text-xs text-zinc-500">${item.size_kb} KB · ${new Date(item.modified_at).toLocaleString('es-AR')}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 self-end sm:self-auto">
+            <button type="button" data-filename="${Panel.escapeHtml(item.filename)}" class="btn-preview-3d flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20 active:scale-95">
+              <span>👁️</span> <span>Ver 3D</span>
+            </button>
+            <a href="/api/schematics/${encodeURIComponent(item.filename)}/download" class="flex min-h-9 items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:border-emerald-400/60 hover:bg-emerald-400/10 hover:text-emerald-200">
+              <span>⬇</span> <span>Descargar</span>
+            </a>
+          </div>
+        </div>
+      `).join('');
+
+      // Asignar listeners a los botones "Ver 3D"
+      document.querySelectorAll('.btn-preview-3d').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const fn = e.currentTarget.dataset.filename;
+          loadSchematicPreview(fn);
+        });
+      });
+
+      // Si no hay ninguno cargado todavía, cargar el primero disponible
+      if (!activeSchematicFilename && items.length > 0) {
+        loadSchematicPreview(items[0].filename);
+      } else if (activeSchematicFilename) {
+        highlightActiveFile(activeSchematicFilename);
+      }
+    };
+
+    const loadSchematics = async () => {
+      try {
+        const items = await Panel.api('/api/schematics');
+        renderList(items);
+        return items;
+      } catch (error) {
+        list.innerHTML = `<p class="px-5 py-8 text-center text-sm text-rose-300">${Panel.escapeHtml(error.message)}</p>`;
+        return [];
+      }
+    };
+
+    // -------------------------------------------------------------
+    // Generación de Nuevos Esquemas
+    // -------------------------------------------------------------
+    const generate = async (button, path, body, targetFilename) => {
+      button.disabled = true;
+      const originalLabel = button.textContent;
+      button.textContent = 'Generando estructura…';
+
+      try {
+        const result = await Panel.api(path, { method: 'POST', body });
+        Panel.toast(result.message);
+        await loadSchematics();
+        banner.src = `/api/server/banner.png?updated=${Date.now()}`;
+        if (targetFilename) {
+          loadSchematicPreview(targetFilename);
+        }
+      } catch (error) {
+        Panel.toast(error.message, 'error');
+      } finally {
+        button.disabled = false;
+        button.textContent = originalLabel;
+      }
+    };
+
+    document.querySelector('#generate-viaduct').addEventListener('click', (event) => {
+      generate(
+        event.currentTarget,
+        '/api/schematics/generate-viaduct',
+        { length_blocks: Number(lengthInput.value) },
+        'viaducto_medieval.nbt'
+      );
+    });
+
+    document.querySelector('#generate-station').addEventListener('click', (event) => {
+      generate(
+        event.currentTarget,
+        '/api/schematics/generate-station',
+        null,
+        'estacion_central.nbt'
+      );
+    });
+
+    document.querySelector('#copy-banner-markdown').addEventListener('click', async () => {
+      const markdown = `![Estado](${window.location.origin}/api/server/banner.png)`;
+      try {
+        await navigator.clipboard.writeText(markdown);
+        Panel.toast('Enlace Markdown copiado al portapapeles.');
+      } catch {
+        Panel.toast('No se pudo copiar el enlace.', 'error');
+      }
+    });
+
+    // Iniciar Three.js y cargar esquemas
+    initThree();
+    loadSchematics();
+  });
+</script>
+{% endblock %}
+

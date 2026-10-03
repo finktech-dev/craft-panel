@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Crashes y Desconexiones · Panel Minecraft{% endblock %}
+{% block content %}
+<section class="space-y-6" aria-labelledby="crashes-title">
+  <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-sm font-medium text-rose-400">Auditoría y Diagnóstico</p>
+      <h1 id="crashes-title" class="mt-1 text-2xl font-bold sm:text-3xl">Crashes y Desconexiones por Jugador</h1>
+      <p class="mt-2 text-sm text-zinc-400">Registro detallado de errores, incompatibilidades y desconexiones con trazas de log completas.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button id="btn-scan-logs" class="rounded-lg border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-sm font-semibold text-zinc-300 hover:border-emerald-400/60 hover:text-zinc-100 transition flex items-center gap-1.5">
+        <span>↻</span> <span>Escanear logs ahora</span>
+      </button>
+      <button id="btn-rescan-clean" class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/20 hover:border-amber-500/60 transition flex items-center gap-1.5" title="Vacía el historial previo y re-escanea todos los logs desde cero">
+        <span>🧹</span> <span>Re-escanear historial limpio</span>
+      </button>
+      <button id="btn-clear-logs" class="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/20 transition">
+        Limpiar historial
+      </button>
+    </div>
+  </header>
+
+  <!-- TARJETAS DE ESTADÍSTICAS -->
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <article class="rounded-xl border border-rose-500/30 bg-rose-950/20 p-5 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-xs font-semibold uppercase tracking-wider text-rose-400">Crashes / Errores Críticos</p>
+        <span class="text-base text-rose-400">💥</span>
+      </div>
+      <p id="stat-critical" class="mt-2 text-3xl font-bold text-rose-300">0</p>
+      <p class="mt-1 text-xs text-rose-300/70">Fallos de mods, NBT o datos corruptos</p>
+    </article>
+
+    <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Salidas Voluntarias</p>
+        <span class="text-base text-zinc-400">🚪</span>
+      </div>
+      <p id="stat-normal" class="mt-2 text-3xl font-bold text-zinc-300">0</p>
+      <p class="mt-1 text-xs text-zinc-500">Desconexiones normales (informativo)</p>
+    </article>
+
+    <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Total de Eventos</p>
+        <span class="text-base text-zinc-400">📋</span>
+      </div>
+      <p id="stat-total" class="mt-2 text-3xl font-bold text-zinc-100">0</p>
+      <p class="mt-1 text-xs text-zinc-500">Histórico de desconexiones detectadas</p>
+    </article>
+
+    <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-xs font-semibold uppercase tracking-wider text-emerald-400">Jugadores Auditados</p>
+        <span class="text-base text-emerald-400">👥</span>
+      </div>
+      <p id="stat-players" class="mt-2 text-3xl font-bold text-emerald-400">0</p>
+      <p class="mt-1 text-xs text-zinc-500">Jugadores que tuvieron actividad</p>
+    </article>
+  </div>
+
+  <!-- BARRA DE FILTROS -->
+  <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+    <div class="grid gap-3 sm:grid-cols-3">
+      <div>
+        <label for="filter-player" class="block text-xs font-semibold text-zinc-400">Filtrar por Jugador</label>
+        <select id="filter-player" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none">
+          <option value="">Todos los jugadores</option>
+        </select>
+      </div>
+      <div>
+        <label for="filter-category" class="block text-xs font-semibold text-zinc-400">Tipo de Error / Causa</label>
+        <select id="filter-category" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none">
+          <option value="">Todas las causas</option>
+        </select>
+      </div>
+      <div>
+        <label for="filter-search" class="block text-xs font-semibold text-zinc-400">Búsqueda en trazas y textos</label>
+        <input id="filter-search" type="search" placeholder="ej: Capability, LuckPerms, timeout..." class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none">
+      </div>
+    </div>
+
+    <!-- Filtro rápido de anomalías vs salidas normales -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-zinc-800/80 pt-3">
+      <label class="inline-flex items-center gap-2.5 cursor-pointer select-none text-xs text-zinc-300 hover:text-zinc-100">
+        <input type="checkbox" id="filter-errors-only" class="rounded border-zinc-700 bg-zinc-950 text-rose-500 focus:ring-rose-400/40 h-4 w-4 cursor-pointer">
+        <span class="font-medium">Solo mostrar errores y desconexiones anómalas <span class="text-zinc-500 font-normal">(ocultar salidas normales)</span></span>
+      </label>
+      <div id="filter-counter" class="text-xs text-zinc-400 font-medium"></div>
+    </div>
+  </div>
+
+  <!-- LISTA DE EVENTOS -->
+  <div id="crashes-list" class="space-y-3">
+    <div class="p-8 text-center text-sm text-zinc-500">Cargando eventos de desconexión...</div>
+  </div>
+</section>
+
+<!-- MODAL VISOR DE LOG COMPLETO Y TRAZA -->
+<dialog id="modal-log-viewer" class="m-auto w-[min(94vw,56rem)] rounded-xl border border-zinc-700 bg-zinc-950 p-6 text-zinc-100 shadow-2xl backdrop:bg-black/80">
+  <div class="flex items-start justify-between border-b border-zinc-800 pb-4">
+    <div class="flex items-center gap-3">
+      <img id="viewer-player-avatar" src="" alt="Avatar" class="h-10 w-10 rounded-lg border border-zinc-700 bg-zinc-900 object-cover">
+      <div>
+        <div class="flex items-center gap-2">
+          <h3 id="viewer-player-name" class="text-base font-bold"></h3>
+          <span id="viewer-category-badge"></span>
+        </div>
+        <p id="viewer-timestamp" class="text-xs text-zinc-400"></p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="btn-copy-log" class="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-emerald-400/60 hover:text-emerald-300 transition">Copiar log completo</button>
+      <button id="close-log-viewer" class="text-zinc-400 hover:text-zinc-100 text-xl font-bold leading-none px-2" aria-label="Cerrar modal">×</button>
+    </div>
+  </div>
+
+  <!-- Diagnóstico y recomendación adaptada -->
+  <div id="viewer-suggestion-box" class="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-4 text-xs leading-relaxed">
+    <p id="viewer-suggestion-title" class="font-bold uppercase tracking-wider text-[10px]">💡 Diagnóstico sugerido</p>
+    <p id="viewer-suggestion-text" class="mt-1 font-medium"></p>
+  </div>
+
+  <!-- Contenedor del log con stack trace -->
+  <div class="mt-4">
+    <div class="flex items-center justify-between text-xs text-zinc-400 pb-1">
+      <span id="viewer-source-file">Archivo: latest.log</span>
+      <span>Traza del servidor (Contexto completo)</span>
+    </div>
+    <pre id="viewer-log-content" class="max-h-[50vh] overflow-y-auto rounded-lg border border-zinc-800 bg-black p-4 font-mono text-xs leading-5 text-zinc-300 whitespace-pre-wrap break-words select-text"></pre>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/crashes.js"></script>
+{% endblock %}

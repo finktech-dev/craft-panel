@@ -1,0 +1,15 @@
+:root { --panel-canvas:#090b10; --panel-surface:#11151d; --panel-border:#252c38; --panel-accent:#63e6be; --panel-focus:#8ab4ff; }
+.panel-shell { background:radial-gradient(900px 520px at 100% -10%, rgba(35, 126, 101, .13), transparent 62%), var(--panel-canvas); }
+.skip-link { position:fixed; top:-4rem; left:1rem; z-index:100; border-radius:.5rem; background:var(--panel-focus); color:#07111f; padding:.6rem .85rem; font-weight:700; }
+.skip-link:focus { top:1rem; }
+.v2-card { border:1px solid var(--panel-border); border-radius:1rem; background:var(--panel-surface); box-shadow:0 12px 32px rgba(0,0,0,.14); }
+.v2-button { min-height:2.75rem; border-radius:.65rem; padding:.65rem .9rem; font-weight:700; transition:transform 150ms ease; }
+.v2-button:hover:not(:disabled) { transform:translateY(-1px); }.panel-shell :focus-visible { outline:2px solid var(--panel-focus); outline-offset:2px; }
+@media (max-width: 639px) { .panel-shell { background:var(--panel-canvas); } }
+
+/* Top navigation replaces the persistent sidebar: compact, touch-safe, and page-focused. */
+.topnav-link { display:inline-flex; align-items:center; min-height:2.75rem; border-radius:.65rem; padding:.55rem .75rem; color:#a1a1aa; font-size:.875rem; font-weight:600; transition:background-color 150ms ease,color 150ms ease; }
+.topnav-link:hover { background:#181d26; color:#f4f4f5; }
+.topnav-link-active { background:rgba(52,211,153,.14); color:#a7f3d0; }
+#mobile-nav .topnav-link { justify-content:center; }
+@media (prefers-reduced-motion: reduce) { .topnav-link { transition:none; } }

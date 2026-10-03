@@ -1,0 +1,26 @@
+# Web framework and ASGI server
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+
+# Validation and configuration
+pydantic>=2.8,<3.0
+pydantic-settings>=2.4,<3.0
+
+# Server-rendered UI and form uploads
+jinja2>=3.1,<4.0
+python-multipart>=0.0.9,<1.0
+itsdangerous>=2.2,<3.0
+
+# Runtime services
+psutil>=6.0,<8.0
+httpx>=0.27,<1.0
+aiofiles>=24.1,<25.0
+
+# 2FA Security and Image generation
+pyotp>=2.9,<3.0
+qrcode>=8.0,<9.0
+pillow>=10.0,<13.0
+nbtlib>=2.0,<3.0
+tomlkit>=0.13,<1.0
+json5>=0.10,<1.0
+apscheduler>=3.10,<4.0

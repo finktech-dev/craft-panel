@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Inicio · Panel Minecraft{% endblock %}
+{% block content %}
+<section aria-labelledby="dashboard-title">
+  <div class="mb-7 flex flex-col gap-5 border-b border-zinc-800 pb-7 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-sm font-semibold text-emerald-300">Tu servidor, de un vistazo</p>
+      <h1 id="dashboard-title" class="mt-1 text-3xl font-bold tracking-tight text-zinc-50">Todo listo para jugar</h1>
+      <p id="dashboard-summary" class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400" aria-live="polite">Revisando el estado del servidor…</p>
+    </div>
+    <a href="/onboarding" class="v2-button inline-flex items-center justify-center border border-zinc-700 bg-zinc-900 text-sm text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800">Guía de inicio</a>
+  </div>
+
+  <section class="v2-card mb-6 overflow-hidden" aria-labelledby="share-title">
+    <div class="border-b border-zinc-800 bg-gradient-to-r from-emerald-500/10 via-transparent to-transparent p-5 sm:p-6">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div><p class="text-sm font-semibold text-emerald-300">Para compartir con amigos</p><h2 id="share-title" class="mt-1 text-xl font-bold text-zinc-100">Dirección de conexión</h2><p id="connection-message" class="mt-1 max-w-xl text-sm leading-6 text-zinc-400">Buscando una dirección que puedas compartir…</p></div>
+        <div class="flex flex-wrap items-center gap-2"><code id="connection-address" class="max-w-full overflow-x-auto rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm font-semibold text-zinc-200">—</code><button id="copy-connection" type="button" class="v2-button border border-emerald-400/30 bg-emerald-400/15 text-sm text-emerald-200 hover:bg-emerald-400/25" disabled>Copiar</button></div>
+      </div>
+    </div>
+    <div class="flex flex-col gap-3 p-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6"><p id="connection-next-step" class="text-zinc-500">Una dirección local sólo funciona desde esta computadora.</p><a href="/administration" class="font-semibold text-emerald-300 hover:text-emerald-200">Configurar acceso →</a></div>
+  </section>
+
+  <section class="grid gap-4 lg:grid-cols-3" aria-label="Estado y salud del servidor">
+    <article class="v2-card p-5 sm:p-6 lg:col-span-2">
+      <div class="flex flex-wrap items-start justify-between gap-4"><div><p class="text-sm font-medium text-zinc-400">Salud del servidor</p><h2 id="health-title" class="mt-2 text-2xl font-bold text-zinc-100">Esperando estado</h2><p id="health-description" class="mt-1 text-sm text-zinc-500">Las métricas aparecen cuando el panel termina de consultar.</p></div><span id="health-badge" class="rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-bold text-zinc-300">REVISANDO</span></div>
+      <dl class="mt-6 grid gap-3 sm:grid-cols-3">
+        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4"><dt class="text-xs font-medium text-zinc-500">Jugabilidad</dt><dd id="tps-value" class="mt-2 text-xl font-bold tabular-nums text-zinc-100">—</dd><p class="mt-1 text-xs text-zinc-500">TPS estimados</p></div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4"><dt class="text-xs font-medium text-zinc-500">Memoria</dt><dd id="ram-value" class="mt-2 text-xl font-bold tabular-nums text-zinc-100">—</dd><p id="ram-caption" class="mt-1 text-xs text-zinc-500">Uso del proceso</p></div>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4"><dt class="text-xs font-medium text-zinc-500">Tiempo activo</dt><dd id="uptime-value" class="mt-2 text-xl font-bold tabular-nums text-zinc-100">—</dd><p id="cpu-caption" class="mt-1 text-xs text-zinc-500">CPU: —</p></div>
+      </dl>
+    </article>
+    <article class="v2-card p-5 sm:p-6" aria-labelledby="backup-title"><p class="text-sm font-medium text-zinc-400">Cuidar tu progreso</p><h2 id="backup-title" class="mt-2 text-xl font-bold text-zinc-100">Última copia</h2><p id="backup-status" class="mt-3 text-sm leading-6 text-zinc-400">Buscando copias de seguridad…</p><p id="backup-detail" class="mt-2 break-all font-mono text-xs text-zinc-500"></p><a href="/backups" class="mt-6 inline-flex min-h-11 items-center text-sm font-semibold text-emerald-300 hover:text-emerald-200">Ver copias de seguridad →</a></article>
+  </section>
+
+  <section class="v2-card mt-6 p-5 sm:p-6" aria-labelledby="operations-title">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div><p class="text-sm font-semibold text-emerald-300">Operaciones guiadas</p><h2 id="operations-title" class="mt-1 text-xl font-bold text-zinc-100">Acciones importantes, explicadas</h2><p class="mt-1 text-sm leading-6 text-zinc-500">Usá estas opciones para jugar tranquilo. No necesitás escribir comandos.</p></div>
+      <p id="operation-feedback" class="text-xs text-zinc-500" aria-live="polite"></p>
+    </div>
+    <div class="mt-5 grid gap-3 md:grid-cols-3">
+      <article class="rounded-xl border border-emerald-400/25 bg-emerald-400/5 p-4"><h3 class="font-semibold text-zinc-100">Iniciar servidor</h3><p class="mt-2 min-h-10 text-sm leading-5 text-zinc-500">Lo enciende para que tus amigos puedan entrar.</p><button data-server-action="start" type="button" class="v2-button mt-4 w-full bg-emerald-400 text-sm font-bold text-emerald-950 hover:bg-emerald-300">Iniciar</button></article>
+      <article class="rounded-xl border border-emerald-400/25 bg-emerald-400/5 p-4"><h3 class="font-semibold text-zinc-100">Crear una copia</h3><p class="mt-2 min-h-10 text-sm leading-5 text-zinc-500">Protege el progreso antes de instalar o cambiar algo.</p><button id="create-backup" type="button" class="v2-button mt-4 w-full border border-emerald-400/35 bg-emerald-400/15 text-sm font-bold text-emerald-200 hover:bg-emerald-400/25">Crear copia ahora</button></article>
+      <article class="rounded-xl border border-teal-400/25 bg-teal-400/5 p-4"><h3 class="font-semibold text-zinc-100">Reiniciar con aviso</h3><p class="mt-2 min-h-10 text-sm leading-5 text-zinc-500">Avisa a quienes están jugando y espera 10 segundos.</p><button id="graceful-restart" type="button" class="v2-button mt-4 w-full bg-teal-300 text-sm font-bold text-teal-950 hover:bg-teal-200">Avisar y reiniciar</button></article>
+    </div>
+    <details class="group mt-5 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+      <summary class="cursor-pointer text-sm font-semibold text-zinc-400 hover:text-zinc-200">Herramientas avanzadas: apagar, forzar cierre y consola</summary>
+      <div class="mt-4 grid gap-3 border-t border-zinc-800 pt-4 sm:grid-cols-3"><button data-server-action="stop" type="button" class="v2-button border border-amber-400/30 bg-amber-400/10 text-sm font-semibold text-amber-200 hover:bg-amber-400/20">Apagar normalmente</button><button data-server-action="kill" type="button" class="v2-button border border-rose-400/30 bg-rose-400/10 text-sm font-semibold text-rose-200 hover:bg-rose-400/20">Forzar cierre</button><a href="/console" class="v2-button inline-flex items-center justify-center border border-zinc-700 bg-zinc-900 text-sm font-semibold text-zinc-200 hover:bg-zinc-800">Abrir consola manual</a></div>
+      <p class="mt-3 text-xs leading-5 text-zinc-500">Forzar cierre puede perder el progreso que todavía no se guardó. Usalo sólo si el apagado normal no responde.</p>
+    </details>
+  </section>
+
+  <section class="mt-6" aria-labelledby="next-title">
+    <div class="flex flex-wrap items-baseline justify-between gap-3"><div><p class="text-sm font-semibold text-emerald-300">Siguiente paso</p><h2 id="next-title" class="mt-1 text-xl font-bold text-zinc-100">Elegí qué querés hacer</h2></div><p id="dashboard-updated" class="text-xs text-zinc-500" aria-live="polite"></p></div>
+    <div class="mt-4 grid gap-4 md:grid-cols-3">
+      <a href="/worlds" class="v2-card group block p-5 transition hover:border-emerald-400/35"><span class="text-lg text-emerald-300" aria-hidden="true">◎</span><h3 class="mt-4 font-bold text-zinc-100 group-hover:text-emerald-200">Mundo y reglas</h3><p class="mt-2 text-sm leading-6 text-zinc-500">Ajustá lo que pasa dentro del juego, con explicaciones claras.</p></a>
+      <a href="/backups" class="v2-card group block p-5 transition hover:border-emerald-400/35"><span class="text-lg text-emerald-300" aria-hidden="true">▣</span><h3 class="mt-4 font-bold text-zinc-100 group-hover:text-emerald-200">Revisar protección</h3><p class="mt-2 text-sm leading-6 text-zinc-500">Comprobá que tus copias estén disponibles antes de cambios grandes.</p></a>
+      <a href="/console" class="v2-card group block p-5 transition hover:border-emerald-400/35"><span class="text-lg text-emerald-300" aria-hidden="true">›_</span><h3 class="mt-4 font-bold text-zinc-100 group-hover:text-emerald-200">Ver actividad</h3><p class="mt-2 text-sm leading-6 text-zinc-500">Abrí la consola cuando necesites mirar qué está ocurriendo en vivo.</p></a>
+    </div>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}<script defer src="/static/js/dashboard.js"></script>{% endblock %}
