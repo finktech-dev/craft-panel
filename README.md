@@ -23,7 +23,10 @@ The panel detects Java and the server installation before it starts Minecraft. I
 - Minecraft server lifecycle: start, graceful restart, normal stop, and emergency stop.
 - Launch RAM: stored locally in `web_panel/.launch_settings.json`, ignored by Git, and used on the next server start.
 - Backups, mods, worlds, player access, console activity, and Playit.gg connection status.
+- Mod installation from the panel: upload compatible `.jar` files, search Modrinth, install required Modrinth dependencies, enable or disable mods, and export a client modpack ZIP for friends.
 - Optional integrations: LuckPerms and Discord. Their per-server settings are local and ignored by Git.
+
+See [Installing mods](docs/MODS.md) for the host workflow and the friend-facing modpack flow.
 
 ## Privacy and local configuration
 
@@ -58,6 +61,8 @@ Playit.gg is enabled by default. In the wizard, click **Link my Playit account**
 ## Contributing
 
 Issues and pull requests are welcome, especially improvements that make first-run hosting clearer and safer for non-technical players. Please read the [contribution guide](docs/CONTRIBUTING.md) before opening a PR. Never include secrets, worlds, backups, logs, player data, or downloaded JARs in a contribution.
+
+For local verification, install development dependencies with `python -m pip install -r requirements-dev.txt` and run `python -m pytest web_panel/tests`.
 
 ## Credits
 

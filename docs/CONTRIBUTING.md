@@ -12,8 +12,9 @@ Thanks for helping make the panel easier for non-technical Minecraft hosts.
 ## Workflow
 
 1. Start from a clean checkout and keep commits small.
-2. Add or update tests for the affected contract.
-3. Run focused tests without starting a real Minecraft server.
-4. Explain in the pull request what the code validates and what still needs manual verification.
+2. Create or refresh the local environment: `python -m venv .venv`, then install dependencies with `python -m pip install -r requirements-dev.txt`.
+3. Add or update tests for the affected contract.
+4. Run focused tests without starting a real Minecraft server: `python -m pytest web_panel/tests`.
+5. Explain in the pull request what the code validates and what still needs manual verification.
 
 This repository is released under the MIT License. Do not copy code from other panels without verifying license compatibility.
