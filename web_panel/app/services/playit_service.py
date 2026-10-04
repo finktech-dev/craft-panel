@@ -8,6 +8,8 @@ import os
 import platform
 import re
 import secrets
+import subprocess
+import time
 import uuid
 from collections import deque
 from datetime import UTC, datetime
@@ -49,10 +51,39 @@ class PlayitService:
         self._stop_requested = False
         self._history: deque[TunnelLogLine] = deque(maxlen=configured_settings.log_buffer_size)
         self._lock = asyncio.Lock()
+        self._external_agent_running = False
+        self._external_agent_checked_at = 0.0
 
     @property
     def is_running(self) -> bool:
         return self._process is not None and self._process.returncode is None
+
+    @property
+    def uses_external_agent(self) -> bool:
+        """Whether an existing OS-managed Playit service is already running.
+
+        On Windows the official installer registers ``playitd`` as a service.
+        The panel deliberately does not read or copy that service's secret.
+        """
+        if platform.system().lower() != "windows":
+            return False
+        now = time.monotonic()
+        if now - self._external_agent_checked_at < 2:
+            return self._external_agent_running
+        self._external_agent_checked_at = now
+        try:
+            result = subprocess.run(
+                ("sc.exe", "query", "playitd"),
+                capture_output=True,
+                text=True,
+                timeout=1,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            self._external_agent_running = False
+            return False
+        self._external_agent_running = result.returncode == 0 and "RUNNING" in result.stdout.upper()
+        return self._external_agent_running
 
     @property
     def history(self) -> tuple[TunnelLogLine, ...]:
@@ -62,11 +93,11 @@ class PlayitService:
     @property
     def needs_setup(self) -> bool:
         assert self._settings.playit_secret_path is not None
-        return not self._settings.playit_secret_path.is_file()
+        return not self._settings.playit_secret_path.is_file() and not self.uses_external_agent
 
     def status(self) -> TunnelStatus:
         return TunnelStatus(
-            is_running=self.is_running,
+            is_running=self.is_running or self.uses_external_agent,
             public_address=self._public_address or self._settings.server_public_address,
             message=self._status_message(),
             started_at=self._started_at,
@@ -80,6 +111,9 @@ class PlayitService:
         async with self._lock:
             if self.is_running:
                 await self._record("El agente ya estaba activo; no se inició una segunda copia.")
+                return self.status()
+            if self.uses_external_agent:
+                await self._record("Usando el servicio Playit ya instalado en esta computadora.")
                 return self.status()
             secret = await self._read_secret()
             await self.ensure_installed()
@@ -299,6 +333,8 @@ class PlayitService:
             await self._record(self._last_error, level="error")
 
     def _status_message(self) -> str:
+        if self.uses_external_agent:
+            return "Usando el servicio Playit ya instalado en esta computadora."
         if self.is_running and self._public_address:
             return "Túnel Playit activo y dirección pública detectada."
         if self.is_running:

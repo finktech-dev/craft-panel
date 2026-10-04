@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -55,3 +56,16 @@ async def test_playit_output_exposes_a_shareable_address(tmp_path):
     await service._read_output(stream)
 
     assert service.status().public_address == "friends-room.joinmc.link:25565"
+
+
+def test_running_windows_playit_service_is_reused_without_copying_its_secret(tmp_path, monkeypatch):
+    service = PlayitService(Settings(project_root=tmp_path))
+    monkeypatch.setattr("app.services.playit_service.platform.system", lambda: "Windows")
+    monkeypatch.setattr(
+        "app.services.playit_service.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="STATE              : 4  RUNNING"),
+    )
+
+    assert service.uses_external_agent is True
+    assert service.needs_setup is False
+    assert service.status().is_running is True

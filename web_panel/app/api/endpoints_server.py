@@ -43,7 +43,7 @@ async def _start_playit_if_required() -> bool:
             detail="Conectá tu cuenta de Playit antes de iniciar, o elegí Solo red local en Preparar servidor.",
         )
     try:
-        was_running = playit_service.is_running
+        was_running = playit_service.is_running or playit_service.uses_external_agent
         await playit_service.start()
         return not was_running
     except PlayitServiceError as error:
