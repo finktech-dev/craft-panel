@@ -252,6 +252,7 @@
       }
       restrictionsCatalog = await Panel.api('/api/restrictions/catalog');
       populateDynamicModFilters();
+      populateDynamicMobsModFilters();
       renderItemsCatalog();
       renderMobsCatalog();
     } catch (err) {
@@ -276,6 +277,27 @@
       <button type="button" data-mod="all" class="mod-filter-btn ${curItemsMod === 'all' ? 'active bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-bold">Todos</button>
       ${detectedMods.map(m => `
         <button type="button" data-mod="${esc(m)}" class="mod-filter-btn ${curItemsMod === m ? 'active bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500 capitalize">${esc(m)}</button>
+      `).join('')}
+    `;
+  }
+
+  function populateDynamicMobsModFilters() {
+    const filtersContainer = $('#mobs-mod-filters');
+    if (!filtersContainer) return;
+    const mobs = restrictionsCatalog.mobs || [];
+    const modCounts = {};
+    for (let i = 0; i < mobs.length; i++) {
+      const m = mobs[i];
+      if (m.mod) {
+        modCounts[m.mod] = (modCounts[m.mod] || 0) + 1;
+      }
+    }
+    const detectedMods = Object.keys(modCounts).sort((a, b) => modCounts[b] - modCounts[a]).slice(0, 8);
+
+    filtersContainer.innerHTML = `
+      <button type="button" data-mob-mod="all" class="mob-filter-btn ${curMobsMod === 'all' ? 'active bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-bold">Todos</button>
+      ${detectedMods.map(m => `
+        <button type="button" data-mob-mod="${esc(m)}" class="mob-filter-btn ${curMobsMod === m ? 'active bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500 capitalize">${esc(m)}</button>
       `).join('')}
     `;
   }
@@ -485,17 +507,17 @@
       searchDebounceMobs = setTimeout(renderMobsCatalog, 200);
     });
 
-    document.querySelectorAll('#mobs-mod-filters .mob-filter-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#mobs-mod-filters .mob-filter-btn').forEach(b => {
-          b.classList.remove('active', 'bg-purple-500/20', 'text-purple-300', 'border-purple-500/30');
-          b.classList.add('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
-        });
-        btn.classList.add('active', 'bg-purple-500/20', 'text-purple-300', 'border-purple-500/30');
-        btn.classList.remove('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
-        curMobsMod = btn.dataset.mobMod;
-        renderMobsCatalog();
+    $('#mobs-mod-filters')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.mob-filter-btn');
+      if (!btn) return;
+      document.querySelectorAll('#mobs-mod-filters .mob-filter-btn').forEach(b => {
+        b.classList.remove('active', 'bg-purple-500/20', 'text-purple-300', 'border-purple-500/30');
+        b.classList.add('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
       });
+      btn.classList.add('active', 'bg-purple-500/20', 'text-purple-300', 'border-purple-500/30');
+      btn.classList.remove('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
+      curMobsMod = btn.dataset.mobMod || 'all';
+      renderMobsCatalog();
     });
 
     $('#mobs-catalog-container')?.addEventListener('click', async (e) => {

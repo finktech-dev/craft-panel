@@ -29,15 +29,8 @@ from app.services.server_properties_service import server_properties_service
 
 logger = logging.getLogger(__name__)
 
-# Catálogo predeterminado de profesiones y mesas de trabajo
-KNOWN_VILLAGERS = [
-    {
-        "id": "pointblank:arms_dealer",
-        "name": "Traficante de Armas (Point Blank)",
-        "mod": "pointblank",
-        "workstation": "Mesa de Trabajo de Armas",
-        "description": "Vende armas de fuego, accesorios y municiones en aldeas.",
-    },
+# Catálogo predeterminado de profesiones y mesas de trabajo de Minecraft Vanilla
+VANILLA_VILLAGERS = [
     {
         "id": "minecraft:weaponsmith",
         "name": "Herrero de Armas",
@@ -130,6 +123,7 @@ KNOWN_VILLAGERS = [
         "description": "Vende mapas exploradores de monumentos oceánicos y mansiones.",
     },
 ]
+KNOWN_VILLAGERS = VANILLA_VILLAGERS
 
 # Vanilla mobs principales para selección inmediata
 VANILLA_MOBS = [
@@ -206,8 +200,24 @@ class RestrictionService:
         return self.config_dir / "panel-villager-blacklist.json"
 
     @property
-    def pointblank_config_file(self) -> Path:
-        return self.config_dir / "pointblank-common.toml"
+    def custom_villagers_file(self) -> Path:
+        return self._settings.panel_directory / ".custom_villagers.json"
+
+    def get_known_villagers(self) -> list[dict[str, Any]]:
+        """Devuelve el catálogo de aldeanos (Vanilla + entradas locales opcionales de .custom_villagers.json)."""
+        villagers = [dict(v) for v in VANILLA_VILLAGERS]
+        custom_file = self.custom_villagers_file
+        if custom_file.is_file():
+            try:
+                data = json.loads(custom_file.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict) and item.get("id"):
+                            if not any(v["id"] == item["id"] for v in villagers):
+                                villagers.append(item)
+            except Exception as err:
+                logger.warning("No se pudo cargar .custom_villagers.json: %s", err)
+        return villagers
 
     def _get_datapack_targets(self) -> list[Path]:
         """Devuelve las carpetas del datapack panel_restrictions en el servidor y moonlight."""
@@ -363,7 +373,7 @@ class RestrictionService:
                 professions.discard(cleaned)
 
             self._save_villagers(professions)
-            self._sync_pointblank_config(professions)
+            self._sync_custom_configs(professions)
             self._sync_datapacks(mobs=self.get_restricted_mobs(), villagers=sorted(professions))
             await self._hot_reload()
             return sorted(professions)
@@ -373,23 +383,36 @@ class RestrictionService:
         data = {"disabled_professions": sorted(professions)}
         self._atomic_json_write(self.villager_blacklist_file, data)
 
-    def _sync_pointblank_config(self, disabled_professions: set[str]) -> None:
-        """Ajusta armsDealerHouse = 0 en pointblank-common.toml si pointblank:arms_dealer está bloqueado."""
-        p = self.pointblank_config_file
-        if not p.is_file():
-            return
-        try:
-            raw = p.read_text(encoding="utf-8")
-            doc = tomlkit.parse(raw)
-            is_blocked = "pointblank:arms_dealer" in disabled_professions
-            target_value = 0 if is_blocked else 10
-            if doc.get("armsDealerHouse") != target_value:
-                doc["armsDealerHouse"] = target_value
-                tmp = p.with_name(f".{p.name}.{uuid.uuid4().hex}.tmp")
-                tmp.write_text(tomlkit.dumps(doc), encoding="utf-8")
-                os.replace(tmp, p)
-        except Exception as err:
-            logger.warning("No se pudo actualizar pointblank-common.toml: %s", err)
+    def _sync_custom_configs(self, disabled_professions: set[str]) -> None:
+        """Sincroniza opciones en archivos TOML/JSON definidas en sync_config para aldeanos personalizados."""
+        for v in self.get_known_villagers():
+            sync_rule = v.get("sync_config")
+            if not isinstance(sync_rule, dict):
+                continue
+            cfg_file_name = sync_rule.get("file")
+            cfg_key = sync_rule.get("key")
+            if not cfg_file_name or not cfg_key:
+                continue
+
+            target_file = self.config_dir / cfg_file_name
+            if not target_file.is_file():
+                continue
+
+            try:
+                raw = target_file.read_text(encoding="utf-8")
+                doc = tomlkit.parse(raw)
+                is_blocked = v["id"] in disabled_professions
+                blocked_val = sync_rule.get("blocked_value", 0)
+                allowed_val = sync_rule.get("allowed_value", 10)
+                target_value = blocked_val if is_blocked else allowed_val
+
+                if doc.get(cfg_key) != target_value:
+                    doc[cfg_key] = target_value
+                    tmp = target_file.with_name(f".{target_file.name}.{uuid.uuid4().hex}.tmp")
+                    tmp.write_text(tomlkit.dumps(doc), encoding="utf-8")
+                    os.replace(tmp, target_file)
+            except Exception as err:
+                logger.warning("No se pudo actualizar configuración externa %s: %s", cfg_file_name, err)
 
     # ==========================================
     # 4. GENERADOR DE DATAPACK NATIVO NEOFORGE
@@ -463,7 +486,7 @@ class RestrictionService:
                 "items": [],
                 "mobs": list(VANILLA_MOBS),
                 "mobs_by_mod": {"minecraft": VANILLA_MOBS},
-                "villagers": KNOWN_VILLAGERS,
+                "villagers": self.get_known_villagers(),
                 "items_by_mod": {},
                 "mods": ["minecraft"],
             }
@@ -555,7 +578,7 @@ class RestrictionService:
             "items": all_items,
             "mobs": all_mobs,
             "mobs_by_mod": mobs_by_mod,
-            "villagers": KNOWN_VILLAGERS,
+            "villagers": self.get_known_villagers(),
             "items_by_mod": items_by_mod,
             "mods": all_mods,
         }
@@ -573,7 +596,7 @@ class RestrictionService:
         villagers = self.get_restricted_villagers()
 
         known_villagers_with_state = []
-        for v in KNOWN_VILLAGERS:
+        for v in self.get_known_villagers():
             v_copy = dict(v)
             v_copy["disabled"] = v["id"] in villagers
             known_villagers_with_state.append(v_copy)

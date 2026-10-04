@@ -8,9 +8,9 @@ import os
 import secrets
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, PrivateAttr, SecretStr, model_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     client_pack_directory: Path | None = None
     client_config_directory: Path | None = None
     client_pack_filename: str = "modpack.zip"
+    client_pack_extra_directories: list[str] = Field(
+        default_factory=list,
+        description="Directorios adicionales del servidor a empaquetar en el cliente (ej. pointblank, resourcepacks)"
+    )
     backups_directory: Path | None = None
     tools_directory: Path | None = None
     totp_secret_path: Path | None = None
@@ -98,6 +102,23 @@ class Settings(BaseSettings):
         "-XX:+PerfDisableSharedMem",
         "-XX:MaxTenuringThreshold=1",
     )
+
+    @field_validator("client_pack_extra_directories", mode="before")
+    @classmethod
+    def _parse_client_pack_extra_directories(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            if v.startswith("[") and v.endswith("]"):
+                with contextlib.suppress(Exception):
+                    parsed = json.loads(v)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+            return [part.strip() for part in v.split(",") if part.strip()]
+        if isinstance(v, (list, tuple)):
+            return [str(item).strip() for item in v if str(item).strip()]
+        return []
 
     @model_validator(mode="after")
     def resolve_project_paths(self) -> "Settings":

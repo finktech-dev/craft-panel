@@ -71,6 +71,7 @@ web_panel/.panel_secrets.tmp
 web_panel/.scheduled_tasks.json
 web_panel/.discord_config.json
 web_panel/.luckperms_config.json
+web_panel/.custom_villagers.json
 web_panel/.player_crashes.json
 web_panel/.server_connection.json
 web_panel/.waypoints.json
@@ -88,7 +89,9 @@ pointblank_durability_mod/
 server/*
 !server/.gitkeep
 
-# Host-specific leftovers kept locally only.
+# Host-specific leftovers and development inspection scripts kept locally only.
+tools/*.py
+!tools/.gitkeep
 tools/generate_hd_textures.py
 web_panel/config/presets/luckperms/current-server-ranks.json
 backups/*.bundle

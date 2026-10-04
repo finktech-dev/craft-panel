@@ -1033,13 +1033,9 @@
         <div class="space-y-3 lg:col-span-7">
           <div class="flex flex-wrap gap-1.5" id="mobs-mod-filters">
             <button type="button" data-mob-mod="all" class="mob-filter-btn active rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 text-[11px] font-bold">Todos</button>
-            <button type="button" data-mob-mod="cataclysm" class="mob-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Cataclysm</button>
-            <button type="button" data-mob-mod="mowziesmobs" class="mob-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Mowzie's Mobs</button>
-            <button type="button" data-mob-mod="aether" class="mob-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Aether</button>
-            <button type="button" data-mob-mod="minecraft" class="mob-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Vanilla</button>
           </div>
 
-          <input id="mobs-catalog-search" type="search" placeholder="Buscar mob por nombre o ID (ej. ignis, frostmaw, creeper, ender_guardian)..." class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-xs text-zinc-200 outline-none focus:border-purple-400 transition" />
+          <input id="mobs-catalog-search" type="search" placeholder="Buscar mob por nombre o ID (ej. creeper, zombie, warden, boss)..." class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-xs text-zinc-200 outline-none focus:border-purple-400 transition" />
 
           <div id="mobs-catalog-container" class="max-h-96 overflow-y-auto space-y-1.5 pr-1">
             <p class="text-xs text-zinc-500 italic p-4 text-center">Cargando mobs...</p>
@@ -1058,7 +1054,7 @@
 
             <!-- Formulario para agregar mob manual -->
             <form id="form-add-mob-custom" class="flex gap-2">
-              <input id="input-mob-custom" type="text" required placeholder="mod:entidad (ej. cataclysm:ignis)" class="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-200 outline-none focus:border-purple-400 transition" />
+              <input id="input-mob-custom" type="text" required placeholder="mod:entidad (ej. minecraft:warden, modid:boss)" class="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-200 outline-none focus:border-purple-400 transition" />
               <button type="submit" class="rounded-lg bg-purple-600 hover:bg-purple-500 px-3.5 py-2 text-xs font-bold text-white transition shadow-sm">
                 Suprimir
               </button>

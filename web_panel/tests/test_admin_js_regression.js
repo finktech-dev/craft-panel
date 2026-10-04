@@ -98,7 +98,8 @@ function createMockEnvironment() {
     'restrictions-hub', 'btn-toggle-worldedit', 'we-live-badge', 'quick-we-badge',
     'count-blocked-items', 'count-blocked-mobs', 'count-disabled-villagers',
     'blocked-items-list', 'blocked-mobs-list', 'villagers-grid', 'items-catalog-grid', 'mobs-catalog-grid',
-    'items-mod-filters',
+    'items-mod-filters', 'mobs-mod-filters',
+    'adv-quick-root-input', 'btn-adv-quick-revoke-root',
     'discord-webhook-url', 'discord-events-url', 'discord-mention-role',
     'discord-toggle-lifecycle', 'discord-toggle-crashes', 'discord-toggle-backups',
     'btn-save-discord-config', 'btn-discord-save', 'btn-test-main-webhook', 'btn-test-events-webhook', 'btn-test-mention',
@@ -142,7 +143,7 @@ function createMockEnvironment() {
     '/api/worldedit/status': { enabled: true, method: 'LuckPerms Live', last_updated: new Date().toISOString() },
     '/api/restrictions/summary': { blocked_items: ['minecraft:tnt'], blocked_mobs: ['minecraft:creeper'], disabled_villagers: ['armorer'], villagers: [{ profession: 'armorer', allowed: false }] },
     '/api/restrictions/catalog': { items: [{ id: 'minecraft:tnt', name: 'TNT', mod: 'minecraft' }], mobs: [{ id: 'minecraft:creeper', name: 'Creeper', mod: 'minecraft' }] },
-    '/api/configs': [{ title: 'PointBlank', category: 'Armas', path: 'pointblank-common.toml', format: 'toml', size_kb: 4 }],
+    '/api/configs': [{ title: 'Server Settings', category: 'General', path: 'server-config.toml', format: 'toml', size_kb: 4 }],
     '/api/gamerules': [{ name: 'keepInventory', value: true }],
     '/api/players': [{ username: 'Steve', is_op: true, is_whitelisted: true }]
   };

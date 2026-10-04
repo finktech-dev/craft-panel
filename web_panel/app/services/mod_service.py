@@ -529,7 +529,9 @@ class ModService:
                     if client_mod.name.lower() not in written_names:
                         archive.write(client_mod, arcname=Path("mods") / client_mod.name)
                         written_names.add(client_mod.name.lower())
-            for directory_name in ("config", "defaultconfigs", "pointblank"):
+            extra_directories = getattr(self._settings, "client_pack_extra_directories", []) or []
+            pack_directories = ("config", "defaultconfigs", *extra_directories)
+            for directory_name in pack_directories:
                 source_directory = self._settings.server_directory / directory_name
                 if source_directory.is_dir():
                     self._add_directory_to_archive(archive, source_directory, Path(directory_name))

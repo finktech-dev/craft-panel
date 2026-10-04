@@ -25,7 +25,7 @@ class ConfigService:
  @staticmethod
  def _category_for(path: str) -> str:
   if 'luckperms' in path: return 'Permisos y Roles (LuckPerms)'
-  if any(token in path for token in ('create','railway','pointblank','bettercombat','simplyswords','securitycraft')): return 'Combate y construcciones'
+  if any(token in path for token in ('create','railway','combat','weapon','gun','sword','armor','build','security')): return 'Combate y construcciones'
   if any(token in path for token in ('modernfix','ferrite','aiimprovements','fastsuite','chunky','connectivity')): return 'Rendimiento'
   if any(token in path for token in ('aether','undergarden','regions','terralith','dungeon','structure','nether')): return 'Mundo y exploración'
   if any(token in path for token in ('voice','sound','accessories','emote','client')): return 'Experiencia y jugadores'

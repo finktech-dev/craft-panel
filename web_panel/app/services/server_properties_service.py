@@ -26,7 +26,7 @@ _PROPERTY_METADATA: dict[str, dict[str, Any]] = {
         "type": "select",
         "default": "easy",
         "recommended": "normal o hard",
-        "description": "Define la dificultad de los combates, el daño recibido por los monstruos de mods (Cataclysm, Mowzie's Mobs) y el impacto del hambre en la salud.",
+        "description": "Define la dificultad de los combates, el daño recibido por monstruos hostiles (vanilla y mods) y el impacto del hambre en la salud.",
         "impact": "En 'peaceful' los jefes y monstruos agresivos desaparecen inmediatamente.",
         "options": [
             {"value": "peaceful", "label": "Pacífico (Sin enemigos ni hambre)"},

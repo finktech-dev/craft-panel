@@ -678,7 +678,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!quickBtn || !currentAdvPlayer) return;
 
     const actionData = quickBtn.dataset.advQuick;
-    const [action, targetId] = actionData.split(':', 2);
+    const colonIdx = actionData.indexOf(':');
+    const action = colonIdx > -1 ? actionData.slice(0, colonIdx) : actionData;
+    const targetId = colonIdx > -1 ? actionData.slice(colonIdx + 1) : '';
 
     quickBtn.disabled = true;
     try {
@@ -693,6 +695,35 @@ document.addEventListener('DOMContentLoaded', () => {
       Panel.toast(err.message, 'error');
     } finally {
       quickBtn.disabled = false;
+    }
+  });
+
+  // Botón para revocar rama personalizada
+  $('#btn-adv-quick-revoke-root')?.addEventListener('click', async (e) => {
+    const btn = e.target;
+    if (!currentAdvPlayer) {
+      Panel.toast('Seleccioná un jugador primero.', 'warning');
+      return;
+    }
+    const inp = $('#adv-quick-root-input');
+    const targetId = (inp?.value || '').trim();
+    if (!targetId) {
+      Panel.toast('Ingresá una raíz o ID de avance.', 'warning');
+      return;
+    }
+
+    btn.disabled = true;
+    try {
+      const res = await Panel.api('/api/advancements/revoke', {
+        method: 'POST',
+        body: { username: currentAdvPlayer, advancement_id: targetId, world_name: currentAdvWorld },
+      });
+      Panel.toast(res.message, 'success');
+      await loadPlayerAdvancements(currentAdvPlayer, currentAdvWorld);
+    } catch (err) {
+      Panel.toast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
     }
   });
 
