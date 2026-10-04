@@ -181,7 +181,6 @@
   }
 
   const VILLAGER_ICONS = {
-    'pointblank:arms_dealer': '🔫',
     'armorer': '🛡️',
     'weaponsmith': '⚔️',
     'toolsmith': '⛏️',
@@ -252,11 +251,33 @@
         mobContainer.innerHTML = '<p class="text-xs text-purple-400/80 italic p-4 text-center animate-pulse">Escaneando mods instalados (mobs y entidades)...</p>';
       }
       restrictionsCatalog = await Panel.api('/api/restrictions/catalog');
+      populateDynamicModFilters();
       renderItemsCatalog();
       renderMobsCatalog();
     } catch (err) {
       console.error('Error cargando catálogo de restricciones:', err);
     }
+  }
+
+  function populateDynamicModFilters() {
+    const filtersContainer = $('#items-mod-filters');
+    if (!filtersContainer) return;
+    const items = restrictionsCatalog.items || [];
+    const modCounts = {};
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.mod) {
+        modCounts[it.mod] = (modCounts[it.mod] || 0) + 1;
+      }
+    }
+    const detectedMods = Object.keys(modCounts).sort((a, b) => modCounts[b] - modCounts[a]).slice(0, 8);
+
+    filtersContainer.innerHTML = `
+      <button type="button" data-mod="all" class="mod-filter-btn ${curItemsMod === 'all' ? 'active bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-bold">Todos</button>
+      ${detectedMods.map(m => `
+        <button type="button" data-mod="${esc(m)}" class="mod-filter-btn ${curItemsMod === m ? 'active bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500 capitalize">${esc(m)}</button>
+      `).join('')}
+    `;
   }
 
   function renderItemsCatalog() {
@@ -395,17 +416,17 @@
       searchDebounceItems = setTimeout(renderItemsCatalog, 200);
     });
 
-    document.querySelectorAll('#items-mod-filters .mod-filter-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#items-mod-filters .mod-filter-btn').forEach(b => {
-          b.classList.remove('active', 'bg-emerald-500/20', 'text-emerald-300', 'border-emerald-500/30');
-          b.classList.add('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
-        });
-        btn.classList.add('active', 'bg-emerald-500/20', 'text-emerald-300', 'border-emerald-500/30');
-        btn.classList.remove('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
-        curItemsMod = btn.dataset.mod;
-        renderItemsCatalog();
+    $('#items-mod-filters')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.mod-filter-btn');
+      if (!btn) return;
+      document.querySelectorAll('#items-mod-filters .mod-filter-btn').forEach(b => {
+        b.classList.remove('active', 'bg-emerald-500/20', 'text-emerald-300', 'border-emerald-500/30');
+        b.classList.add('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
       });
+      btn.classList.add('active', 'bg-emerald-500/20', 'text-emerald-300', 'border-emerald-500/30');
+      btn.classList.remove('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
+      curItemsMod = btn.dataset.mod || 'all';
+      renderItemsCatalog();
     });
 
     $('#items-catalog-container')?.addEventListener('click', async (e) => {

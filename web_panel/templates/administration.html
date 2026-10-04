@@ -101,8 +101,22 @@
 
   <!-- PANEL MAESTRO 1: JUGADORES Y RANGOS (LUCKPERMS) -->
   <div id="panel-master-ranks" class="master-tab-panel space-y-6" role="tabpanel" aria-labelledby="tab-btn-ranks">
-  <!-- SECCIÓN GESTIÓN DE RANGOS LUCKPERMS -->
-  <section id="ranks" data-luckperms-module class="admin-module rounded-2xl border p-5 sm:p-7 transition-all">
+    <!-- Banner de estado cuando LuckPerms está inactivo o pendiente de activación -->
+    <div id="lp-disabled-banner" class="hidden rounded-2xl border border-amber-500/30 bg-amber-950/20 p-6 text-center space-y-3">
+      <span class="text-3xl">👑</span>
+      <h3 class="text-lg font-bold text-amber-200">Gestión Visual de Rangos (LuckPerms)</h3>
+      <p class="text-sm text-zinc-300 max-w-xl mx-auto" id="lp-disabled-message">
+        LuckPerms no se encuentra activo o configurado actualmente. Podés activarlo con un clic para comenzar a gestionar rangos y permisos visualmente.
+      </p>
+      <div class="pt-2">
+        <button id="btn-activate-luckperms" type="button" class="rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-5 py-2.5 text-xs font-bold transition shadow-md">
+          <span>⚡</span> Activar Gestión de Rangos en el Panel
+        </button>
+      </div>
+    </div>
+
+    <!-- SECCIÓN GESTIÓN DE RANGOS LUCKPERMS -->
+    <section id="ranks" class="admin-module rounded-2xl border p-5 sm:p-7 transition-all">
     <!-- Header de Rangos -->
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-5">
       <div>
@@ -343,8 +357,8 @@
                 <span>🎙️ VoiceChat Grupos</span>
               </label>
               <label class="flex items-center gap-2 text-zinc-300 hover:text-white cursor-pointer">
-                <input type="checkbox" id="init-perm-pointblank" class="rounded accent-emerald-400 h-4 w-4" />
-                <span>🔫 Armas Point Blank</span>
+                <input type="checkbox" id="init-perm-god" class="rounded accent-emerald-400 h-4 w-4" />
+                <span>🛡️ Modo Dios (/god)</span>
               </label>
               <label class="flex items-center gap-2 text-zinc-300 hover:text-red-300 cursor-pointer">
                 <input type="checkbox" id="init-perm-all" class="rounded accent-red-500 h-4 w-4" />
@@ -768,21 +782,21 @@
               <span class="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
                 <span>⚡</span> Mods Instalados & Super Permisos
               </span>
-              <span class="text-[11px] text-zinc-500 font-mono">pointblank / voicechat / op</span>
+              <span class="text-[11px] text-zinc-500 font-mono">voicechat / god / op</span>
             </div>
             <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-              <!-- Armas Point Blank -->
+              <!-- Modo Dios (/god) -->
               <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 flex flex-col justify-between">
                 <div>
                   <div class="flex items-center gap-1.5">
-                    <span class="text-base">🔫</span>
-                    <b class="text-xs text-zinc-200">Point Blank (Armas)</b>
+                    <span class="text-base">🛡️</span>
+                    <b class="text-xs text-zinc-200">Modo Dios (/god)</b>
                   </div>
-                  <p class="text-[11px] text-zinc-500 mt-1">Acceso libre al arsenal militar.</p>
+                  <p class="text-[11px] text-zinc-500 mt-1">Invulnerabilidad ante daño.</p>
                 </div>
                 <div class="mt-3 flex gap-1.5">
-                  <button type="button" data-cmd-perm="pointblank" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
-                  <button type="button" data-cmd-perm="pointblank" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
+                  <button type="button" data-cmd-perm="god" data-perm-action="grant" class="flex-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 py-1 transition">+ Dar</button>
+                  <button type="button" data-cmd-perm="god" data-perm-action="revoke" class="flex-1 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-300 py-1 transition">- Quitar</button>
                 </div>
               </div>
               <!-- VoiceChat Grupos -->
@@ -852,7 +866,7 @@
               <option value="minecraft.command.weather"></option>
               <option value="voicechat.groups"></option>
               <option value="voicechat.speak"></option>
-              <option value="pointblank.*"></option>
+              <option value="essentialcommands.spawn"></option>
               <option value="worldedit.*"></option>
               <option value="*"></option>
             </datalist>
@@ -872,7 +886,7 @@
             <span class="text-[11px] text-zinc-500">Sugerencias rápidas:</span>
             <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="essentialcommands.fly">essentialcommands.fly</button>
             <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="minecraft.command.gamemode">minecraft.command.gamemode</button>
-            <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="pointblank.*">pointblank.*</button>
+            <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="essentialcommands.spawn">essentialcommands.spawn</button>
             <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="voicechat.groups">voicechat.groups</button>
             <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-cyan-300 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="worldedit.*">worldedit.*</button>
             <button type="button" class="quick-perm-chip text-[11px] font-mono text-zinc-400 hover:text-red-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800" data-perm="*">* (Totales)</button>
@@ -928,7 +942,7 @@
     <!-- Barra de Pestañas (Tabs) de Restricciones -->
     <div class="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-3" role="tablist">
       <button type="button" class="tab-btn active flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" data-tab="items">
-        <span>📦</span> Ítems & Armas
+        <span>📦</span> Ítems Bloqueados
         <span id="tab-count-items" class="ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">0</span>
       </button>
       <button type="button" class="tab-btn flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" data-tab="mobs">
@@ -948,7 +962,7 @@
       </details>
     </div>
 
-    <!-- PESTAÑA 1: ÍTEMS & ARMAS -->
+    <!-- PESTAÑA 1: ÍTEMS BLOQUEADOS -->
     <div id="tab-panel-items" class="tab-panel space-y-4">
       <div class="grid gap-6 lg:grid-cols-12">
         <!-- Columna Izquierda: Explorador dinámico sin PNGs (7 cols) -->
@@ -960,17 +974,13 @@
             <span class="text-xs text-zinc-500">100% tipográfico · Sin descargar imágenes</span>
           </div>
 
-          <!-- Filtros rápidos por mod -->
+          <!-- Filtros rápidos por mod (detectados automáticamente) -->
           <div id="items-mod-filters" class="flex flex-wrap gap-1.5">
             <button type="button" data-mod="all" class="mod-filter-btn active rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 text-[11px] font-bold">Todos</button>
-            <button type="button" data-mod="pointblank" class="mod-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Point Blank</button>
-            <button type="button" data-mod="cataclysm" class="mod-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Cataclysm</button>
-            <button type="button" data-mod="create" class="mod-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Create</button>
-            <button type="button" data-mod="simplyswords" class="mod-filter-btn rounded-md bg-zinc-800/80 text-zinc-300 border border-zinc-700 px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500">Simply Swords</button>
           </div>
 
           <div class="relative">
-            <input id="items-catalog-search" type="search" placeholder="Buscar ítem por nombre o ID (ej. ak47, netherite, canon, create:track)..." class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-xs text-zinc-200 outline-none focus:border-emerald-400 transition" />
+            <input id="items-catalog-search" type="search" placeholder="Buscar ítem por nombre o ID (ej. netherite, tnt, sword, diamond)..." class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-xs text-zinc-200 outline-none focus:border-emerald-400 transition" />
           </div>
 
           <!-- Grid de ítems sin imágenes con scroll -->
@@ -997,7 +1007,7 @@
               </button>
             </form>
             <p class="text-[11px] text-zinc-400 leading-relaxed">
-              💡 Podés escribir un ítem único como <code class="font-mono text-emerald-300">pointblank:ak47</code> o usar el comodín <code class="font-mono text-emerald-300">!pointblank:.*</code> para bloquear todo el mod con <b>Item Obliterator</b>.
+              💡 Podés escribir un ID exacto (ej. <code class="font-mono text-emerald-300">minecraft:tnt</code>) o usar comodines (ej. <code class="font-mono text-emerald-300">modid:*</code> o <code class="font-mono text-emerald-300">!modid:.*</code>) para bloquear elementos con <b>Item Obliterator</b>.
             </p>
 
             <!-- Lista de ítems bloqueados -->
@@ -1013,7 +1023,7 @@
     <div id="tab-panel-mobs" class="tab-panel hidden space-y-4">
       <div class="rounded-xl border border-purple-500/30 bg-purple-950/20 p-4 text-xs text-zinc-300 leading-relaxed">
         <p class="font-semibold text-purple-200 flex items-center gap-1.5 mb-1">
-          <span>🧬</span> Modificador de Biomas Nativo de NeoForge 1.21.1
+          <span>🧬</span> Modificador de Biomas Nativo de NeoForge
         </p>
         Los mobs seleccionados aquí son suprimidos a nivel de generación en biomas (<code>neoforge:remove_spawns</code>) en <b>#minecraft:is_overworld</b>, <b>#minecraft:is_nether</b> y <b>#minecraft:is_end</b> dentro del datapack del servidor. Al guardar, se ejecuta <code>/reload</code> en caliente.
       </div>
@@ -1067,8 +1077,7 @@
       <div class="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-xs text-zinc-300 leading-relaxed">
         <p class="font-semibold text-amber-200 flex items-center gap-1.5 mb-1">
           <span>👨‍🌾</span> Desactivación de Mesas de Trabajo (POI Tag Removal)
-        </p>
-        Al desactivar una profesión, se remueve su punto de interés (POI) de <code>acquirable_job_site.json</code> vía datapack nativo, impidiendo que los aldeanos reclamen esa mesa de trabajo. Para <b>Point Blank</b>, se sincroniza <code>armsDealerHouse = 0</code> en <code>pointblank-common.toml</code> para que no aparezca la casa del traficante.
+        Al desactivar una profesión, se remueve su punto de interés (POI) de <code>acquirable_job_site.json</code> vía datapack nativo, impidiendo que los aldeanos reclamen esa mesa de trabajo y evitando intercambios no deseados en el servidor.
       </div>
 
       <div id="villagers-grid" class="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
@@ -1126,7 +1135,7 @@
             <h2 class="text-xl font-bold tracking-tight text-zinc-100">Editor de Configuraciones de Mods</h2>
             <span class="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/40">TOML & JSON</span>
           </div>
-          <p class="mt-1 text-sm text-zinc-400">Modificá parámetros internos de mods (armas, generación, balance). Las opciones visuales preservan comentarios y formato original.</p>
+          <p class="mt-1 text-sm text-zinc-400">Modificá parámetros internos de mods (generación, balance, jugabilidad). Las opciones visuales preservan comentarios y formato original.</p>
         </div>
       </div>
 
@@ -1139,7 +1148,7 @@
             id="config-search"
             type="search"
             class="w-full rounded-xl border border-zinc-700 bg-zinc-950 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition"
-            placeholder="Buscar archivo de configuración (ej. armas, pointblank, create, ferritecore…)"
+            placeholder="Buscar archivo de configuración (ej. general, performance, ferritecore…)"
           />
         </div>
         <div id="config-picker" class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3"></div>
@@ -1433,6 +1442,94 @@
         </label>
       </div>
     </div>
+
+    <!-- Personalización de Mensajes y Plantillas de Discord -->
+    <details class="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5 space-y-4">
+      <summary class="cursor-pointer font-bold text-xs sm:text-sm text-indigo-300 hover:text-indigo-200 transition flex items-center justify-between">
+        <span class="flex items-center gap-2">
+          <span>✍️</span> Personalizar Mensajes y Textos de Alertas en Discord
+        </span>
+        <span class="text-[10px] text-zinc-400 font-mono">100% configurable</span>
+      </summary>
+      <p class="text-xs text-zinc-400 leading-relaxed">
+        Personalizá los títulos y textos que envía el bot a Discord para cada evento. Podés usar variables dinámicas:
+        <code class="text-emerald-300 font-mono">{player_name}</code>, <code class="text-emerald-300 font-mono">{server_name}</code>,
+        <code class="text-emerald-300 font-mono">{world_name}</code>, <code class="text-emerald-300 font-mono">{addr}</code>,
+        <code class="text-emerald-300 font-mono">{death_message}</code>, <code class="text-emerald-300 font-mono">{advancement_title}</code>,
+        <code class="text-emerald-300 font-mono">{adv_kind}</code>.
+      </p>
+
+      <div class="grid gap-4 sm:grid-cols-2 pt-3 border-t border-zinc-800/80">
+        <!-- Servidor Iniciando -->
+        <div class="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5">
+          <span class="text-xs font-bold text-amber-300 block">🟡 Servidor Iniciando</span>
+          <label for="discord-msg-starting-title" class="block text-[11px] text-zinc-400 font-semibold">Título:</label>
+          <input id="discord-msg-starting-title" type="text" placeholder="🟡 Iniciando Servidor de Minecraft..." class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400" />
+          <label for="discord-msg-starting-desc" class="block text-[11px] text-zinc-400 font-semibold mt-1">Descripción:</label>
+          <textarea id="discord-msg-starting-desc" rows="2" placeholder="El servidor se está encendiendo y cargando los mods..." class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400"></textarea>
+        </div>
+
+        <!-- Servidor Listo / Online -->
+        <div class="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5">
+          <span class="text-xs font-bold text-emerald-300 block">🟢 Servidor Listo / Online</span>
+          <label for="discord-msg-started-title" class="block text-[11px] text-zinc-400 font-semibold">Título:</label>
+          <input id="discord-msg-started-title" type="text" placeholder="🟢 ¡Servidor Listo para Jugar!" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400" />
+          <label for="discord-msg-started-desc" class="block text-[11px] text-zinc-400 font-semibold mt-1">Descripción:</label>
+          <textarea id="discord-msg-started-desc" rows="2" placeholder="¡El servidor de Minecraft ya terminó de cargar...!" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400"></textarea>
+        </div>
+
+        <!-- Servidor Detenido -->
+        <div class="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5">
+          <span class="text-xs font-bold text-rose-300 block">🔴 Servidor Detenido</span>
+          <label for="discord-msg-stopped-title" class="block text-[11px] text-zinc-400 font-semibold">Título:</label>
+          <input id="discord-msg-stopped-title" type="text" placeholder="🔴 Servidor Detenido" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400" />
+          <label for="discord-msg-stopped-desc" class="block text-[11px] text-zinc-400 font-semibold mt-1">Descripción:</label>
+          <textarea id="discord-msg-stopped-desc" rows="2" placeholder="El servidor de Minecraft se ha apagado ordenadamente..." class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400"></textarea>
+        </div>
+
+        <!-- Jugador Conectado -->
+        <div class="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5">
+          <span class="text-xs font-bold text-cyan-300 block">👋 Jugador Conectado</span>
+          <label for="discord-msg-join-title" class="block text-[11px] text-zinc-400 font-semibold">Título:</label>
+          <input id="discord-msg-join-title" type="text" placeholder="👋 {player_name} entró al servidor" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400" />
+          <label for="discord-msg-join-desc" class="block text-[11px] text-zinc-400 font-semibold mt-1">Descripción:</label>
+          <textarea id="discord-msg-join-desc" rows="2" placeholder="**{player_name}** se unió a la partida." class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400"></textarea>
+        </div>
+
+        <!-- Jugador Desconectado -->
+        <div class="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5">
+          <span class="text-xs font-bold text-zinc-300 block">🚪 Jugador Desconectado</span>
+          <label for="discord-msg-leave-title" class="block text-[11px] text-zinc-400 font-semibold">Título:</label>
+          <input id="discord-msg-leave-title" type="text" placeholder="🚪 {player_name} salió del servidor" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400" />
+          <label for="discord-msg-leave-desc" class="block text-[11px] text-zinc-400 font-semibold mt-1">Descripción:</label>
+          <textarea id="discord-msg-leave-desc" rows="2" placeholder="**{player_name}** abandonó la partida." class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400"></textarea>
+        </div>
+
+        <!-- Muerte de Jugador -->
+        <div class="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5">
+          <span class="text-xs font-bold text-rose-400 block">💀 Muerte de Jugador</span>
+          <label for="discord-msg-death-title" class="block text-[11px] text-zinc-400 font-semibold">Título:</label>
+          <input id="discord-msg-death-title" type="text" placeholder="💀 Baja en el Servidor" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400" />
+          <label for="discord-msg-death-desc" class="block text-[11px] text-zinc-400 font-semibold mt-1">Descripción:</label>
+          <textarea id="discord-msg-death-desc" rows="2" placeholder="**{death_message}**" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400"></textarea>
+        </div>
+
+        <!-- Logro o Desafío -->
+        <div class="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5 sm:col-span-2">
+          <span class="text-xs font-bold text-yellow-300 block">🏆 Logro / Avance Desbloqueado</span>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label for="discord-msg-adv-title" class="block text-[11px] text-zinc-400 font-semibold">Título:</label>
+              <input id="discord-msg-adv-title" type="text" placeholder="🏆 ¡{player_name} completó un {adv_kind}!" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400" />
+            </div>
+            <div>
+              <label for="discord-msg-adv-desc" class="block text-[11px] text-zinc-400 font-semibold">Descripción:</label>
+              <textarea id="discord-msg-adv-desc" rows="2" placeholder="**{player_name}** ha desbloqueado: **[{advancement_title}]**" class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
   </section>
   </div>
 </section>
