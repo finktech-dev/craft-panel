@@ -6,7 +6,12 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from app.core.security import get_current_admin
-from app.schemas.luckperms import LuckPermsAvailability, LuckPermsCommandRequest, LuckPermsEditorResponse
+from app.schemas.luckperms import (
+    LuckPermsAvailability,
+    LuckPermsCommandRequest,
+    LuckPermsEditorResponse,
+    LuckPermsPanelConfig,
+)
 from app.services.luckperms_service import luckperms_service
 
 router = APIRouter(prefix="/luckperms", tags=["luckperms"], dependencies=[Depends(get_current_admin)])
@@ -15,6 +20,13 @@ router = APIRouter(prefix="/luckperms", tags=["luckperms"], dependencies=[Depend
 @router.get("/config", response_model=LuckPermsAvailability)
 async def get_luckperms_configuration() -> LuckPermsAvailability:
     """Return the non-secret per-installation settings needed by the UI."""
+    return luckperms_service.get_configuration()
+
+
+@router.post("/config", response_model=LuckPermsAvailability)
+async def update_luckperms_configuration(payload: LuckPermsPanelConfig) -> LuckPermsAvailability:
+    """Persist LuckPerms panel configuration."""
+    luckperms_service.save_configuration(payload)
     return luckperms_service.get_configuration()
 
 

@@ -42,7 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
     workbench: ['essentialcommands.workbench'],
     enderchest: ['essentialcommands.enderchest'],
     anvil: ['essentialcommands.anvil'],
-    pointblank: ['pointblank.*'],
     voice_groups: ['voicechat.groups'],
     voice_speak: ['voicechat.speak'],
     all: ['*']
@@ -187,19 +186,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function loadLuckPermsConfiguration() {
+    const banner = $('#lp-disabled-banner');
+    const msgEl = $('#lp-disabled-message');
+    const ranksSec = $('#ranks');
     try {
       const config = window.Panel && window.Panel.api
         ? await window.Panel.api('/api/luckperms/config')
         : await fetch('/api/luckperms/config').then(response => response.json());
       if (!config || !config.enabled) {
-        document.querySelectorAll('[data-luckperms-module]').forEach(node => node.classList.add('hidden'));
+        if (banner) {
+          banner.classList.remove('hidden');
+          if (msgEl && config && config.message) msgEl.textContent = config.message;
+        }
+        if (ranksSec) ranksSec.classList.add('hidden');
         return false;
       }
+      if (banner) banner.classList.add('hidden');
+      if (ranksSec) ranksSec.classList.remove('hidden');
       PRIMARY_RANKS = Array.isArray(config.primary_ranks) ? config.primary_ranks : [];
       SECONDARY_ROLES = Array.isArray(config.secondary_roles) ? config.secondary_roles : [];
       return true;
     } catch (_) {
-      document.querySelectorAll('[data-luckperms-module]').forEach(node => node.classList.add('hidden'));
+      if (banner) banner.classList.remove('hidden');
+      if (ranksSec) ranksSec.classList.add('hidden');
       return false;
     }
   }
@@ -518,7 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if ($('#init-perm-tp') && $('#init-perm-tp').checked) permsToSet.push(...PERM_DEFINITIONS.tp);
         if ($('#init-perm-gm') && $('#init-perm-gm').checked) permsToSet.push(...PERM_DEFINITIONS.gamemode);
         if ($('#init-perm-voice') && $('#init-perm-voice').checked) permsToSet.push(...PERM_DEFINITIONS.voice_groups);
-        if ($('#init-perm-pointblank') && $('#init-perm-pointblank').checked) permsToSet.push(...PERM_DEFINITIONS.pointblank);
+        if ($('#init-perm-god') && $('#init-perm-god').checked) permsToSet.push(...PERM_DEFINITIONS.god);
         if ($('#init-perm-all') && $('#init-perm-all').checked) permsToSet.push('*');
 
         for (const p of permsToSet) {
@@ -976,15 +985,36 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   window.addEventListener('hashchange', handleRanksHash);
 
-  // 15. Initial Execution on DOMContentLoaded
-  (async () => {
+  // 15. Initial Execution & Activation Handler
+  const initRanks = async () => {
     if (!await loadLuckPermsConfiguration()) return;
     renderRanksCards();
     populateInspectorDropdown();
     updateCreateRankPreview();
     loadRanksPlayers();
     handleRanksHash();
-  })();
+  };
+
+  $('#btn-activate-luckperms')?.addEventListener('click', async () => {
+    const btn = $('#btn-activate-luckperms');
+    if (btn) btn.disabled = true;
+    try {
+      if (window.Panel && window.Panel.api) {
+        await window.Panel.api('/api/luckperms/config', {
+          method: 'POST',
+          body: { enabled: true, preset: '', primary_ranks: [], secondary_roles: [] }
+        });
+      }
+      if (window.Panel && window.Panel.toast) window.Panel.toast('Gestión de LuckPerms activada.', 'success');
+      await initRanks();
+    } catch (e) {
+      if (window.Panel && window.Panel.toast) window.Panel.toast(e.message || 'Error al activar', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+
+  initRanks();
 
   // 16. Expose global namespace for interop & compatibility
   window.AdminRanks = {
