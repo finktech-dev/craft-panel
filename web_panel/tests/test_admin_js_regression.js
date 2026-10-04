@@ -93,13 +93,24 @@ function createMockEnvironment() {
     'lp-new-id', 'lp-new-name', 'lp-new-prefix', 'lp-new-weight', 'lp-preview-chat-prefix',
     'lp-preview-tab-prefix', 'lp-target-player', 'lp-online-chips', 'lp-online-count',
     'lp-output-console', 'btn-toggle-create-rank', 'lp-create-rank-panel',
+    'lp-disabled-banner', 'btn-activate-luckperms',
+    'lp-user-target', 'lp-group-target', 'btn-lp-assign-group',
     'restrictions-hub', 'btn-toggle-worldedit', 'we-live-badge', 'quick-we-badge',
     'count-blocked-items', 'count-blocked-mobs', 'count-disabled-villagers',
     'blocked-items-list', 'blocked-mobs-list', 'villagers-grid', 'items-catalog-grid', 'mobs-catalog-grid',
+    'items-mod-filters',
     'discord-webhook-url', 'discord-events-url', 'discord-mention-role',
     'discord-toggle-lifecycle', 'discord-toggle-crashes', 'discord-toggle-backups',
     'btn-save-discord-config', 'btn-discord-save', 'btn-test-main-webhook', 'btn-test-events-webhook', 'btn-test-mention',
     'btn-toggle-webhook-view', 'btn-toggle-events-view',
+    // Discord configurable message template inputs
+    'discord-msg-starting-title', 'discord-msg-starting-desc',
+    'discord-msg-started-title', 'discord-msg-started-desc',
+    'discord-msg-stopped-title', 'discord-msg-stopped-desc',
+    'discord-msg-join-title', 'discord-msg-join-desc',
+    'discord-msg-leave-title', 'discord-msg-leave-desc',
+    'discord-msg-death-title', 'discord-msg-death-desc',
+    'discord-msg-advancement-title', 'discord-msg-advancement-desc',
     'config-picker', 'config-search', 'config-workspace', 'config-form', 'config-code',
     'gamerules-list', 'players-list'
   ];
@@ -117,7 +128,17 @@ function createMockEnvironment() {
   };
 
   const mockApiResponses = {
-    '/api/discord/config': { webhook_url: 'https://example.invalid/discord-webhook', events_webhook_url: '', mention_role: '123456789' },
+    '/api/discord/config': {
+      webhook_url: 'https://example.invalid/discord-webhook', events_webhook_url: '', mention_role: '123456789',
+      msg_server_starting_title: '🔄 Servidor iniciando...', msg_server_starting_desc: '{server_name} está arrancando.',
+      msg_server_started_title: '✅ Servidor en línea', msg_server_started_desc: '{server_name} listo en {addr}.',
+      msg_server_stopped_title: '🔴 Servidor offline', msg_server_stopped_desc: '{server_name} se detuvo.',
+      msg_player_join_title: '➡️ {player_name} se unió', msg_player_join_desc: 'Bienvenido a {server_name}.',
+      msg_player_leave_title: '⬅️ {player_name} salió', msg_player_leave_desc: 'Hasta la próxima.',
+      msg_player_death_title: '💀 {player_name} murió', msg_player_death_desc: '{death_message}',
+      msg_advancement_title: '🏆 {player_name} obtuvo un logro', msg_advancement_desc: '{advancement_title}'
+    },
+    '/api/luckperms/config': { enabled: true, primary_ranks: ['owner','admin','mod','vip','default'], secondary_roles: ['streamer','builder'] },
     '/api/worldedit/status': { enabled: true, method: 'LuckPerms Live', last_updated: new Date().toISOString() },
     '/api/restrictions/summary': { blocked_items: ['minecraft:tnt'], blocked_mobs: ['minecraft:creeper'], disabled_villagers: ['armorer'], villagers: [{ profession: 'armorer', allowed: false }] },
     '/api/restrictions/catalog': { items: [{ id: 'minecraft:tnt', name: 'TNT', mod: 'minecraft' }], mobs: [{ id: 'minecraft:creeper', name: 'Creeper', mod: 'minecraft' }] },
