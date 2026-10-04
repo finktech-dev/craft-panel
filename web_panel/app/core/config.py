@@ -279,7 +279,7 @@ class Settings(BaseSettings):
     @property
     def cloudflared_executable_path(self) -> Path:
         assert self.tools_directory is not None
-        return self.tools_directory / "cloudflared.exe"
+        return self.tools_directory / ("cloudflared.exe" if os.name == "nt" else "cloudflared")
 
     @property
     def server_start_command(self) -> tuple[str, ...]:

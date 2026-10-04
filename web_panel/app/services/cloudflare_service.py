@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shutil
 from datetime import UTC, datetime
 
 from app.core.config import Settings, settings
@@ -51,8 +52,12 @@ class CloudflareQuickTunnelService:
                 return self.status()
             executable = self._settings.cloudflared_executable_path
             if not executable.is_file():
-                self._last_error = f"No existe cloudflared.exe en {executable}."
-                raise CloudflareQuickTunnelError(self._last_error)
+                system_bin = shutil.which("cloudflared")
+                if system_bin:
+                    executable = Path(system_bin)
+                else:
+                    self._last_error = f"No existe el ejecutable cloudflared en {executable} ni en el sistema."
+                    raise CloudflareQuickTunnelError(self._last_error)
 
             self._url = None
             self._last_error = None
