@@ -335,7 +335,7 @@ class DiscordService:
 
         success, _ = await self._send_embed(
             title="⚠️ Caída Inesperada del Servidor (Crash)",
-            description="El proceso NeoForge finalizó de forma anómala. El panel analizó el reporte de choque:",
+            description="El proceso del servidor finalizó de forma anómala. El panel analizó el reporte de choque:",
             color=0xF1C40F,
             fields=fields,
         )

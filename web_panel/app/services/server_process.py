@@ -63,7 +63,7 @@ class TerminalLine:
 
 
 class MinecraftServerManager:
-    """Única autoridad sobre el proceso NeoForge del host.
+    """Única autoridad sobre el proceso del servidor en el host.
 
     Todas las operaciones de proceso y E/S usan APIs ``asyncio``: nunca se
     bloquea el event loop del panel mientras Java está corriendo.
@@ -141,7 +141,7 @@ class MinecraftServerManager:
         ]
 
     async def start(self, dev_mode: bool = False) -> bool:
-        """Inicia NeoForge y retorna ``False`` si ya había un proceso vivo."""
+        """Inicia el servidor y retorna ``False`` si ya había un proceso vivo."""
         async with self._lock:
             if self.is_running:
                 return False
@@ -155,7 +155,7 @@ class MinecraftServerManager:
                 )
             if not self._settings.server_start_script.is_file():
                 raise ServerProcessError(
-                    f"No existe el script de NeoForge: {self._settings.server_start_script}"
+                    f"No existe el script de inicio del servidor: {self._settings.server_start_script}"
                 )
 
             self._state = ServerState.STARTING
@@ -178,7 +178,7 @@ class MinecraftServerManager:
             except OSError as error:
                 self._state = ServerState.CRASHED
                 await self._record_log("system", f"No se pudo iniciar el servidor: {error}")
-                raise ServerProcessError("No se pudo crear el proceso de NeoForge.") from error
+                raise ServerProcessError("No se pudo crear el proceso del servidor.") from error
 
             assert self._process.stdout is not None
             assert self._process.stderr is not None
@@ -365,7 +365,7 @@ class MinecraftServerManager:
             self._last_death_notified.clear()
             self._state = ServerState.STOPPED if self._stop_requested else ServerState.CRASHED
 
-        await self._record_log("system", f"Proceso NeoForge finalizado con código {exit_code}.")
+        await self._record_log("system", f"Proceso del servidor finalizado con código {exit_code}.")
         await self._broadcast_status()
         if not self._dev_mode:
             if self._state == ServerState.STOPPED:

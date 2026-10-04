@@ -1,4 +1,4 @@
-"""Controles REST protegidos para el proceso NeoForge y métricas de operación."""
+"""Controles REST protegidos para el proceso del servidor y métricas de operación."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ async def start_server(dev_mode: bool = False) -> ServerActionResponse:
             await playit_service.stop()
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
     if dev_mode:
-        msg = "Servidor NeoForge iniciado en Modo Dev (Silencioso)."
+        msg = "Servidor iniciado en Modo Dev (Silencioso)."
     elif settings.playit_enabled:
         msg = "Servidor iniciado y Playit quedó conectado para compartirlo con amigos."
     else:
@@ -106,7 +106,7 @@ async def restart_server() -> ServerActionResponse:
         await server_manager.start()
     except ServerProcessError as error:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
-    return _action_response("Servidor NeoForge reiniciado.")
+    return _action_response("Servidor reiniciado.")
 
 
 @router.post("/graceful-restart", response_model=ServerActionResponse)

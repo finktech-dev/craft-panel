@@ -74,6 +74,7 @@ web_panel/.scheduled_tasks.json
 web_panel/.discord_config.json
 web_panel/.luckperms_config.json
 web_panel/.custom_villagers.json
+web_panel/.guide_book.json
 web_panel/.player_crashes.json
 web_panel/.server_connection.json
 web_panel/.waypoints.json

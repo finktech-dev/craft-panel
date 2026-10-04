@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     client_pack_filename: str = "modpack.zip"
     client_pack_extra_directories: list[str] = Field(
         default_factory=list,
-        description="Directorios adicionales del servidor a empaquetar en el cliente (ej. pointblank, resourcepacks)"
+        description="Directorios adicionales del servidor a empaquetar en el cliente (ej. resourcepacks, datapacks)"
     )
     backups_directory: Path | None = None
     tools_directory: Path | None = None
@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     discord_test_player_name: str = "Jugador de prueba"
     discord_player_avatar_url_template: str = "https://mc-heads.net/avatar/{player_name}/100.png"
     banner_title: str = "Minecraft server status"
+    banner_subtitle: str = ""
     server_public_address: str | None = None
     minecraft_version: str = "1.21.1"
     neoforge_version: str = "21.1.250"

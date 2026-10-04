@@ -33,16 +33,6 @@ class WaypointService:
                     "description": "Punto central de aparición del mundo.",
                     "icon": "compass",
                 },
-                {
-                    "id": "coliseo",
-                    "name": "Coliseo Romano",
-                    "x": 885.0,
-                    "y": 87.0,
-                    "z": 156.0,
-                    "dimension": "minecraft:overworld",
-                    "description": "Gran arena de combate romana copiada con WorldEdit.",
-                    "icon": "shield",
-                },
             ]
             self._storage_file.write_text(json.dumps(defaults, indent=2, ensure_ascii=False), encoding="utf-8")
 

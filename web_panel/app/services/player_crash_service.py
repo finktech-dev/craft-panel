@@ -332,7 +332,7 @@ class PlayerCrashService:
             category = "CLIENT_MISMATCH"
             cat_label = "Cliente Incompatible / Versión"
             severity = "warning"
-            suggestion = "Verificar que el jugador tenga instalada la versión exacta del modpack y NeoForge 21.1.250."
+            suggestion = "Verificar que el jugador tenga instalada la versión exacta del modpack o cliente compatible con el servidor."
         elif re.search(r"crash report has been saved|encountered an unexpected exception\s+net\.minecraft|a single server tick took", combined_evidence, re.I):
             category = "SERVER_CRASH"
             cat_label = "Caída del Servidor"

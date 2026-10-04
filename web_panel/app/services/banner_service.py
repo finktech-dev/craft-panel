@@ -38,8 +38,12 @@ class BannerService:
         small_font = _font(12)
         draw.rounded_rectangle((1, 1, 598, 158), radius=14, outline=(190, 148, 64), width=2, fill=(24, 24, 27))
         draw.rectangle((20, 22, 25, 136), fill=(190, 148, 64))
-        draw.text((43, 21), self._settings.banner_title, fill=(250, 204, 21), font=title_font)
-        draw.text((43, 50), f"NeoForge {self._settings.minecraft_version}", fill=(161, 161, 170), font=small_font)
+        subtitle = (
+            self._settings.banner_subtitle.strip()
+            or self._settings.discord_server_software_label.strip()
+            or f"Minecraft {self._settings.minecraft_version}"
+        )
+        draw.text((43, 50), subtitle, fill=(161, 161, 170), font=small_font)
         draw.ellipse((43, 83, 55, 95), fill=state_color)
         draw.text((65, 80), state_label, fill=(244, 244, 245), font=body_font)
         draw.text((43, 111), f"RAM  {ram_used_gb:.1f} GB / {self._settings.allocated_ram_gb:.1f} GB", fill=(212, 212, 216), font=body_font)

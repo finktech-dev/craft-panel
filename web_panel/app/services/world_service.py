@@ -132,7 +132,7 @@ class WorldService:
             await server_properties_service.update_properties(updates)
             return {
                 "success": True,
-                "message": f"Mundo '{name}' preparado y activado. Al iniciar el servidor, NeoForge generará el terreno automáticamente.",
+                "message": f"Mundo '{name}' preparado y activado. Al iniciar el servidor, se generará el terreno automáticamente.",
                 "world_name": name,
             }
 

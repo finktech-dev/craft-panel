@@ -1,11 +1,11 @@
-"""Servicio agnóstico de restricciones para Minecraft NeoForge 1.21.1.
+"""Servicio agnóstico de restricciones para Minecraft.
 
 Maneja:
 1. Bloqueo de ítems y armas (compatible con Item Obliterator y comodines como !mod:.*).
-2. Supresión de spawns de mobs mediante datapack nativo NeoForge 1.21.1 (neoforge:remove_spawns)
+2. Supresión de spawns de mobs mediante datapacks nativos (remove_spawns)
    en las carpetas de datapacks del servidor y moonlight-global-datapacks contra Overworld, Nether y End.
 3. Desactivación de profesiones de aldeanos y mesas de trabajo vía datapack tag removal
-   en data/minecraft/tags/point_of_interest_type/acquirable_job_site.json y pointblank-common.toml.
+   y sincronización de configs de mods personalizados (.custom_villagers.json).
 4. Descubrimiento dinámico 100% tipográfico (sin descargar texturas/PNGs).
 5. Recarga en caliente automática mediante /reload cuando el servidor está encendido.
 """

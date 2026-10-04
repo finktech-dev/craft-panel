@@ -81,12 +81,12 @@ def _diagnose(
     if any(term in evidence for term in ("zipexception", "corrupt", "invalid or corrupt jar")):
         return (
             "Se detectó un archivo JAR corrupto o incompleto.",
-            "Volvé a descargar el mod sospechoso desde su fuente oficial y verificá su versión NeoForge 1.21.1.",
+            "Volvé a descargar el mod sospechoso desde su fuente oficial y verificá que sea compatible con la versión del servidor.",
         )
     if suspected_mod or any(term in evidence for term in ("modloadingexception", "mixin", "failed to load mod")):
         return (
             f"Probable conflicto o incompatibilidad de mod{f': {suspected_mod}' if suspected_mod else ''}.",
-            "Comprobá dependencias y compatibilidad NeoForge 1.21.1; probá desactivar el mod sospechoso y reiniciar.",
+            "Comprobá dependencias y compatibilidad con el cargador de mods del servidor; probá desactivar el mod sospechoso y reiniciar.",
         )
     detail = (trace_cause or description or "No se encontró una causa específica en el reporte.").strip()
     return (detail[:500], "Revisá el reporte completo y los últimos logs antes de cambiar mods o configuración.")
