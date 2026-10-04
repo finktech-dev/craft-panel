@@ -87,6 +87,8 @@ tools/java/
 
 # Developed and released separately
 pointblank_durability_mod/
+fortune_anvil_fix/
+landing-mod/
 # Every clone starts with an empty local server. Never version a real server, players, worlds, or mod settings.
 server/*
 !server/.gitkeep
