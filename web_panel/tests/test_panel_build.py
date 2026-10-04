@@ -92,3 +92,25 @@ def test_mod_item_schema_and_server_only_classification(tmp_path):
     assert item_client.is_server_only is False
     assert item_client.name == "jei-1.21.1-19.0.0"
 
+
+def test_mods_template_and_asset_integrity():
+    """Valida que la vista /mods referencie su controlador mods.js y contenga los componentes UX clave."""
+    panel_root = pathlib.Path(__file__).parent.parent
+    template = (panel_root / "templates" / "mods.html").read_text(encoding="utf-8")
+    script = (panel_root / "static" / "js" / "mods.js").read_text(encoding="utf-8")
+
+    assert '/static/js/mods.js' in template
+    assert 'id="panel-installed"' in template
+    assert 'id="panel-modrinth"' in template
+    assert 'id="local-mod-search"' in template
+    assert 'id="modal-upload-mod"' in template
+    assert 'id="modal-delete-mod"' in template
+    assert 'kpi-total-mods' in template
+
+    # Validar que mods.js consuma las APIs de mods
+    assert '/api/mods' in script
+    assert '/api/mods/upload' in script
+    assert '/api/mods/export-client-pack' in script
+    assert '/api/mods/search' in script
+
+

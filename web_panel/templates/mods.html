@@ -1,22 +1,327 @@
 {% extends "base.html" %}
-{% block title %}Mods · Panel Minecraft{% endblock %}
+{% block title %}Gestor de Mods · Panel Minecraft{% endblock %}
+
 {% block content %}
-<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p class="text-sm font-medium text-emerald-300">Contenido</p><h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Gestor de mods</h1><p class="mt-2 text-sm text-zinc-400">Cambios locales preparados para el próximo inicio del servidor.</p></div><div class="flex flex-wrap gap-2"><button id="export-pack" class="min-h-11 rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-200 hover:bg-emerald-400/20">Exportar modpack</button><a id="download-pack" href="/api/mods/download-client-pack" class="hidden min-h-11 items-center rounded-lg bg-emerald-400 px-4 text-sm font-bold text-emerald-950 hover:bg-emerald-300">Descargar ZIP</a></div></div>
-<!-- Banner informativo sobre reinicio y WorldEdit Hot-Toggle -->
-<div class="mb-6 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-950/30 via-zinc-900 to-zinc-900 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
-  <div class="flex items-start gap-3.5">
-    <span class="text-2xl mt-0.5">⚠️</span>
+<div class="space-y-8">
+  <!-- ENCABEZADO Y KPIS -->
+  <header class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
     <div>
-      <h2 class="text-sm font-bold text-amber-200">Reinicio necesario al renombrar o subir archivos JAR</h2>
-      <p class="text-xs text-zinc-400 mt-1 leading-relaxed">
-        Activar o desactivar mods renombrando archivos <code>.jar</code> requiere reiniciar el servidor para que la JVM de Java cargue o descargue las clases de la memoria RAM. Para activar o desactivar <b>WorldEdit</b> en vivo sin reiniciar, usá el interruptor <a href="/administration#worldedit" class="font-bold text-emerald-400 underline hover:text-emerald-300">Hot-Toggle de WorldEdit</a> en el Centro de Control.
+      <div class="flex items-center gap-2">
+        <span class="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-400">
+          NeoForge 1.21.1
+        </span>
+        <span class="text-xs text-zinc-500">·</span>
+        <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Ecosistema & Modding</p>
+      </div>
+      <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-zinc-100 sm:text-4xl">
+        Gestor de Mods
+      </h1>
+      <p class="mt-2 text-sm text-zinc-400 max-w-2xl leading-relaxed">
+        Activá, desactivá o instalá modificaciones del servidor. El empaquetador automático excluye herramientas administrativas del modpack de tus jugadores.
       </p>
     </div>
-  </div>
-  <a href="/administration#worldedit" class="shrink-0 flex items-center gap-1.5 rounded-lg bg-emerald-400 hover:bg-emerald-300 px-3.5 py-2 text-xs font-bold text-zinc-950 transition shadow-sm">
-    <span>🏗️</span> Hot-Toggle WorldEdit
-  </a>
+
+    <!-- TARJETAS RESUMEN / KPIS -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:shrink-0">
+      <div class="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5 text-center min-w-[5.5rem] shadow-sm">
+        <p class="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Total</p>
+        <p id="kpi-total-mods" class="mt-1 text-2xl font-black text-zinc-100">0</p>
+      </div>
+      <div class="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-3.5 text-center min-w-[5.5rem] shadow-sm">
+        <p class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">Activos</p>
+        <p id="kpi-active-mods" class="mt-1 text-2xl font-black text-emerald-300">0</p>
+      </div>
+      <div class="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3.5 text-center min-w-[5.5rem] shadow-sm">
+        <p class="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Inactivos</p>
+        <p id="kpi-disabled-mods" class="mt-1 text-2xl font-black text-zinc-400">0</p>
+      </div>
+      <div class="rounded-2xl border border-sky-500/30 bg-sky-950/20 p-3.5 text-center min-w-[5.5rem] shadow-sm">
+        <p class="text-[11px] font-semibold text-sky-400 uppercase tracking-wider">Tamaño</p>
+        <p id="kpi-total-size" class="mt-1 text-2xl font-black text-sky-300">0 MB</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- BANNER INFORMATIVO / WORLDEDIT HOT-TOGGLE -->
+  <aside class="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-950/20 via-zinc-900/60 to-zinc-900/40 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm" aria-label="Aviso de reinicio">
+    <div class="flex items-start gap-3.5">
+      <span class="text-2xl mt-0.5 select-none" aria-hidden="true">💡</span>
+      <div>
+        <h2 class="text-sm font-bold text-amber-200">Reinicio necesario para aplicar altas o bajas de mods</h2>
+        <p class="text-xs text-zinc-400 mt-1 leading-relaxed max-w-3xl">
+          Modificar extensiones renombrando archivos <code class="font-mono text-zinc-300">.jar</code> requiere reiniciar el servidor para que la máquina virtual Java (JVM) libere o cargue las clases en memoria RAM. Para alternar <strong class="text-zinc-200">WorldEdit</strong> sin apagar el juego, usá el interruptor en vivo.
+        </p>
+      </div>
+    </div>
+    <a href="/administration#worldedit" class="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-amber-400/10 border border-amber-400/30 hover:bg-amber-400/20 px-3.5 py-2 text-xs font-bold text-amber-200 transition shadow-sm">
+      <span>🏗️</span> Hot-Toggle WorldEdit
+    </a>
+  </aside>
+
+  <!-- PESTAÑAS PRINCIPALES -->
+  <nav class="flex items-center gap-2 border-b border-zinc-800 pb-3" aria-label="Secciones de mods">
+    <button id="tab-btn-installed" data-tab="installed" type="button" class="tab-pill rounded-xl bg-emerald-400 px-4 py-2 text-xs sm:text-sm font-bold text-zinc-950 shadow-sm transition">
+      Mods Instalados (<span id="tab-badge-installed">0</span>)
+    </button>
+    <button id="tab-btn-modrinth" data-tab="modrinth" type="button" class="tab-pill rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs sm:text-sm font-semibold text-zinc-400 hover:text-zinc-200 transition">
+      🌐 Explorar Catálogo Modrinth
+    </button>
+  </nav>
+
+  <!-- PANELES DE CONTENIDO -->
+
+  <!-- PANEL 1: MODS INSTALADOS -->
+  <section id="panel-installed" class="space-y-6" aria-labelledby="installed-heading">
+    <h2 id="installed-heading" class="sr-only">Mods Instalados</h2>
+
+    <!-- BARRA DE HERRAMIENTAS Y FILTROS -->
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+      <!-- Buscador y Filtros Rápidos -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 min-w-0">
+        <div class="relative flex-1 min-w-[14rem]">
+          <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+            🔍
+          </span>
+          <input
+            id="local-mod-search"
+            type="search"
+            placeholder="Buscar mod por nombre o archivo..."
+            class="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/70 pl-10 pr-4 py-2 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition"
+          >
+        </div>
+
+        <!-- Pills de Filtro -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" role="toolbar" aria-label="Filtros por estado">
+          <button type="button" data-filter="all" class="filter-pill shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-400/20 px-3 py-1.5 text-xs font-bold text-emerald-300 transition">
+            Todos
+          </button>
+          <button type="button" data-filter="active" class="filter-pill shrink-0 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">
+            Activos
+          </button>
+          <button type="button" data-filter="disabled" class="filter-pill shrink-0 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">
+            Inactivos
+          </button>
+          <button type="button" data-filter="server_only" class="filter-pill shrink-0 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" title="Exclusivos de servidor (no requeridos en clientes)">
+            Solo Servidor
+          </button>
+        </div>
+      </div>
+
+      <!-- Ordenamiento y Acción Principal -->
+      <div class="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+        <label for="local-mod-sort" class="sr-only">Ordenar por</label>
+        <select
+          id="local-mod-sort"
+          class="rounded-xl border border-zinc-700/80 bg-zinc-950/70 px-3 py-2 text-xs font-medium text-zinc-300 outline-none focus:border-emerald-400 transition"
+        >
+          <option value="name">Nombre (A-Z)</option>
+          <option value="size_desc">Tamaño (Mayor a menor)</option>
+          <option value="size_asc">Tamaño (Menor a mayor)</option>
+          <option value="recent">Modificado recientemente</option>
+        </select>
+
+        <button
+          id="btn-open-upload-modal"
+          type="button"
+          class="inline-flex items-center gap-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 px-4 py-2 text-xs sm:text-sm font-bold text-zinc-950 transition shadow-sm"
+        >
+          <span>＋</span> Subir .jar
+        </button>
+      </div>
+    </div>
+
+    <!-- LISTADO DE TARJETAS DE MODS -->
+    <div id="installed-mods-container" class="space-y-3" aria-live="polite">
+      <!-- Rellenado dinámicamente por mods.js -->
+    </div>
+
+    <!-- ESTADO VACÍO -->
+    <div id="installed-mods-empty" class="hidden rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 text-center">
+      <div class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-zinc-800/80 text-2xl text-zinc-400">
+        📦
+      </div>
+      <h3 class="mt-4 text-base font-bold text-zinc-200">No se encontraron mods</h3>
+      <p id="installed-empty-msg" class="mt-1 text-xs text-zinc-500 max-w-sm mx-auto">
+        No hay archivos en la carpeta de mods o el filtro aplicado no coincide con ningún archivo.
+      </p>
+      <button
+        id="btn-empty-upload"
+        type="button"
+        onclick="document.getElementById('btn-open-upload-modal')?.click()"
+        class="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 px-4 py-2 text-xs font-bold text-zinc-950 transition shadow-sm"
+      >
+        <span>＋</span> Subir mod ahora
+      </button>
+    </div>
+
+    <!-- TARJETA: EXPORTAR MODPACK CLIENTE -->
+    <div class="rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900/80 via-zinc-900/40 to-zinc-950 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-sm">
+      <div class="max-w-xl">
+        <div class="flex items-center gap-2">
+          <span class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-300">
+            Sincronización con Jugadores
+          </span>
+        </div>
+        <h3 class="mt-2 text-lg font-bold text-zinc-100">
+          Empaquetador de Mods para Clientes
+        </h3>
+        <p class="mt-1 text-xs text-zinc-400 leading-relaxed">
+          Genera un archivo <code class="font-mono text-zinc-300">mods.zip</code> listo para enviar a tus amigos. Los mods marcados como <em>"Solo Servidor"</em> (WorldEdit, Dynmap, Chunky, etc.) son excluidos automáticamente para que su Minecraft no sufra errores de inicio.
+        </p>
+        <p id="pack-export-info" class="mt-3 hidden text-xs font-semibold text-emerald-300"></p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3 shrink-0">
+        <button
+          id="btn-export-pack"
+          type="button"
+          class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-4 py-2.5 text-xs sm:text-sm font-bold text-emerald-200 transition"
+        >
+          Generar Modpack ZIP
+        </button>
+        <a
+          id="btn-download-pack"
+          href="/api/mods/download-client-pack"
+          class="hidden items-center gap-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 px-4 py-2.5 text-xs sm:text-sm font-bold text-zinc-950 transition shadow-sm"
+        >
+          <span>📥</span> Descargar ZIP
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- PANEL 2: MODRINTH -->
+  <section id="panel-modrinth" class="hidden space-y-6" aria-labelledby="modrinth-heading">
+    <h2 id="modrinth-heading" class="sr-only">Catálogo Modrinth</h2>
+
+    <div class="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+      <div class="max-w-xl">
+        <h3 class="text-base font-bold text-zinc-100">Explorar mods en Modrinth</h3>
+        <p class="mt-1 text-xs text-zinc-400 leading-relaxed">
+          Buscá e instalá mods directamente compatibles con NeoForge 1.21.1 sin salir del panel.
+        </p>
+      </div>
+
+      <form id="modrinth-search-form" class="mt-5 flex flex-col sm:flex-row gap-3">
+        <div class="relative flex-1">
+          <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+            🔎
+          </span>
+          <input
+            id="modrinth-query"
+            type="search"
+            placeholder="Ej. Create, FerriteCore, JEI, Waystones, Sodium..."
+            required
+            class="w-full rounded-xl border border-zinc-700 bg-zinc-950 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition"
+          >
+        </div>
+        <button
+          type="submit"
+          class="rounded-xl bg-zinc-100 hover:bg-white px-5 py-2.5 text-xs sm:text-sm font-bold text-zinc-950 transition shadow-sm shrink-0"
+        >
+          Buscar en Modrinth
+        </button>
+      </form>
+    </div>
+
+    <!-- RESULTADOS MODRINTH -->
+    <div id="modrinth-results-container" class="space-y-3" aria-live="polite">
+      <div class="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/20 p-12 text-center text-zinc-500">
+        <span class="text-3xl block mb-2">🌐</span>
+        <p class="text-sm font-semibold text-zinc-400">Ingresá el nombre de un mod arriba para buscar</p>
+        <p class="text-xs text-zinc-600 mt-1">Se filtrarán automáticamente versiones compatibles con NeoForge 1.21.1</p>
+      </div>
+    </div>
+  </section>
 </div>
-<section class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_23rem]"><div class="space-y-6"><section class="rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:p-6" aria-labelledby="local-mods-title"><div class="flex items-center justify-between gap-4"><div><p class="text-sm font-medium text-emerald-300">Instalados</p><h2 id="local-mods-title" class="mt-1 text-xl font-semibold">Mods locales</h2></div><button id="refresh-mods" class="min-h-10 rounded-lg border border-zinc-700 px-3 text-sm hover:bg-zinc-800">Actualizar</button></div><div id="mods-list" class="mt-5 space-y-2" aria-live="polite"><p class="text-sm text-zinc-500">Cargando mods…</p></div></section><section class="rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:p-6" aria-labelledby="search-title"><div><p class="text-sm font-medium text-emerald-300">Catálogo</p><h2 id="search-title" class="mt-1 text-xl font-semibold">Buscar en Modrinth</h2></div><form id="modrinth-search" class="mt-5 flex flex-col gap-2 sm:flex-row"><label class="sr-only" for="mod-query">Buscar mod</label><input id="mod-query" class="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm outline-none focus:border-emerald-400" placeholder="Ej. Create, FerriteCore…" required><button class="min-h-11 rounded-lg bg-zinc-100 px-4 text-sm font-bold text-zinc-950 hover:bg-white">Buscar</button></form><div id="search-results" class="mt-5 space-y-3"></div></section></div><aside class="h-fit rounded-xl border border-dashed border-emerald-400/40 bg-emerald-400/5 p-5 sm:p-6" aria-labelledby="upload-title"><p class="text-sm font-medium text-emerald-300">Importar</p><h2 id="upload-title" class="mt-1 text-xl font-semibold">Subir archivo JAR</h2><p class="mt-2 text-sm leading-6 text-zinc-400">Arrastrá un mod o elegilo desde tu dispositivo. No se reemplazan archivos existentes.</p><label id="drop-zone" for="mod-file" class="mt-5 flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-600 px-4 text-center transition hover:border-emerald-400 hover:bg-emerald-400/10"><span class="text-2xl text-emerald-300" aria-hidden="true">↑</span><span class="mt-2 text-sm font-semibold">Soltá tu .jar aquí</span><span class="mt-1 text-xs text-zinc-500">o tocá para seleccionarlo</span><input id="mod-file" class="sr-only" type="file" accept=".jar"></label><p id="upload-status" class="mt-3 min-h-5 text-sm text-zinc-400" aria-live="polite"></p></aside></section>
+
+<!-- MODAL NATIVO: SUBIDA DE MOD (.jar) -->
+<dialog id="modal-upload-mod" class="backdrop:bg-zinc-950/80 backdrop:backdrop-blur-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-0 text-zinc-100 shadow-2xl max-w-lg w-full">
+  <div class="p-6">
+    <div class="flex items-center justify-between pb-4 border-b border-zinc-800">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">📤</span>
+        <h3 class="text-base font-bold text-zinc-100">Subir archivo mod (.jar)</h3>
+      </div>
+      <button
+        id="close-upload-modal"
+        type="button"
+        class="rounded-lg p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
+        title="Cerrar modal"
+      >
+        ✕
+      </button>
+    </div>
+
+    <p class="mt-4 text-xs text-zinc-400 leading-relaxed">
+      Arrastrá o seleccioná un mod compatible con NeoForge 1.21.1. No se sobreescriben archivos ya existentes.
+    </p>
+
+    <label
+      id="modal-drop-zone"
+      for="mod-file-input"
+      class="mt-4 flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-700 hover:border-emerald-400 bg-zinc-950/50 p-6 text-center transition group"
+    >
+      <span class="text-3xl text-zinc-500 group-hover:text-emerald-400 transition" aria-hidden="true">↑</span>
+      <span class="mt-3 text-sm font-bold text-zinc-200 group-hover:text-emerald-300 transition">
+        Soltá tu archivo .jar aquí
+      </span>
+      <span class="mt-1 text-xs text-zinc-500">o hacé clic para buscar en tus carpetas</span>
+      <input id="mod-file-input" type="file" accept=".jar" class="sr-only">
+    </label>
+
+    <div id="modal-upload-progress" class="mt-4 hidden space-y-2">
+      <div class="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+        <div class="h-full w-full animate-pulse bg-emerald-400"></div>
+      </div>
+    </div>
+
+    <p id="modal-upload-status" class="mt-3 min-h-5 text-center text-xs text-zinc-400" aria-live="polite"></p>
+  </div>
+</dialog>
+
+<!-- MODAL NATIVO: CONFIRMACIÓN DE ELIMINACIÓN -->
+<dialog id="modal-delete-mod" class="backdrop:bg-zinc-950/80 backdrop:backdrop-blur-sm rounded-2xl border border-rose-900/50 bg-zinc-900 p-0 text-zinc-100 shadow-2xl max-w-md w-full">
+  <div class="p-6">
+    <div class="flex items-center gap-3">
+      <div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 text-lg">
+        🗑️
+      </div>
+      <div>
+        <h3 class="text-base font-bold text-zinc-100">¿Eliminar mod?</h3>
+        <p class="text-xs text-zinc-400">Esta acción no se puede deshacer.</p>
+      </div>
+    </div>
+
+    <div class="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3.5">
+      <p class="text-xs text-zinc-400">Archivo seleccionado:</p>
+      <p id="delete-mod-name-target" class="mt-1 text-xs font-mono font-bold text-rose-300 break-all"></p>
+    </div>
+
+    <p class="mt-3 text-xs text-zinc-400 leading-relaxed">
+      El archivo se borrará permanentemente de <code class="font-mono text-zinc-300">server/mods/</code>. Si el servidor está encendido, el cambio tendrá efecto completo en el próximo reinicio.
+    </p>
+
+    <div class="mt-6 flex items-center justify-end gap-3">
+      <button
+        id="cancel-delete-mod"
+        type="button"
+        class="rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-300 transition"
+      >
+        Cancelar
+      </button>
+      <button
+        id="confirm-delete-mod"
+        type="button"
+        class="rounded-xl bg-rose-600 hover:bg-rose-500 px-4 py-2 text-xs font-bold text-white transition shadow-sm"
+      >
+        Eliminar definitivamente
+      </button>
+    </div>
+  </div>
+</dialog>
 {% endblock %}
-{% block scripts %}<script>document.addEventListener('DOMContentLoaded', () => { const list = document.querySelector('#mods-list'); const searchResults = document.querySelector('#search-results'); const dropZone = document.querySelector('#drop-zone'); const fileInput = document.querySelector('#mod-file'); const uploadStatus = document.querySelector('#upload-status'); const escape = Panel.escapeHtml; const loadMods = async () => { try { const mods = await Panel.api('/api/mods'); list.replaceChildren(); if (!mods.length) { list.innerHTML = '<p class="text-sm text-zinc-500">Todavía no hay mods en server/mods.</p>'; return; } mods.forEach((mod) => { const row = document.createElement('article'); row.className = 'flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3'; row.innerHTML = `<div class="min-w-0"><p class="truncate text-sm font-semibold text-zinc-200">${escape(mod.name)}</p><p class="mt-1 text-xs text-zinc-500">${escape(mod.filename)} · ${mod.size_mb.toFixed(2)} MB</p></div><button class="toggle-mod min-h-10 rounded-full px-3 text-xs font-bold ${mod.is_enabled ? 'bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-400/30' : 'bg-zinc-800 text-zinc-400'}" data-filename="${encodeURIComponent(mod.filename)}">${mod.is_enabled ? 'ACTIVO' : 'DESACTIVADO'}</button>`; list.append(row); }); } catch (issue) { Panel.toast(issue.message, 'error'); } }; list.addEventListener('click', async (event) => { const button = event.target.closest('.toggle-mod'); if (!button) return; button.disabled = true; try { const result = await Panel.api(`/api/mods/${button.dataset.filename}/toggle`, { method: 'POST' }); Panel.toast(result.message, 'success'); await loadMods(); } catch (issue) { Panel.toast(issue.message, 'error'); button.disabled = false; } }); const upload = async (file) => { if (!file) return; if (!file.name.toLowerCase().endsWith('.jar')) { Panel.toast('Elegí un archivo .jar.', 'error'); return; } uploadStatus.textContent = `Subiendo ${file.name}…`; const data = new FormData(); data.append('file', file); try { const response = await fetch('/api/mods/upload', { method: 'POST', body: data, credentials: 'same-origin' }); await Panel.readResponse(response); uploadStatus.textContent = `${file.name} subido correctamente.`; Panel.toast('Mod subido.', 'success'); await loadMods(); } catch (issue) { uploadStatus.textContent = issue.message; Panel.toast(issue.message, 'error'); } finally { fileInput.value = ''; } }; fileInput.addEventListener('change', () => upload(fileInput.files[0])); ['dragenter','dragover'].forEach((type) => dropZone.addEventListener(type, (event) => { event.preventDefault(); dropZone.classList.add('border-emerald-400','bg-emerald-400/10'); })); ['dragleave','drop'].forEach((type) => dropZone.addEventListener(type, (event) => { event.preventDefault(); dropZone.classList.remove('border-emerald-400','bg-emerald-400/10'); })); dropZone.addEventListener('drop', (event) => upload(event.dataTransfer.files[0])); document.querySelector('#refresh-mods').addEventListener('click', loadMods); document.querySelector('#modrinth-search').addEventListener('submit', async (event) => { event.preventDefault(); searchResults.innerHTML = '<p class="text-sm text-zinc-500">Buscando…</p>'; try { const hits = await Panel.api(`/api/mods/search?query=${encodeURIComponent(document.querySelector('#mod-query').value)}`); searchResults.replaceChildren(); if (!hits.length) { searchResults.innerHTML = '<p class="text-sm text-zinc-500">No hubo resultados compatibles.</p>'; return; } hits.forEach((hit) => { const row = document.createElement('article'); row.className = 'flex gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-4'; const icon = hit.icon_url ? `<img class="h-10 w-10 rounded-lg object-cover" src="${escape(hit.icon_url)}" alt="">` : '<div class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-zinc-800 text-zinc-500">◈</div>'; row.innerHTML = `${icon}<div class="min-w-0 flex-1"><div class="flex flex-wrap items-start justify-between gap-2"><div><p class="font-semibold text-zinc-100">${escape(hit.title)}</p><p class="mt-1 line-clamp-2 text-sm text-zinc-400">${escape(hit.description)}</p></div><button class="install-mod min-h-10 rounded-md bg-emerald-400 px-3 text-xs font-bold text-emerald-950 hover:bg-emerald-300" data-project="${escape(hit.project_id)}">Instalar</button></div><p class="mt-2 text-xs text-zinc-500">${hit.downloads.toLocaleString('es-AR')} descargas</p></div>`; searchResults.append(row); }); } catch (issue) { searchResults.innerHTML = `<p class="text-sm text-rose-300">${escape(issue.message)}</p>`; } }); searchResults.addEventListener('click', async (event) => { const button = event.target.closest('.install-mod'); if (!button) return; button.disabled = true; try { const mod = await Panel.api('/api/mods/install', { method: 'POST', body: { project_id: button.dataset.project } }); Panel.toast(`${mod.name} instalado.`, 'success'); await loadMods(); } catch (issue) { Panel.toast(issue.message, 'error'); button.disabled = false; } }); document.querySelector('#export-pack').addEventListener('click', async (event) => { event.currentTarget.disabled = true; try { const result = await Panel.api('/api/mods/export-client-pack', { method: 'POST' }); document.querySelector('#download-pack').classList.remove('hidden'); document.querySelector('#download-pack').classList.add('inline-flex'); Panel.toast(result.message, 'success'); } catch (issue) { Panel.toast(issue.message, 'error'); } finally { event.currentTarget.disabled = false; } }); loadMods(); });</script>{% endblock %}
+
+{% block scripts %}
+<script defer src="/static/js/mods.js"></script>
+{% endblock %}
