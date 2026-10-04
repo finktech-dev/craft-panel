@@ -460,6 +460,8 @@ class RestrictionService:
     def _scan_catalog_sync(self) -> dict[str, Any]:
         if not self.mods_dir.is_dir():
             return {
+                "items": [],
+                "mobs": list(VANILLA_MOBS),
                 "mobs_by_mod": {"minecraft": VANILLA_MOBS},
                 "villagers": KNOWN_VILLAGERS,
                 "items_by_mod": {},
