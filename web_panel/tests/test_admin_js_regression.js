@@ -14,6 +14,7 @@ console.log('='.repeat(60));
 
 const jsDir = path.join(__dirname, '..', 'static', 'js');
 const files = [
+  'admin-tabs.js',
   'admin-configs.js',
   'admin-restrictions.js',
   'admin-ranks.js',
@@ -56,6 +57,8 @@ function createMockEnvironment() {
         contains(c) { return this._classes.has(c); }
       },
       attributes: {},
+      setAttribute: function(k, v) { this.attributes[k] = String(v); },
+      getAttribute: function(k) { return this.attributes[k] !== undefined ? this.attributes[k] : null; },
       dataset: {},
       innerHTML: '',
       textContent: '',
@@ -84,6 +87,8 @@ function createMockEnvironment() {
 
   // Pre-crear elementos que los scripts buscan
   const knownIds = [
+    'admin-master-tabs', 'tab-btn-ranks', 'tab-btn-rules', 'tab-btn-configs', 'tab-btn-discord',
+    'panel-master-ranks', 'panel-master-rules', 'panel-master-configs', 'panel-master-discord',
     'ranks', 'lp-ranks-grid', 'lp-roles-grid', 'lp-inspector-section', 'lp-inspect-select',
     'lp-new-id', 'lp-new-name', 'lp-new-prefix', 'lp-new-weight', 'lp-preview-chat-prefix',
     'lp-preview-tab-prefix', 'lp-target-player', 'lp-online-chips', 'lp-online-count',
@@ -147,6 +152,7 @@ function createMockEnvironment() {
     decodeURIComponent,
     localStorage,
     location: { hash: '#ranks' },
+    history: { replaceState: () => {}, pushState: () => {} },
     addEventListener: (evt, fn) => {},
     removeEventListener: () => {},
     window: null,
@@ -156,6 +162,14 @@ function createMockEnvironment() {
       querySelectorAll: (sel) => {
         if (sel === '.tab-btn') return [createMockElement('button', 'tab-items')];
         if (sel === '.tab-panel') return [createMockElement('div', 'tab-panel-items')];
+        if (sel.includes('.master-tab-btn')) {
+          return ['tab-btn-ranks', 'tab-btn-rules', 'tab-btn-configs', 'tab-btn-discord']
+            .map(id => elements.get(`#${id}`)).filter(Boolean);
+        }
+        if (sel.includes('.admin-master-panel')) {
+          return ['panel-master-ranks', 'panel-master-rules', 'panel-master-configs', 'panel-master-discord']
+            .map(id => elements.get(`#${id}`)).filter(Boolean);
+        }
         if (elements.has(sel)) return [elements.get(sel)];
         return [];
       },
@@ -174,8 +188,21 @@ function createMockEnvironment() {
   return { context, elements, mockStorage };
 }
 
-// 3. Test de ejecución y contratos de admin-ranks.js
-console.log('\n[2] Probando admin-ranks.js (Rangos, Colores Minecraft, LuckPerms)...');
+// 3. Test de ejecución y contratos de admin-tabs.js
+console.log('\n[2] Probando admin-tabs.js (Pestañas Maestras y Deep Linking)...');
+const { context: tabsEnv } = createMockEnvironment();
+const tabsCode = fs.readFileSync(path.join(jsDir, 'admin-tabs.js'), 'utf8');
+vm.runInNewContext(tabsCode, tabsEnv);
+
+assert(tabsEnv.window.switchMasterTab, 'switchMasterTab debe estar expuesto');
+assert(tabsEnv.window.AdminTabs, 'AdminTabs debe estar expuesto');
+assert.strictEqual(tabsEnv.window.AdminTabs.getCurrentTab(), 'ranks', 'Pestaña inicial por defecto debe ser ranks');
+tabsEnv.window.switchMasterTab('rules');
+assert.strictEqual(tabsEnv.window.AdminTabs.getCurrentTab(), 'rules', 'switchMasterTab debe cambiar pestaña a rules');
+console.log('  ✓ switchMasterTab y AdminTabs responden correctamente');
+
+// 4. Test de ejecución y contratos de admin-ranks.js
+console.log('\n[3] Probando admin-ranks.js (Rangos, Colores Minecraft, LuckPerms)...');
 const { context: ranksEnv } = createMockEnvironment();
 const ranksCode = fs.readFileSync(path.join(jsDir, 'admin-ranks.js'), 'utf8');
 vm.runInNewContext(ranksCode, ranksEnv);
@@ -199,8 +226,8 @@ const secondaryRoles = ranksEnv.window.AdminRanks.SECONDARY_ROLES;
 assert.strictEqual(secondaryRoles.length, 0, 'Un clon nuevo no debe incluir roles de otro servidor');
 console.log('  ✓ Los rangos se cargan sólo desde la configuración local del usuario');
 
-// 4. Test de ejecución y contratos de admin-restrictions.js
-console.log('\n[3] Probando admin-restrictions.js (Centro de Restricciones & WorldEdit)...');
+// 5. Test de ejecución y contratos de admin-restrictions.js
+console.log('\n[4] Probando admin-restrictions.js (Centro de Restricciones & WorldEdit)...');
 const { context: restrEnv } = createMockEnvironment();
 const restrCode = fs.readFileSync(path.join(jsDir, 'admin-restrictions.js'), 'utf8');
 vm.runInNewContext(restrCode, restrEnv);
@@ -211,8 +238,8 @@ assert(restrEnv.window.loadRestrictionsSummary, 'loadRestrictionsSummary debe es
 assert(restrEnv.window.loadCatalog, 'loadCatalog debe estar definido');
 console.log('  ✓ Funciones de restricciones y hot-toggle expuestas y operativas');
 
-// 5. Test de ejecución y contratos de admin-configs.js
-console.log('\n[4] Probando admin-configs.js (Editor TOML, Gamerules, Spark)...');
+// 6. Test de ejecución y contratos de admin-configs.js
+console.log('\n[5] Probando admin-configs.js (Editor TOML, Gamerules, Spark)...');
 const { context: configsEnv } = createMockEnvironment();
 const configsCode = fs.readFileSync(path.join(jsDir, 'admin-configs.js'), 'utf8');
 vm.runInNewContext(configsCode, configsEnv);
@@ -221,8 +248,8 @@ assert(configsEnv.window.loadConfigFile, 'loadConfigFile debe estar expuesto');
 assert(configsEnv.window.world, 'world debe estar expuesto');
 console.log('  ✓ Funciones de configs, gamerules y spark expuestas y operativas');
 
-// 6. Test de ejecución y contratos de admin-discord.js
-console.log('\n[5] Probando admin-discord.js (Webhooks de Discord)...');
+// 7. Test de ejecución y contratos de admin-discord.js
+console.log('\n[6] Probando admin-discord.js (Webhooks de Discord)...');
 const { context: discordEnv } = createMockEnvironment();
 const discordCode = fs.readFileSync(path.join(jsDir, 'admin-discord.js'), 'utf8');
 vm.runInNewContext(discordCode, discordEnv);

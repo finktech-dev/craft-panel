@@ -29,38 +29,78 @@
     font-variant-numeric: tabular-nums;
   }
 </style>
-<section class="administration-page space-y-10" aria-labelledby="admin-title">
-  <header class="max-w-2xl">
-    <p class="text-sm font-medium text-emerald-300">Configuración</p>
-    <h1 id="admin-title" class="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Ajustá tu servidor</h1>
-    <p class="mt-3 text-sm leading-6 text-zinc-400">Empezá por lo necesario. Las herramientas técnicas quedan aparte y nunca cambian tu servidor sin que lo confirmes.</p>
+<section class="administration-page space-y-8" aria-labelledby="admin-title">
+  <!-- ENCABEZADO PRINCIPAL -->
+  <header class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div>
+      <div class="flex items-center gap-2">
+        <span class="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-400">
+          CENTRO DE CONTROL
+        </span>
+        <span class="text-xs text-zinc-500">·</span>
+        <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Administración Integral</p>
+      </div>
+      <h1 id="admin-title" class="mt-2 text-3xl font-extrabold tracking-tight text-zinc-100 sm:text-4xl">
+        Centro de Control & Configuración
+      </h1>
+      <p class="mt-2 text-sm text-zinc-400 max-w-2xl leading-relaxed">
+        Gestioná permisos, reglas del servidor, archivos técnicos de mods y alertas en vivo sin necesidad de comandos de consola.
+      </p>
+    </div>
   </header>
 
-  <nav class="grid gap-3 md:grid-cols-3" aria-label="Áreas de configuración">
-    <a href="#ranks" data-luckperms-module class="admin-action-card rounded-xl border p-5 transition">
-      <p class="text-sm font-semibold text-zinc-100">Jugadores y rangos</p>
-      <p class="mt-2 text-sm leading-6 text-zinc-400">Asigná permisos y roles sin escribir comandos.</p>
-    </a>
-    <a href="#restrictions-hub" data-tab-target="items" class="nav-shortcut-tab admin-action-card rounded-xl border p-5 transition">
-      <p class="text-sm font-semibold text-zinc-100">Reglas del servidor</p>
-      <p class="mt-2 text-sm leading-6 text-zinc-400">Controlá ítems, mobs y profesiones que querés permitir.</p>
-    </a>
-    <a href="#discord" class="admin-action-card rounded-xl border p-5 transition">
-      <p class="text-sm font-semibold text-zinc-100">Avisos para el grupo</p>
-      <p class="mt-2 text-sm leading-6 text-zinc-400">Conectá Discord sólo si querés recibir notificaciones.</p>
-    </a>
+  <!-- BARRA DE PESTAÑAS MAESTRAS (MASTER TABS) -->
+  <nav id="admin-master-tabs" class="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-3" role="tablist" aria-label="Secciones de administración">
+    <button
+      id="tab-btn-ranks"
+      data-master-tab="ranks"
+      type="button"
+      role="tab"
+      aria-selected="true"
+      aria-controls="panel-master-ranks"
+      class="master-tab-btn tab-pill rounded-xl bg-emerald-400 px-4 py-2 text-xs sm:text-sm font-bold text-zinc-950 shadow-sm transition"
+    >
+      <span>👑</span> Jugadores & Rangos
+    </button>
+    <button
+      id="tab-btn-rules"
+      data-master-tab="rules"
+      type="button"
+      role="tab"
+      aria-selected="false"
+      aria-controls="panel-master-rules"
+      class="master-tab-btn tab-pill rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs sm:text-sm font-semibold text-zinc-400 hover:text-zinc-200 transition"
+    >
+      <span>🛡️</span> Reglas & Restricciones
+    </button>
+    <button
+      id="tab-btn-configs"
+      data-master-tab="configs"
+      type="button"
+      role="tab"
+      aria-selected="false"
+      aria-controls="panel-master-configs"
+      class="master-tab-btn tab-pill rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs sm:text-sm font-semibold text-zinc-400 hover:text-zinc-200 transition"
+    >
+      <span>⚙️</span> Servidor & Configs
+    </button>
+    <button
+      id="tab-btn-discord"
+      data-master-tab="discord"
+      type="button"
+      role="tab"
+      aria-selected="false"
+      aria-controls="panel-master-discord"
+      class="master-tab-btn tab-pill rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs sm:text-sm font-semibold text-zinc-400 hover:text-zinc-200 transition"
+    >
+      <span>💬</span> Discord & Alertas
+    </button>
   </nav>
 
-  <details id="advanced-tools" class="rounded-xl border border-zinc-800 bg-zinc-900/40 px-5 py-4">
-    <summary class="cursor-pointer font-semibold text-zinc-200">Herramientas avanzadas</summary>
-    <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">No necesitás usar nada de esta sección para jugar. Son opciones para cuando quieras administrar el mundo con más detalle.</p>
-    <div class="mt-4 grid gap-3 md:grid-cols-3">
-      <a href="#world" class="admin-action-card rounded-xl border p-4 transition"><p class="font-semibold text-zinc-100">Mundo y jugadores</p><p class="mt-1 text-sm text-zinc-400">Reglas, moderación y ajustes del mundo.</p></a>
-      <a href="#health" class="admin-action-card rounded-xl border p-4 transition"><p class="font-semibold text-zinc-100">Rendimiento y copias</p><p class="mt-1 text-sm text-zinc-400">Revisá lag y la frecuencia de backups.</p></a>
-      <a id="worldedit-tools" href="#worldedit" data-tab-target="worldedit" class="nav-shortcut-tab admin-action-card rounded-xl border p-4 transition"><p class="font-semibold text-zinc-100">WorldEdit <span class="ml-1 text-xs font-normal text-zinc-500">opcional</span></p><p class="mt-1 text-sm text-zinc-400">Disponible sólo si instalaste WorldEdit.</p></a>
-    </div>
-  </details>
+  <!-- PANELES MAESTROS -->
 
+  <!-- PANEL MAESTRO 1: JUGADORES Y RANGOS (LUCKPERMS) -->
+  <div id="panel-master-ranks" class="master-tab-panel space-y-6" role="tabpanel" aria-labelledby="tab-btn-ranks">
   <!-- SECCIÓN GESTIÓN DE RANGOS LUCKPERMS -->
   <section id="ranks" data-luckperms-module class="admin-module rounded-2xl border p-5 sm:p-7 transition-all">
     <!-- Header de Rangos -->
@@ -858,7 +898,10 @@
       </div>
     </div>
   </section>
+  </div>
 
+  <!-- PANEL MAESTRO 2: REGLAS Y RESTRICCIONES -->
+  <div id="panel-master-rules" class="master-tab-panel hidden space-y-6" role="tabpanel" aria-labelledby="tab-btn-rules">
   <!-- CENTRO DE RESTRICCIONES AGNÓSTICO & CONTROL EN CALIENTE -->
   <section id="restrictions-hub" class="admin-module rounded-2xl border p-5 sm:p-7 space-y-8 transition-all">
     <!-- Header del Centro de Restricciones -->
@@ -870,7 +913,7 @@
           <span class="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/40">100% SIN PNGs</span>
           <span class="rounded-full bg-purple-500/20 px-2.5 py-0.5 text-xs font-bold text-purple-300 ring-1 ring-purple-500/40">/reload en Caliente</span>
         </div>
-        <p class="mt-1 text-sm text-zinc-400">Control unificado y agnóstico de Ítems, Spawns de Mobs por Bioma, Aldeanos/Mesas, WorldEdit y Configs TOML.</p>
+        <p class="mt-1 text-sm text-zinc-400">Control unificado y agnóstico de Ítems, Spawns de Mobs por Bioma, Aldeanos/Mesas y WorldEdit.</p>
       </div>
       <div class="flex flex-wrap items-center gap-2.5">
         <span id="restrictions-quick-summary" class="rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-1.5 text-xs font-mono text-zinc-300">
@@ -882,7 +925,7 @@
       </div>
     </div>
 
-    <!-- Barra de Pestañas (Tabs) -->
+    <!-- Barra de Pestañas (Tabs) de Restricciones -->
     <div class="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-3" role="tablist">
       <button type="button" class="tab-btn active flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" data-tab="items">
         <span>📦</span> Ítems & Armas
@@ -896,13 +939,13 @@
         <span>👨‍🌾</span> Aldeanos & Mesas
         <span id="tab-count-villagers" class="ml-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">0</span>
       </button>
-      <details id="worldedit-optional-tab" class="relative"><summary class="cursor-pointer rounded-lg px-4 py-2 text-xs font-semibold text-zinc-500 hover:text-zinc-300">Más herramientas</summary><button type="button" id="tab-btn-worldedit" class="tab-btn flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" data-tab="worldedit">
-        WorldEdit <span class="text-zinc-500">(opcional)</span>
-        <span id="tab-badge-worldedit" class="ml-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">OFF</span>
-      </button>
-      </details><button type="button" class="tab-btn flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" data-tab="configs">
-        <span>⚙️</span> Configs TOML
-      </button>
+      <details id="worldedit-optional-tab" class="relative">
+        <summary class="cursor-pointer rounded-lg px-4 py-2 text-xs font-semibold text-zinc-500 hover:text-zinc-300">Más herramientas</summary>
+        <button type="button" id="tab-btn-worldedit" class="tab-btn flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" data-tab="worldedit">
+          WorldEdit <span class="text-zinc-500">(opcional)</span>
+          <span id="tab-badge-worldedit" class="ml-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">OFF</span>
+        </button>
+      </details>
     </div>
 
     <!-- PESTAÑA 1: ÍTEMS & ARMAS -->
@@ -1068,35 +1111,132 @@
       </div>
     </div>
 
-    <!-- PESTAÑA 5: CONFIGS TOML -->
-    <div id="tab-panel-configs" class="tab-panel hidden space-y-4">
-      <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 sm:p-5">
-        <p class="text-sm font-medium text-emerald-300">Editor de Configuraciones</p>
-        <h3 class="mt-1 text-base font-semibold text-zinc-100">Ajustes TOML y JSON de Mods</h3>
-        <p class="mt-1 text-xs text-zinc-400">Buscá un archivo de configuración. Las opciones visuales preservan comentarios y formato original.</p>
-        <input id="config-search" type="search" class="mt-4 min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs" placeholder="Ej. armas, pointblank, rendimiento, create…" />
-        <div id="config-picker" class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3"></div>
-        <div id="config-workspace" class="mt-5 hidden border-t border-zinc-800 pt-5">
-          <div class="flex justify-between gap-3">
+    </div>
+  </section>
+  </div>
+
+  <!-- PANEL MAESTRO 3: SERVIDOR Y CONFIGURACIÓN -->
+  <div id="panel-master-configs" class="master-tab-panel hidden space-y-8" role="tabpanel" aria-labelledby="tab-btn-configs">
+    <!-- EDITOR DE CONFIGURACIONES TOML / JSON -->
+    <div id="tab-panel-configs" class="admin-module rounded-2xl border p-5 sm:p-7 space-y-5 transition-all">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-800 pb-4">
+        <div>
+          <div class="flex items-center gap-2.5">
+            <span class="text-2xl">⚙️</span>
+            <h2 class="text-xl font-bold tracking-tight text-zinc-100">Editor de Configuraciones de Mods</h2>
+            <span class="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/40">TOML & JSON</span>
+          </div>
+          <p class="mt-1 text-sm text-zinc-400">Modificá parámetros internos de mods (armas, generación, balance). Las opciones visuales preservan comentarios y formato original.</p>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div class="relative">
+          <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+            🔍
+          </span>
+          <input
+            id="config-search"
+            type="search"
+            class="w-full rounded-xl border border-zinc-700 bg-zinc-950 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition"
+            placeholder="Buscar archivo de configuración (ej. armas, pointblank, create, ferritecore…)"
+          />
+        </div>
+        <div id="config-picker" class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3"></div>
+
+        <div id="config-workspace" class="hidden border-t border-zinc-800 pt-5">
+          <div class="flex items-center justify-between gap-3">
             <div>
-              <p id="selected-config-name" class="font-semibold text-sm text-zinc-200"></p>
-              <p id="selected-config-help" class="mt-1 text-xs text-zinc-500"></p>
+              <p id="selected-config-name" class="font-bold text-sm text-zinc-100"></p>
+              <p id="selected-config-help" class="mt-0.5 text-xs text-zinc-400"></p>
             </div>
-            <button id="close-config" class="min-h-9 rounded-lg px-3 text-xs text-zinc-400 hover:bg-zinc-800">Cambiar</button>
+            <button id="close-config" type="button" class="rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition">
+              ✕ Cerrar Editor
+            </button>
           </div>
           <div id="config-form" class="mt-4 space-y-3"></div>
-          <details class="mt-5 rounded-lg border border-zinc-800 p-4">
-            <summary class="cursor-pointer text-xs font-medium text-zinc-300">Modo avanzado: editar archivo completo</summary>
-            <textarea id="config-code" class="mt-3 h-64 w-full rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs"></textarea>
-            <button id="save-config" class="mt-3 min-h-10 rounded-lg border border-emerald-400/50 px-4 text-xs text-emerald-100 bg-emerald-500/10 hover:bg-emerald-500/20">Validar y guardar</button>
+          <details class="mt-5 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+            <summary class="cursor-pointer text-xs font-bold text-zinc-300">Modo avanzado: editar archivo en texto plano</summary>
+            <textarea id="config-code" class="mt-3 h-64 w-full rounded-lg border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs text-zinc-100 outline-none focus:border-emerald-400"></textarea>
+            <button id="save-config" type="button" class="mt-3 rounded-xl border border-emerald-400/50 bg-emerald-500/10 hover:bg-emerald-500/20 px-4 py-2 text-xs font-bold text-emerald-300 transition shadow-sm">
+              Validar y guardar archivo
+            </button>
           </details>
         </div>
       </div>
     </div>
-  </section>
-  <section id="world" class="grid gap-5 xl:grid-cols-2"><article class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5"><p class="text-sm font-medium text-emerald-300">Mundo</p><h2 class="mt-1 text-xl font-semibold">Reglas del mundo</h2><p class="mt-1 text-sm text-zinc-400">Cambios inmediatos, con el servidor encendido.</p><div id="gamerules-list" class="mt-4 space-y-2"></div></article><article class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5"><p class="text-sm font-medium text-emerald-300">Jugadores</p><h2 class="mt-1 text-xl font-semibold">Moderación rápida</h2><div id="players-list" class="mt-4 space-y-2"></div></article></section>
-  <section id="health" class="grid gap-5 xl:grid-cols-2"><article class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5"><p class="text-sm font-medium text-emerald-300">Rendimiento</p><h2 class="mt-1 text-xl font-semibold">Auditar lag</h2><p id="spark-note" class="mt-2 text-sm text-zinc-400">Spark revisa qué está consumiendo recursos durante 30 segundos.</p><button id="spark-audit" class="mt-5 min-h-11 rounded-lg bg-emerald-400 px-4 text-sm font-semibold text-zinc-950">Iniciar auditoría</button></article><article class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5"><p class="text-sm font-medium text-emerald-300">Automático</p><h2 class="mt-1 text-xl font-semibold">Copias periódicas</h2><div class="mt-5 flex gap-2"><select id="backup-hours" class="min-h-11 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm"><option value="3">Cada 3 horas</option><option value="6">Cada 6 horas</option><option value="12">Cada 12 horas</option><option value="24">Una vez al día</option></select><button id="save-schedule" class="min-h-11 rounded-lg border border-emerald-400/50 px-4 text-sm text-emerald-100">Activar</button></div><p id="schedule-status" class="mt-3 text-xs text-zinc-500"></p></article></section>
 
+    <!-- REGLAS DEL MUNDO Y MODERACIÓN RÁPIDA -->
+    <div class="grid gap-6 xl:grid-cols-2">
+      <!-- Reglas del Mundo -->
+      <section id="world" class="admin-module rounded-2xl border p-5 sm:p-6 space-y-4 transition-all">
+        <div class="border-b border-zinc-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🌍</span>
+            <h3 class="text-base font-bold text-zinc-100">Reglas del Mundo (Gamerules)</h3>
+          </div>
+          <p class="mt-1 text-xs text-zinc-400">Ajustes inmediatos que aplican en vivo sin apagar el servidor.</p>
+        </div>
+        <div id="gamerules-list" class="space-y-2 max-h-96 overflow-y-auto pr-1"></div>
+      </section>
+
+      <!-- Moderación Rápida -->
+      <section class="admin-module rounded-2xl border p-5 sm:p-6 space-y-4 transition-all">
+        <div class="border-b border-zinc-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🛡️</span>
+            <h3 class="text-base font-bold text-zinc-100">Moderación Rápida de Jugadores</h3>
+          </div>
+          <p class="mt-1 text-xs text-zinc-400">Expulsar o perdonar jugadores en vivo durante la partida.</p>
+        </div>
+        <div id="players-list" class="space-y-2 max-h-96 overflow-y-auto pr-1"></div>
+      </section>
+    </div>
+
+    <!-- RENDIMIENTO Y COPIAS PERIÓDICAS -->
+    <div class="grid gap-6 xl:grid-cols-2">
+      <!-- Rendimiento Spark -->
+      <section id="health" class="admin-module rounded-2xl border p-5 sm:p-6 space-y-4 transition-all">
+        <div class="border-b border-zinc-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">⚡</span>
+            <h3 class="text-base font-bold text-zinc-100">Rendimiento & Diagnóstico de Lag</h3>
+          </div>
+          <p id="spark-note" class="mt-1 text-xs text-zinc-400">Spark audita el consumo de CPU y TPS durante 30 segundos.</p>
+        </div>
+        <button id="spark-audit" type="button" class="inline-flex items-center gap-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 px-4 py-2.5 text-xs sm:text-sm font-bold text-zinc-950 transition shadow-sm">
+          <span>⚡</span> Iniciar Auditoría de Lag
+        </button>
+      </section>
+
+      <!-- Copias Periódicas -->
+      <section class="admin-module rounded-2xl border p-5 sm:p-6 space-y-4 transition-all">
+        <div class="border-b border-zinc-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">💾</span>
+            <h3 class="text-base font-bold text-zinc-100">Copias de Seguridad Periódicas</h3>
+          </div>
+          <p class="mt-1 text-xs text-zinc-400">Programá backups automáticos en segundo plano para proteger el mundo.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <label for="backup-hours" class="sr-only">Frecuencia de backups</label>
+          <select id="backup-hours" class="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-emerald-400">
+            <option value="3">Cada 3 horas</option>
+            <option value="6">Cada 6 horas</option>
+            <option value="12">Cada 12 horas</option>
+            <option value="24">Una vez al día</option>
+          </select>
+          <button id="save-schedule" type="button" class="rounded-xl border border-emerald-400/50 bg-emerald-500/10 hover:bg-emerald-500/20 px-4 py-2 text-xs font-bold text-emerald-300 transition shadow-sm">
+            Activar Programación
+          </button>
+        </div>
+        <p id="schedule-status" class="mt-2 text-xs text-zinc-500"></p>
+      </section>
+    </div>
+  </div>
+
+  <!-- PANEL MAESTRO 4: DISCORD Y ALERTAS -->
+  <div id="panel-master-discord" class="master-tab-panel hidden space-y-6" role="tabpanel" aria-labelledby="tab-btn-discord">
   <!-- SECCIÓN WEBHOOKS Y ALERTAS DE DISCORD -->
   <section id="discord" class="admin-module rounded-2xl border p-5 sm:p-7 transition-all">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-5">
@@ -1294,9 +1434,11 @@
       </div>
     </div>
   </section>
+  </div>
 </section>
 {% endblock %}
 {% block scripts %}
+<script src="/static/js/admin-tabs.js"></script>
 <script src="/static/js/admin-configs.js"></script>
 <script src="/static/js/admin-restrictions.js"></script>
 <script src="/static/js/admin-ranks.js"></script>

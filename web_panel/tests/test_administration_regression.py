@@ -24,9 +24,10 @@ def auth_client():
 
 
 def test_modular_js_files_exist():
-    """Verifica que los 4 archivos JavaScript modularizados existan en disk y no estén vacíos."""
+    """Verifica que los 5 archivos JavaScript modularizados existan en disk y no estén vacíos."""
     js_dir = pathlib.Path(__file__).parent.parent / "static" / "js"
     expected_files = [
+        "admin-tabs.js",
         "admin-configs.js",
         "admin-restrictions.js",
         "admin-ranks.js",
@@ -45,6 +46,7 @@ def test_administration_html_contains_modular_scripts():
     assert template_path.is_file()
     html = template_path.read_text(encoding="utf-8")
 
+    assert '<script src="/static/js/admin-tabs.js"></script>' in html
     assert '<script src="/static/js/admin-configs.js"></script>' in html
     assert '<script src="/static/js/admin-restrictions.js"></script>' in html
     assert '<script src="/static/js/admin-ranks.js"></script>' in html
@@ -52,6 +54,18 @@ def test_administration_html_contains_modular_scripts():
 
     # Verificar que no quedó ningún tag <script> inline sin cerrar
     assert html.count("<script>") == 0, "No debe haber bloques <script> inline sin modularizar en administration.html"
+
+
+def test_administration_master_tabs_structure():
+    """Verifica la existencia y estructura de las 4 pestañas maestras aisladas."""
+    template_path = pathlib.Path(__file__).parent.parent / "templates" / "administration.html"
+    html = template_path.read_text(encoding="utf-8")
+
+    assert 'id="admin-master-tabs"' in html
+    assert 'id="panel-master-ranks"' in html
+    assert 'id="panel-master-rules"' in html
+    assert 'id="panel-master-configs"' in html
+    assert 'id="panel-master-discord"' in html
 
 
 def test_administration_template_renders_cleanly():
@@ -70,6 +84,7 @@ def test_administration_template_renders_cleanly():
     }
     rendered = templates.get_template("administration.html").render(context)
     assert '<html' in rendered or '<section' in rendered
+    assert '/static/js/admin-tabs.js' in rendered
     assert '/static/js/admin-configs.js' in rendered
     assert '/static/js/admin-restrictions.js' in rendered
     assert '/static/js/admin-ranks.js' in rendered
@@ -77,8 +92,9 @@ def test_administration_template_renders_cleanly():
 
 
 def test_static_assets_http_delivery(client):
-    """Verifica que FastAPI sirva los 4 archivos JS a través de HTTP con código 200."""
+    """Verifica que FastAPI sirva los 5 archivos JS a través de HTTP con código 200."""
     endpoints = [
+        "/static/js/admin-tabs.js",
         "/static/js/admin-configs.js",
         "/static/js/admin-restrictions.js",
         "/static/js/admin-ranks.js",
