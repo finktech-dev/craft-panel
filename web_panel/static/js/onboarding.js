@@ -35,7 +35,10 @@
       const launch = await Panel.api('/api/runtime/launch-settings');
       const ram = document.querySelector('#onboarding-ram');
       ram.replaceChildren(...Array.from({ length: launch.maximum_recommended_ram_gb }, (_, index) => { const value = index + 1; return new Option(`${value} GB`, String(value), false, value === launch.allocated_ram_gb); }));
-      document.querySelector('#onboarding-ram-hint').textContent = `${launch.available_ram_gb} GB libres ahora · hasta ${launch.maximum_recommended_ram_gb} GB recomendados.`;
+      if (launch.allocated_ram_gb && launch.allocated_ram_gb <= launch.maximum_recommended_ram_gb) {
+        ram.value = String(launch.allocated_ram_gb);
+      }
+      document.querySelector('#onboarding-ram-hint').textContent = `${launch.available_ram_gb} GB libres ahora · ${launch.total_ram_gb} GB totales (máx. recomendado: ${launch.maximum_recommended_ram_gb} GB).`;
       showStep(state.first_step);
       if (state.public_address) document.querySelector('#ready-feedback').textContent = `Dirección para compartir: ${state.public_address}`;
     } catch (error) { showError(error.message); }

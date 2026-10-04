@@ -36,7 +36,7 @@ def _host_memory() -> tuple[int, int, int]:
     memory = psutil.virtual_memory()
     total_gb = max(1, int(memory.total / (1024**3)))
     available_gb = max(1, int(memory.available / (1024**3)))
-    recommended_gb = max(1, min(64, min(total_gb - 2, available_gb - 1)))
+    recommended_gb = max(1, min(64, total_gb - 2 if total_gb > 3 else total_gb))
     return total_gb, available_gb, recommended_gb
 
 
@@ -97,7 +97,7 @@ async def update_launch_settings(payload: LaunchSettingsUpdate) -> LaunchSetting
         raise HTTPException(status_code=409, detail="Apagá el servidor antes de cambiar la RAM.")
     total_gb, available_gb, maximum = _host_memory()
     if payload.allocated_ram_gb > maximum:
-        raise HTTPException(status_code=422, detail=f"Esta computadora recomienda reservar recursos; elegí hasta {maximum} GB.")
+        raise HTTPException(status_code=422, detail=f"Esta computadora recomienda reservar al menos 2 GB para el sistema; elegí hasta {maximum} GB.")
     _apply_ram_to_jvm_args(payload.allocated_ram_gb)
     settings.allocated_ram_gb = payload.allocated_ram_gb
     settings.playit_enabled = payload.playit_enabled

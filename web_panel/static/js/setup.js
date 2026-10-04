@@ -43,8 +43,9 @@
       const select = document.querySelector('#launch-ram');
       if (launch && select) {
         launchSettings = launch;
+        select.replaceChildren();
         for (let value = 1; value <= launch.maximum_recommended_ram_gb; value += 1) select.add(new Option(`${value} GB`, String(value), value === launch.allocated_ram_gb, value === launch.allocated_ram_gb));
-        document.querySelector('#launch-ram-hint').textContent = `${launch.total_ram_gb} GB totales · ${launch.available_ram_gb} GB libres ahora · recomendado: hasta ${launch.maximum_recommended_ram_gb} GB.`;
+        document.querySelector('#launch-ram-hint').textContent = `${launch.total_ram_gb} GB totales · ${launch.available_ram_gb} GB libres ahora · máx. recomendado: ${launch.maximum_recommended_ram_gb} GB.`;
         document.querySelector('#local-only').checked = !launch.playit_enabled;
         document.querySelector('#launch-feedback').textContent = launch.server_running ? 'El servidor ya está encendido. Apagalo antes de cambiar la RAM.' : launch.playit_enabled && tunnel?.needs_setup ? 'Conectá Playit para que tus amigos entren desde Internet.' : 'Listo para iniciar.';
       }
