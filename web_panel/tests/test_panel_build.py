@@ -107,6 +107,9 @@ def test_mods_template_and_asset_integrity():
     assert 'id="local-mod-search"' in template
     assert 'id="modal-upload-mod"' in template
     assert 'id="modal-delete-mod"' in template
+    assert 'id="modal-bulk-delete"' in template
+    assert 'id="bulk-actions-bar"' in template
+    assert 'id="btn-check-updates"' in template
     assert 'kpi-total-mods' in template
 
     # Validar que mods.js consuma las APIs de mods
@@ -114,6 +117,8 @@ def test_mods_template_and_asset_integrity():
     assert '/api/mods/upload' in script
     assert '/api/mods/export-client-pack' in script
     assert '/api/mods/search' in script
+    assert '/api/mods/bulk-action' in script
+    assert '/api/mods/updates' in script
 
 
 def test_mod_metadata_extraction_and_config_linking(tmp_path):

@@ -1,6 +1,7 @@
 /**
  * Gestor de Mods (web_panel/static/js/mods.js)
  * Controlador modular para la administración interactiva de mods locales y catálogo Modrinth.
+ * Soporta operaciones en lote, subida múltiple, metadatos enriquecidos, configs y verificación de versiones.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -14,6 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentSort = 'name';
   let searchTerm = '';
   let modToDelete = null;
+  const selectedFilenames = new Set();
+  let updatesMap = {};
 
   // Elementos DOM principales
   const installedContainer = $('#installed-mods-container');
@@ -21,7 +24,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchInput = $('#local-mod-search');
   const sortSelect = $('#local-mod-sort');
   const filterButtons = $$('.filter-pill');
-  
+  const selectAllCheckbox = $('#select-all-mods');
+  const btnCheckUpdates = $('#btn-check-updates');
+
+  // Barra de acciones en lote
+  const bulkBar = $('#bulk-actions-bar');
+  const bulkCount = $('#bulk-selected-count');
+  const btnBulkEnable = $('#btn-bulk-enable');
+  const btnBulkDisable = $('#btn-bulk-disable');
+  const btnBulkDelete = $('#btn-bulk-delete');
+  const bulkDeleteModal = $('#modal-bulk-delete');
+  const bulkDeleteCountTarget = $('#bulk-delete-count-target');
+
   // KPIs
   const kpiTotal = $('#kpi-total-mods');
   const kpiActive = $('#kpi-active-mods');
@@ -58,6 +72,9 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
       }
       installedMods = await Panel.api('/api/mods');
+      selectedFilenames.clear();
+      if (selectAllCheckbox) selectAllCheckbox.checked = false;
+      updateBulkBar();
       updateKpis();
       renderInstalledMods();
     } catch (err) {
@@ -88,14 +105,30 @@ document.addEventListener('DOMContentLoaded', () => {
     if (badgeInstalled) badgeInstalled.textContent = total;
   }
 
-  // 3. RENDERIZADO DE MODS INSTALADOS
+  // 3. BARRA DE ACCIONES EN LOTE (BULK ACTIONS)
+  function updateBulkBar() {
+    if (!bulkBar) return;
+    const count = selectedFilenames.size;
+    if (count > 0) {
+      bulkBar.classList.remove('hidden');
+      if (bulkCount) bulkCount.textContent = `${count} seleccionado${count > 1 ? 's' : ''}`;
+    } else {
+      bulkBar.classList.add('hidden');
+    }
+  }
+
+  // 4. RENDERIZADO DE MODS INSTALADOS
   function renderInstalledMods() {
     if (!installedContainer) return;
 
     // Filtrado
     const query = searchTerm.trim().toLowerCase();
     let filtered = installedMods.filter(mod => {
-      const matchSearch = !query || mod.name.toLowerCase().includes(query) || mod.filename.toLowerCase().includes(query);
+      const matchSearch =
+        !query ||
+        mod.name.toLowerCase().includes(query) ||
+        mod.filename.toLowerCase().includes(query) ||
+        (mod.mod_id && mod.mod_id.toLowerCase().includes(query));
       if (!matchSearch) return false;
 
       if (currentFilter === 'active') return mod.is_enabled;
@@ -134,32 +167,66 @@ document.addEventListener('DOMContentLoaded', () => {
       const encodedFilename = encodeURIComponent(mod.filename);
       const isEnabled = mod.is_enabled;
       const isServerOnly = !!mod.is_server_only;
+      const isSelected = selectedFilenames.has(mod.filename);
 
       const badgeType = isServerOnly
-        ? `<span class="inline-flex items-center gap-1 rounded bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 text-[11px] font-semibold text-indigo-300" title="Excluido del paquete cliente">⚙️ Solo Servidor</span>`
+        ? `<span class="inline-flex items-center gap-1 rounded bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 text-[11px] font-semibold text-indigo-300" title="Excluido automáticamente del paquete de clientes">⚙️ Solo Servidor</span>`
         : `<span class="inline-flex items-center gap-1 rounded bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 text-[11px] font-semibold text-sky-300">👥 Servidor + Cliente</span>`;
 
       const statusDot = isEnabled
         ? `<span class="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 ring-4 ring-emerald-400/20" title="Habilitado"></span>`
         : `<span class="h-2.5 w-2.5 shrink-0 rounded-full bg-zinc-600 ring-4 ring-zinc-700/20" title="Deshabilitado"></span>`;
 
+      const versionBadge = mod.version
+        ? `<span class="rounded bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 text-[10px] font-mono font-bold text-emerald-400" title="Versión declarada en metadata">v${esc(mod.version)}</span>`
+        : '';
+
+      const authorsText = mod.authors
+        ? `<span class="text-[11px] text-zinc-500 truncate max-w-[12rem]">de ${esc(mod.authors)}</span>`
+        : '';
+
+      const descriptionText = mod.description
+        ? `<p class="text-xs text-zinc-400 mt-1 line-clamp-1 leading-relaxed">${esc(mod.description)}</p>`
+        : '';
+
+      const configButton = mod.has_config
+        ? `<a href="/administration#configs" class="inline-flex items-center gap-1 rounded-lg border border-zinc-700/80 bg-zinc-800/80 hover:bg-zinc-700/80 px-2.5 py-1 text-xs font-semibold text-zinc-300 hover:text-zinc-100 transition shadow-sm" title="Abrir editor para ${esc(mod.config_filename || 'este mod')}">⚙️ Config</a>`
+        : '';
+
+      // Check de actualización
+      const updateData = updatesMap[mod.filename];
+      const updateBadge = (updateData && updateData.has_update)
+        ? `<button data-update-project="${esc(updateData.project_id || '')}" data-update-filename="${encodedFilename}" class="mod-update-btn inline-flex items-center gap-1 rounded-lg bg-sky-500/20 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-1 text-xs font-bold text-sky-300 transition shadow-sm animate-pulse" title="Nueva versión disponible en Modrinth">🚀 Actualizar a v${esc(updateData.latest_version || '')}</button>`
+        : '';
+
       return `
         <article class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl border ${isEnabled ? 'border-zinc-800 bg-zinc-900/60' : 'border-zinc-800/60 bg-zinc-950/40 opacity-80'} hover:border-zinc-700 transition">
           <div class="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
+            <!-- Selector para operaciones en lote -->
+            <label class="cursor-pointer pt-0.5 sm:pt-0 shrink-0">
+              <input type="checkbox" data-select-filename="${esc(mod.filename)}" ${isSelected ? 'checked' : ''} class="mod-select-checkbox rounded border-zinc-700 bg-zinc-800 text-emerald-500 focus:ring-emerald-400 h-4 w-4">
+            </label>
+
             <div class="mt-1 sm:mt-0">${statusDot}</div>
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <h4 class="font-bold text-sm text-zinc-100 truncate">${esc(mod.name)}</h4>
+                ${versionBadge}
                 <span class="rounded bg-zinc-800/80 px-2 py-0.5 text-[11px] font-mono text-zinc-400">${mod.size_mb.toFixed(2)} MB</span>
                 ${badgeType}
+                ${authorsText}
+                ${updateBadge}
               </div>
-              <p class="text-xs text-zinc-500 font-mono mt-1 truncate" title="${esc(mod.filename)}">
+              <p class="text-xs text-zinc-500 font-mono mt-0.5 truncate" title="${esc(mod.filename)}">
                 ${esc(mod.filename)}
               </p>
+              ${descriptionText}
             </div>
           </div>
 
-          <div class="flex items-center gap-4 self-end sm:self-center shrink-0">
+          <div class="flex items-center gap-3 self-end sm:self-center shrink-0">
+            ${configButton}
+
             <!-- Modern Switch -->
             <label class="relative inline-flex items-center cursor-pointer select-none">
               <input type="checkbox" ${isEnabled ? 'checked' : ''} data-toggle-filename="${encodedFilename}" class="mod-switch-checkbox sr-only peer">
@@ -179,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('');
   }
 
-  // 4. BÚSQUEDA Y FILTRADO LOCAL
+  // 5. BÚSQUEDA Y FILTRADO LOCAL
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       searchTerm = e.target.value;
@@ -207,38 +274,156 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 5. EVENTOS DE LA LISTA: TOGGLE Y DELETE
+  // 6. SELECCIÓN INDIVIDUAL Y MASTER (BULK ACTIONS)
   if (installedContainer) {
     installedContainer.addEventListener('change', async (event) => {
       const target = event.target;
-      if (!target.classList.contains('mod-switch-checkbox')) return;
-      const filename = target.dataset.toggleFilename;
-      if (!filename) return;
 
-      target.disabled = true;
-      try {
-        const result = await Panel.api(`/api/mods/${filename}/toggle`, { method: 'POST' });
-        Panel.toast(result.message, 'success');
-        await loadMods();
-      } catch (err) {
-        Panel.toast(err.message, 'error');
-        target.checked = !target.checked;
-      } finally {
-        target.disabled = false;
+      // Checkbox de selección para bulk
+      if (target.classList.contains('mod-select-checkbox')) {
+        const fn = target.dataset.selectFilename;
+        if (target.checked) selectedFilenames.add(fn);
+        else selectedFilenames.delete(fn);
+        updateBulkBar();
+        return;
+      }
+
+      // Switch toggle individual
+      if (target.classList.contains('mod-switch-checkbox')) {
+        const filename = target.dataset.toggleFilename;
+        if (!filename) return;
+
+        target.disabled = true;
+        try {
+          const result = await Panel.api(`/api/mods/${filename}/toggle`, { method: 'POST' });
+          Panel.toast(result.message, 'success');
+          await loadMods();
+        } catch (err) {
+          Panel.toast(err.message, 'error');
+          target.checked = !target.checked;
+        } finally {
+          target.disabled = false;
+        }
       }
     });
 
-    installedContainer.addEventListener('click', (event) => {
+    // Clicks en la lista (Delete individual o Update en 1 clic)
+    installedContainer.addEventListener('click', async (event) => {
       const deleteBtn = event.target.closest('.delete-mod-btn');
       if (deleteBtn) {
         const filename = deleteBtn.dataset.deleteFilename;
         const modName = deleteBtn.dataset.modName;
         openDeleteModal(filename, modName);
+        return;
+      }
+
+      const updateBtn = event.target.closest('.mod-update-btn');
+      if (updateBtn) {
+        const projectId = updateBtn.dataset.updateProject;
+        if (!projectId) return;
+        updateBtn.disabled = true;
+        updateBtn.innerHTML = `⏳ Actualizando...`;
+        try {
+          const mod = await Panel.api('/api/mods/install', {
+            method: 'POST',
+            body: { project_id: projectId },
+          });
+          Panel.toast(`¡Mod "${mod.name}" actualizado con éxito!`, 'success');
+          await loadMods();
+        } catch (err) {
+          Panel.toast(err.message, 'error');
+          updateBtn.disabled = false;
+          updateBtn.innerHTML = `🚀 Reintentar`;
+        }
       }
     });
   }
 
-  // 6. MODAL DE ELIMINACIÓN SEGURA
+  // Master checkbox: Seleccionar todos
+  if (selectAllCheckbox) {
+    selectAllCheckbox.addEventListener('change', (e) => {
+      const checkboxes = $$('.mod-select-checkbox');
+      if (e.target.checked) {
+        checkboxes.forEach(cb => {
+          cb.checked = true;
+          selectedFilenames.add(cb.dataset.selectFilename);
+        });
+      } else {
+        checkboxes.forEach(cb => {
+          cb.checked = false;
+        });
+        selectedFilenames.clear();
+      }
+      updateBulkBar();
+    });
+  }
+
+  // Ejecutor de operaciones en lote
+  async function executeBulkAction(action) {
+    if (selectedFilenames.size === 0) return;
+    const filenames = Array.from(selectedFilenames);
+    try {
+      const res = await Panel.api('/api/mods/bulk-action', {
+        method: 'POST',
+        body: { action, filenames },
+      });
+      Panel.toast(res.message, res.errors.length ? 'info' : 'success');
+      selectedFilenames.clear();
+      if (selectAllCheckbox) selectAllCheckbox.checked = false;
+      updateBulkBar();
+      await loadMods();
+    } catch (err) {
+      Panel.toast(err.message, 'error');
+    }
+  }
+
+  btnBulkEnable?.addEventListener('click', () => executeBulkAction('enable'));
+  btnBulkDisable?.addEventListener('click', () => executeBulkAction('disable'));
+  btnBulkDelete?.addEventListener('click', () => {
+    if (bulkDeleteCountTarget) bulkDeleteCountTarget.textContent = `${selectedFilenames.size} mods seleccionados`;
+    if (bulkDeleteModal) bulkDeleteModal.showModal();
+  });
+
+  $('#confirm-bulk-delete')?.addEventListener('click', async () => {
+    if (bulkDeleteModal) bulkDeleteModal.close();
+    await executeBulkAction('delete');
+  });
+
+  $('#cancel-bulk-delete')?.addEventListener('click', () => {
+    if (bulkDeleteModal) bulkDeleteModal.close();
+  });
+
+  // 7. VERIFICADOR DE ACTUALIZACIONES (UPDATE CHECKER)
+  if (btnCheckUpdates) {
+    btnCheckUpdates.addEventListener('click', async () => {
+      btnCheckUpdates.disabled = true;
+      btnCheckUpdates.innerHTML = `<span class="inline-block animate-spin mr-1">⏳</span> Buscando...`;
+      try {
+        const updates = await Panel.api('/api/mods/updates');
+        updatesMap = {};
+        let count = 0;
+        updates.forEach(u => {
+          if (u.has_update) {
+            updatesMap[u.filename] = u;
+            count++;
+          }
+        });
+        if (count > 0) {
+          Panel.toast(`¡Se encontraron ${count} actualización(es) disponibles en Modrinth!`, 'success');
+        } else {
+          Panel.toast('Todos los mods compatibles están al día.', 'info');
+        }
+        renderInstalledMods();
+      } catch (err) {
+        Panel.toast(err.message, 'error');
+      } finally {
+        btnCheckUpdates.disabled = false;
+        btnCheckUpdates.innerHTML = `<span>🔄</span> Buscar Actualizaciones`;
+      }
+    });
+  }
+
+  // 8. MODAL DE ELIMINACIÓN SEGURA INDIVIDUAL
   function openDeleteModal(encodedFilename, modName) {
     modToDelete = decodeURIComponent(encodedFilename);
     const targetLabel = $('#delete-mod-name-target');
@@ -268,7 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 7. SUBIDA DE ARCHIVOS (MODAL + DROPZONE)
+  // 9. SUBIDA MÚLTIPLE DE ARCHIVOS (BATCH UPLOAD + DROPZONE)
   $('#btn-open-upload-modal')?.addEventListener('click', () => {
     if (uploadStatus) uploadStatus.textContent = '';
     if (uploadProgress) uploadProgress.classList.add('hidden');
@@ -279,45 +464,61 @@ document.addEventListener('DOMContentLoaded', () => {
     if (uploadModal) uploadModal.close();
   });
 
-  async function handleFileUpload(file) {
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.jar')) {
-      Panel.toast('Elegí un archivo que termine en .jar.', 'error');
+  async function handleBatchFileUpload(files) {
+    if (!files || files.length === 0) return;
+    const jarFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.jar'));
+    if (jarFiles.length === 0) {
+      Panel.toast('Elegí archivos válidos que terminen en .jar.', 'error');
       return;
     }
 
-    if (uploadStatus) uploadStatus.textContent = `Subiendo ${file.name}...`;
     if (uploadProgress) uploadProgress.classList.remove('hidden');
+    let uploadedCount = 0;
+    let failedCount = 0;
+    const total = jarFiles.length;
 
-    const formData = new FormData();
-    formData.append('file', file);
+    for (let i = 0; i < total; i++) {
+      const file = jarFiles[i];
+      if (uploadStatus) uploadStatus.textContent = `Subiendo ${i + 1} de ${total}: ${file.name}...`;
 
-    try {
-      const response = await fetch('/api/mods/upload', {
-        method: 'POST',
-        body: formData,
-        credentials: 'same-origin',
-      });
-      await Panel.readResponse(response);
-      Panel.toast(`Mod "${file.name}" subido con éxito.`, 'success');
-      if (uploadStatus) uploadStatus.textContent = `¡"${file.name}" subido correctamente!`;
-      await loadMods();
-      setTimeout(() => {
-        if (uploadModal) uploadModal.close();
-      }, 1000);
-    } catch (err) {
-      if (uploadStatus) uploadStatus.textContent = err.message;
-      Panel.toast(err.message, 'error');
-    } finally {
-      if (uploadProgress) uploadProgress.classList.add('hidden');
-      if (fileInput) fileInput.value = '';
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const response = await fetch('/api/mods/upload', {
+          method: 'POST',
+          body: formData,
+          credentials: 'same-origin',
+        });
+        await Panel.readResponse(response);
+        uploadedCount++;
+      } catch (err) {
+        failedCount++;
+        Panel.toast(`${file.name}: ${err.message}`, 'error');
+      }
     }
+
+    if (uploadStatus) {
+      uploadStatus.textContent = `Finalizado: ${uploadedCount} mod(s) subido(s)${failedCount > 0 ? `, ${failedCount} con error` : ''}.`;
+    }
+
+    if (uploadedCount > 0) {
+      Panel.toast(`¡${uploadedCount} archivo(s) .jar subidos con éxito!`, 'success');
+      await loadMods();
+    }
+
+    setTimeout(() => {
+      if (uploadModal) uploadModal.close();
+      if (uploadProgress) uploadProgress.classList.add('hidden');
+      if (uploadStatus) uploadStatus.textContent = '';
+      if (fileInput) fileInput.value = '';
+    }, 1200);
   }
 
   if (fileInput) {
     fileInput.addEventListener('change', () => {
-      if (fileInput.files && fileInput.files[0]) {
-        handleFileUpload(fileInput.files[0]);
+      if (fileInput.files && fileInput.files.length > 0) {
+        handleBatchFileUpload(fileInput.files);
       }
     });
   }
@@ -338,13 +539,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     dropZone.addEventListener('drop', (e) => {
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-        handleFileUpload(e.dataTransfer.files[0]);
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleBatchFileUpload(e.dataTransfer.files);
       }
     });
   }
 
-  // 8. PESTAÑAS PRINCIPALES: INSTALADOS VS MODRINTH
+  // 10. PESTAÑAS PRINCIPALES: INSTALADOS VS MODRINTH
   const tabBtnInstalled = $('#tab-btn-installed');
   const tabBtnModrinth = $('#tab-btn-modrinth');
   const panelInstalled = $('#panel-installed');
@@ -367,7 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
   tabBtnInstalled?.addEventListener('click', () => switchMainTab('installed'));
   tabBtnModrinth?.addEventListener('click', () => switchMainTab('modrinth'));
 
-  // 9. BÚSQUEDA Y CATÁLOGO MODRINTH
+  // 11. BÚSQUEDA Y CATÁLOGO MODRINTH CON RESOLUCIÓN DE DEPENDENCIAS
   if (modrinthForm) {
     modrinthForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -388,13 +589,12 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-zinc-500">
               <span class="text-3xl block mb-2">🔍</span>
               <p class="font-semibold text-zinc-300">No se encontraron mods compatibles con NeoForge 1.21.1</p>
-              <p class="text-xs text-zinc-500 mt-1">Probá con otro término como "Create", "JEI", "Waystones" o "Sodium".</p>
+              <p class="text-xs text-zinc-500 mt-1">Probá con otro término como "Create", "JEI", "Waystones" o "FerriteCore".</p>
             </div>
           `;
           return;
         }
 
-        // Renderizar tarjetas de Modrinth
         const installedNames = new Set(installedMods.map(m => m.name.toLowerCase()));
 
         modrinthResults.innerHTML = hits.map(hit => {
@@ -422,6 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p class="mt-2 text-xs text-zinc-400 line-clamp-2 leading-relaxed">${esc(hit.description)}</p>
                 <div class="mt-3 flex items-center gap-4 text-xs text-zinc-500">
                   <span>📥 ${Number(hit.downloads || 0).toLocaleString('es-AR')} descargas</span>
+                  <span class="text-emerald-400/80">⚡ Resuelve dependencias automáticamente</span>
                   <a href="https://modrinth.com/mod/${esc(hit.slug)}" target="_blank" rel="noreferrer" class="text-emerald-400 hover:underline">Ver en Modrinth ↗</a>
                 </div>
               </div>
@@ -444,13 +645,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!projectId) return;
 
       installBtn.disabled = true;
-      installBtn.textContent = 'Instalando...';
+      installBtn.textContent = 'Instalando mod y librerías...';
       try {
         const mod = await Panel.api('/api/mods/install', {
           method: 'POST',
-          body: { project_id: projectId },
+          body: { project_id: projectId, install_dependencies: true },
         });
-        Panel.toast(`¡Mod "${mod.name}" instalado correctamente!`, 'success');
+        Panel.toast(`¡Mod "${mod.name}" y sus librerías requeridas instalados correctamente!`, 'success');
         installBtn.replaceWith(document.createRange().createContextualFragment(
           `<span class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-300">✓ Ya Instalado</span>`
         ));
@@ -463,7 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 10. EXPORTAR MODPACK CLIENTE
+  // 12. EXPORTAR MODPACK CLIENTE
   if (exportBtn) {
     exportBtn.addEventListener('click', async () => {
       exportBtn.disabled = true;
