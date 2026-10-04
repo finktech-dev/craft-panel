@@ -8,10 +8,13 @@ from fastapi.responses import FileResponse
 from app.core.security import get_current_admin
 from app.schemas.mod import (
     ClientPackExportResponse,
+    ModBulkActionRequest,
+    ModBulkActionResponse,
     ModInstallRequest,
     ModItem,
     ModrinthSearchHit,
     ModToggleResponse,
+    ModUpdateItem,
 )
 from app.services.mod_service import ModServiceError, mod_service
 
@@ -21,6 +24,14 @@ router = APIRouter(prefix="/mods", tags=["mods"], dependencies=[Depends(get_curr
 @router.get("", response_model=list[ModItem])
 async def list_mods() -> list[ModItem]:
     return await mod_service.list_mods()
+
+
+@router.post("/bulk-action", response_model=ModBulkActionResponse)
+async def bulk_action(payload: ModBulkActionRequest) -> ModBulkActionResponse:
+    try:
+        return await mod_service.bulk_action(payload.action, payload.filenames)
+    except ModServiceError as error:
+        _raise_mod_error(error)
 
 
 @router.post("/{filename}/toggle", response_model=ModToggleResponse)
@@ -55,10 +66,20 @@ async def search_modrinth(query: str) -> list[ModrinthSearchHit]:
         _raise_mod_error(error)
 
 
+@router.get("/updates", response_model=list[ModUpdateItem])
+async def check_mod_updates() -> list[ModUpdateItem]:
+    try:
+        return await mod_service.check_updates()
+    except ModServiceError as error:
+        _raise_mod_error(error)
+
+
 @router.post("/install", response_model=ModItem, status_code=status.HTTP_201_CREATED)
 async def install_modrinth_mod(payload: ModInstallRequest) -> ModItem:
     try:
-        return await mod_service.install_modrinth_mod(payload.project_id, payload.version_id)
+        return await mod_service.install_modrinth_mod(
+            payload.project_id, payload.version_id, payload.install_dependencies
+        )
     except ModServiceError as error:
         _raise_mod_error(error)
 

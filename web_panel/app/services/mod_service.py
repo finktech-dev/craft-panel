@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import tomllib
 import uuid
 import zipfile
 from collections.abc import Iterable
@@ -17,7 +18,13 @@ import httpx
 from fastapi import UploadFile
 
 from app.core.config import Settings, settings
-from app.schemas.mod import ModItem, ModrinthSearchHit, ModToggleResponse
+from app.schemas.mod import (
+    ModBulkActionResponse,
+    ModItem,
+    ModrinthSearchHit,
+    ModToggleResponse,
+    ModUpdateItem,
+)
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 from app.services.server_process import MinecraftServerManager, server_manager
 
@@ -157,6 +164,55 @@ class ModService:
         except OSError as error:
             raise ModServiceError(f"No se pudo eliminar el mod: {error}") from error
 
+    async def bulk_action(self, action: str, filenames: list[str]) -> ModBulkActionResponse:
+        """Aplica una acción en lote (enable, disable, delete) de forma segura."""
+        self._require_server_stopped(f"operación en lote: {action}")
+        affected = 0
+        errors: list[str] = []
+
+        for name in filenames:
+            try:
+                target = self._resolve_mod_path(name)
+                if not target.is_file():
+                    errors.append(f"{name}: no existe.")
+                    continue
+
+                if action == "enable":
+                    if target.name.endswith(".jar.disabled"):
+                        dest = target.with_name(target.name.removesuffix(".disabled"))
+                        if dest.exists():
+                            errors.append(f"{name}: el archivo activo ya existe.")
+                            continue
+                        await asyncio.to_thread(target.rename, dest)
+                        affected += 1
+                elif action == "disable":
+                    if target.name.endswith(".jar"):
+                        dest = target.with_name(f"{target.name}.disabled")
+                        if dest.exists():
+                            errors.append(f"{name}: el archivo desactivado ya existe.")
+                            continue
+                        await asyncio.to_thread(target.rename, dest)
+                        affected += 1
+                elif action == "delete":
+                    await asyncio.to_thread(target.unlink)
+                    affected += 1
+            except Exception as err:
+                errors.append(f"{name}: {err}")
+
+        action_labels = {"enable": "habilitados", "disable": "deshabilitados", "delete": "eliminados"}
+        label = action_labels.get(action, action)
+        message = (
+            f"{affected} mods {label} correctamente."
+            if not errors
+            else f"{affected} mods {label}, con {len(errors)} advertencias."
+        )
+        return ModBulkActionResponse(
+            action=action,
+            affected_count=affected,
+            errors=errors,
+            message=message,
+        )
+
     async def search_modrinth(self, query: str) -> list[ModrinthSearchHit]:
         cleaned_query = query.strip()
         if not cleaned_query:
@@ -188,7 +244,13 @@ class ModService:
             for hit in hits
         ]
 
-    async def install_modrinth_mod(self, project_id: str, version_id: str | None = None) -> ModItem:
+    async def install_modrinth_mod(
+        self,
+        project_id: str,
+        version_id: str | None = None,
+        install_dependencies: bool = True,
+        visited_projects: set[str] | None = None,
+    ) -> ModItem:
         self._require_server_stopped("instalar mods")
         version = await self._get_compatible_version(project_id, version_id)
         file_data = self._select_download_file(version)
@@ -221,7 +283,85 @@ class ModService:
             if temporary_path.exists():
                 await asyncio.to_thread(temporary_path.unlink)
 
+        # Resolución automática de dependencias requeridas
+        if install_dependencies:
+            if visited_projects is None:
+                visited_projects = set()
+            visited_projects.add(project_id)
+
+            dependencies = version.get("dependencies")
+            if isinstance(dependencies, list):
+                for dep in dependencies:
+                    if dep.get("dependency_type") == "required" and dep.get("project_id"):
+                        dep_proj = dep["project_id"]
+                        if dep_proj not in visited_projects:
+                            visited_projects.add(dep_proj)
+                            try:
+                                await self.install_modrinth_mod(
+                                    dep_proj,
+                                    version_id=dep.get("version_id"),
+                                    install_dependencies=True,
+                                    visited_projects=visited_projects,
+                                )
+                                logger.info("Dependencia requerida %s instalada con éxito", dep_proj)
+                            except ModConflictError:
+                                pass  # Ya existía en disco
+                            except Exception as dep_err:
+                                logger.warning("No se pudo autoinstalar dependencia requerida %s: %s", dep_proj, dep_err)
+
         return await asyncio.to_thread(self._mod_item_from_path, destination)
+
+    async def check_updates(self) -> list[ModUpdateItem]:
+        """Comprueba de forma asíncrona si hay versiones más nuevas en Modrinth para los mods instalados."""
+        installed = await self.list_mods()
+        candidates = [m for m in installed if m.is_enabled and (m.mod_id or m.name)]
+        if not candidates:
+            return []
+
+        results: list[ModUpdateItem] = []
+        semaphore = asyncio.Semaphore(5)
+
+        async def _check_single(mod: ModItem) -> ModUpdateItem:
+            target_id = mod.mod_id or mod.name
+            update_item = ModUpdateItem(
+                filename=mod.filename,
+                mod_id=mod.mod_id,
+                name=mod.name,
+                current_version=mod.version,
+                latest_version=None,
+                project_id=None,
+                has_update=False,
+            )
+            async with semaphore:
+                try:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+                        resp = await client.get(
+                            f"{_MODRINTH_API}/project/{target_id}/version",
+                            params={"loaders": json.dumps(["neoforge"]), "game_versions": json.dumps(["1.21.1"])},
+                        )
+                        if resp.status_code == 200:
+                            versions = resp.json()
+                            if isinstance(versions, list) and versions:
+                                latest = max(versions, key=lambda v: v.get("date_published", ""))
+                                latest_ver = latest.get("version_number")
+                                update_item.latest_version = latest_ver
+                                update_item.project_id = latest.get("project_id")
+                                if (
+                                    mod.version
+                                    and latest_ver
+                                    and mod.version.strip().casefold() != latest_ver.strip().casefold()
+                                ):
+                                    update_item.has_update = True
+                except Exception as err:
+                    logger.debug("Error comprobando actualización para %s: %s", mod.filename, err)
+            return update_item
+
+        updates = await asyncio.gather(*[_check_single(m) for m in candidates], return_exceptions=True)
+        for item in updates:
+            if isinstance(item, ModUpdateItem):
+                results.append(item)
+        return results
+
 
     async def export_client_pack(self) -> Path:
         """Empaqueta mods activos y configuraciones presentes sin bloquear FastAPI."""
@@ -317,7 +457,105 @@ class ModService:
             yield from self.mods_directory.glob("*.jar")
 
     @staticmethod
-    def _is_server_only_mod(mod_file: Path) -> bool:
+    def _extract_jar_metadata(path: Path) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "mod_id": None,
+            "display_name": None,
+            "version": None,
+            "description": None,
+            "authors": None,
+        }
+        if not path.is_file() or path.stat().st_size < 100:
+            return result
+
+        try:
+            with zipfile.ZipFile(path, "r") as archive:
+                namelist = set(archive.namelist())
+
+                # 1. NeoForge / Forge mods.toml
+                toml_candidate = None
+                for candidate in ("META-INF/neoforge.mods.toml", "META-INF/mods.toml"):
+                    if candidate in namelist:
+                        toml_candidate = candidate
+                        break
+
+                if toml_candidate:
+                    raw_toml = archive.read(toml_candidate).decode("utf-8", errors="replace")
+                    data = tomllib.loads(raw_toml)
+                    mods = data.get("mods")
+                    if isinstance(mods, list) and mods:
+                        first = mods[0]
+                        if isinstance(first, dict):
+                            result["mod_id"] = first.get("modId")
+                            result["display_name"] = first.get("displayName")
+                            raw_version = str(first.get("version", "")).strip()
+                            if raw_version and not raw_version.startswith("${"):
+                                result["version"] = raw_version
+                            result["description"] = first.get("description")
+                            authors = first.get("authors")
+                            if isinstance(authors, list):
+                                result["authors"] = ", ".join(str(a) for a in authors)
+                            elif isinstance(authors, str):
+                                result["authors"] = authors
+                    return result
+
+                # 2. Fabric / Quilt fabric.mod.json
+                if "fabric.mod.json" in namelist:
+                    raw_json = archive.read("fabric.mod.json").decode("utf-8", errors="replace")
+                    data = json.loads(raw_json)
+                    result["mod_id"] = data.get("id")
+                    result["display_name"] = data.get("name")
+                    result["version"] = data.get("version")
+                    result["description"] = data.get("description")
+                    authors = data.get("authors")
+                    if isinstance(authors, list):
+                        result["authors"] = ", ".join(
+                            str(a.get("name", a) if isinstance(a, dict) else a) for a in authors
+                        )
+                    elif isinstance(authors, str):
+                        result["authors"] = authors
+                    return result
+        except Exception as error:
+            logger.debug("No se pudieron extraer metadatos de %s: %s", path.name, error)
+
+        return result
+
+    @staticmethod
+    def _find_mod_config(server_directory: Path | None, mod_id: str | None, filename_stem: str) -> str | None:
+        if not server_directory:
+            return None
+        config_dir = server_directory / "config"
+        if not config_dir.is_dir():
+            return None
+
+        candidates_to_check: list[str] = []
+        if mod_id:
+            cleaned_id = mod_id.strip().casefold()
+            candidates_to_check.extend([
+                f"{cleaned_id}.toml",
+                f"{cleaned_id}-common.toml",
+                f"{cleaned_id}-server.toml",
+                f"{cleaned_id}-client.toml",
+            ])
+
+        cleaned_stem = filename_stem.strip().casefold()
+        candidates_to_check.extend([
+            f"{cleaned_stem}.toml",
+            f"{cleaned_stem}-common.toml",
+            f"{cleaned_stem}-server.toml",
+        ])
+
+        for candidate_name in candidates_to_check:
+            candidate_path = config_dir / candidate_name
+            if candidate_path.is_file():
+                return candidate_name
+
+        return None
+
+    @staticmethod
+    def _is_server_only_mod(mod_file: Path, mod_id: str | None = None) -> bool:
+        if mod_id and mod_id.casefold() in SERVER_ONLY_MODS:
+            return True
         normalized_name = mod_file.name.casefold()
         return any(
             normalized_name == f"{mod_name}.jar"
@@ -327,16 +565,35 @@ class ModService:
         )
 
     @classmethod
-    def _mod_item_from_path(cls, path: Path) -> ModItem:
+    def _mod_item_from_path(cls, path: Path, settings_obj: Settings | None = None) -> ModItem:
         is_enabled = path.name.endswith(".jar")
         suffix = ".jar" if is_enabled else ".jar.disabled"
+        stem = path.name.removesuffix(suffix)
+
+        metadata = cls._extract_jar_metadata(path)
+        mod_id = metadata.get("mod_id")
+        display_name = metadata.get("display_name") or stem
+        version = metadata.get("version")
+        description = metadata.get("description")
+        authors = metadata.get("authors")
+
+        active_settings = settings_obj or settings
+        server_dir = getattr(active_settings, "server_directory", None)
+        config_filename = cls._find_mod_config(server_dir, mod_id, stem)
+
         return ModItem(
             filename=path.name,
-            name=path.name.removesuffix(suffix),
+            name=display_name,
             size_mb=round(path.stat().st_size / _MEBIBYTE, 2),
             is_enabled=is_enabled,
             modified_at=datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(),
-            is_server_only=cls._is_server_only_mod(path),
+            is_server_only=cls._is_server_only_mod(path, mod_id),
+            mod_id=mod_id,
+            version=version,
+            description=description,
+            authors=authors,
+            has_config=config_filename is not None,
+            config_filename=config_filename,
         )
 
     def _resolve_mod_path(self, filename: str) -> Path:
