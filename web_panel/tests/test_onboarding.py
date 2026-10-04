@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from app.core.config import Settings
@@ -113,3 +114,39 @@ def test_server_start_command_is_native_to_the_host(monkeypatch, tmp_path):
     monkeypatch.setattr("app.core.config.sys.platform", "linux")
     (configured.server_directory / "run.sh").write_text("#!/usr/bin/env sh\n", encoding="utf-8")
     assert configured.server_start_command == ("sh", "./run.sh", "nogui")
+
+
+class FailingAsyncClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        return False
+
+    async def get(self, *args, **kwargs):
+        raise httpx.ConnectError("offline")
+
+
+@pytest.mark.asyncio
+async def test_vanilla_manifest_network_error_is_reported_as_installer_error(monkeypatch, tmp_path):
+    from app.services.installer_service import InstallerServiceError
+
+    monkeypatch.setattr("app.services.installer_service.httpx.AsyncClient", FailingAsyncClient)
+    service = InstallerService(configured_settings=Settings(project_root=tmp_path), server=StoppedServer())
+
+    with pytest.raises(InstallerServiceError, match="official server manifest"):
+        await service._install_vanilla("1.21.1")
+
+
+@pytest.mark.asyncio
+async def test_fabric_manifest_network_error_is_reported_as_installer_error(monkeypatch, tmp_path):
+    from app.services.installer_service import InstallerServiceError
+
+    monkeypatch.setattr("app.services.installer_service.httpx.AsyncClient", FailingAsyncClient)
+    service = InstallerService(configured_settings=Settings(project_root=tmp_path), server=StoppedServer())
+
+    with pytest.raises(InstallerServiceError, match="Fabric installer manifest"):
+        await service._install_fabric("1.21.1")

@@ -103,23 +103,28 @@ class InstallerService:
             )
     async def _install_vanilla(self, minecraft_version: str) -> None:
         await self._publish("Finding the official Vanilla server download…")
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
-            manifest_response = await client.get(_MOJANG_MANIFEST)
-            manifest_response.raise_for_status()
-            manifest = manifest_response.json()
-            versions = manifest.get("versions", []) if isinstance(manifest, dict) else []
-            selected = next((item for item in versions if item.get("id") == minecraft_version), None)
-            if not isinstance(selected, dict) or not isinstance(selected.get("url"), str):
-                raise InstallerValidationError(f"Minecraft {minecraft_version} was not found in Mojang's official manifest.")
-            details_response = await client.get(selected["url"])
-            details_response.raise_for_status()
-            details = details_response.json()
-            server = details.get("downloads", {}).get("server", {}) if isinstance(details, dict) else {}
-            url, checksum = server.get("url"), server.get("sha1")
-            if not isinstance(url, str) or not isinstance(checksum, str):
-                raise InstallerServiceError("The official manifest did not provide a server download.")
-            assert self._settings.server_directory is not None
-            await self._download(client, url, self._settings.server_directory / "server.jar", checksum)
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
+                manifest_response = await client.get(_MOJANG_MANIFEST)
+                manifest_response.raise_for_status()
+                manifest = manifest_response.json()
+                versions = manifest.get("versions", []) if isinstance(manifest, dict) else []
+                selected = next((item for item in versions if item.get("id") == minecraft_version), None)
+                if not isinstance(selected, dict) or not isinstance(selected.get("url"), str):
+                    raise InstallerValidationError(f"Minecraft {minecraft_version} was not found in Mojang's official manifest.")
+                details_response = await client.get(selected["url"])
+                details_response.raise_for_status()
+                details = details_response.json()
+                server = details.get("downloads", {}).get("server", {}) if isinstance(details, dict) else {}
+                url, checksum = server.get("url"), server.get("sha1")
+                if not isinstance(url, str) or not isinstance(checksum, str):
+                    raise InstallerServiceError("The official manifest did not provide a server download.")
+                assert self._settings.server_directory is not None
+                await self._download(client, url, self._settings.server_directory / "server.jar", checksum)
+        except InstallerServiceError:
+            raise
+        except (httpx.HTTPError, ValueError) as error:
+            raise InstallerServiceError("The official server manifest could not be reached. Check the connection and try again.") from error
 
     async def _install_neoforge(self, minecraft_version: str) -> None:
         if minecraft_version != self._settings.minecraft_version:
@@ -136,18 +141,23 @@ class InstallerService:
 
     async def _install_fabric(self, minecraft_version: str) -> None:
         await self._publish("Finding the Fabric installer…")
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
-            installers_response = await client.get(_FABRIC_INSTALLERS)
-            installers_response.raise_for_status()
-            installers = installers_response.json()
-            selected = next((item for item in installers if item.get("stable")), None)
-            if not isinstance(selected, dict) or not isinstance(selected.get("version"), str):
-                raise InstallerServiceError("No stable Fabric installer is available right now.")
-            version = selected["version"]
-            url = f"https://maven.fabricmc.net/net/fabricmc/fabric-installer/{version}/fabric-installer-{version}.jar"
-            assert self._settings.tools_directory is not None
-            installer = self._settings.tools_directory / f"fabric-installer-{version}.jar"
-            await self._download(client, url, installer)
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
+                installers_response = await client.get(_FABRIC_INSTALLERS)
+                installers_response.raise_for_status()
+                installers = installers_response.json()
+                selected = next((item for item in installers if item.get("stable")), None)
+                if not isinstance(selected, dict) or not isinstance(selected.get("version"), str):
+                    raise InstallerServiceError("No stable Fabric installer is available right now.")
+                version = selected["version"]
+                url = f"https://maven.fabricmc.net/net/fabricmc/fabric-installer/{version}/fabric-installer-{version}.jar"
+                assert self._settings.tools_directory is not None
+                installer = self._settings.tools_directory / f"fabric-installer-{version}.jar"
+                await self._download(client, url, installer)
+        except InstallerServiceError:
+            raise
+        except (httpx.HTTPError, ValueError) as error:
+            raise InstallerServiceError("The Fabric installer manifest could not be reached. Check the connection and try again.") from error
         assert self._settings.server_directory is not None
         await self._publish("Installing Fabric…")
         await self._run_java(
