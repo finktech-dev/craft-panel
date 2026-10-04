@@ -10,6 +10,7 @@ from app.schemas.mod import (
     ClientPackExportResponse,
     ModBulkActionRequest,
     ModBulkActionResponse,
+    ModEnvironmentResponse,
     ModInstallRequest,
     ModItem,
     ModrinthSearchHit,
@@ -21,23 +22,45 @@ from app.services.mod_service import ModServiceError, mod_service
 router = APIRouter(prefix="/mods", tags=["mods"], dependencies=[Depends(get_current_admin)])
 
 
+# 1. RUTAS ESTÁTICAS PRIMERO (Previene sombras con /{filename})
 @router.get("", response_model=list[ModItem])
 async def list_mods() -> list[ModItem]:
     return await mod_service.list_mods()
+
+
+@router.get("/environment", response_model=ModEnvironmentResponse)
+async def get_mod_environment() -> ModEnvironmentResponse:
+    env = mod_service.get_environment()
+    return ModEnvironmentResponse(
+        loader=env["loader"],
+        minecraft_version=env["minecraft_version"],
+    )
+
+
+@router.get("/updates", response_model=list[ModUpdateItem])
+async def check_mod_updates() -> list[ModUpdateItem]:
+    try:
+        return await mod_service.check_updates()
+    except ModServiceError as error:
+        _raise_mod_error(error)
+
+
+@router.get("/search", response_model=list[ModrinthSearchHit])
+async def search_modrinth(
+    query: str,
+    loader: str | None = None,
+    game_version: str | None = None,
+) -> list[ModrinthSearchHit]:
+    try:
+        return await mod_service.search_modrinth(query, loader=loader, game_version=game_version)
+    except ModServiceError as error:
+        _raise_mod_error(error)
 
 
 @router.post("/bulk-action", response_model=ModBulkActionResponse)
 async def bulk_action(payload: ModBulkActionRequest) -> ModBulkActionResponse:
     try:
         return await mod_service.bulk_action(payload.action, payload.filenames)
-    except ModServiceError as error:
-        _raise_mod_error(error)
-
-
-@router.post("/{filename}/toggle", response_model=ModToggleResponse)
-async def toggle_mod(filename: str) -> ModToggleResponse:
-    try:
-        return await mod_service.toggle_mod(filename)
     except ModServiceError as error:
         _raise_mod_error(error)
 
@@ -50,35 +73,15 @@ async def upload_mod(file: UploadFile = File(...)) -> ModItem:
         _raise_mod_error(error)
 
 
-@router.delete("/{filename}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_mod(filename: str) -> None:
-    try:
-        await mod_service.delete_mod(filename)
-    except ModServiceError as error:
-        _raise_mod_error(error)
-
-
-@router.get("/search", response_model=list[ModrinthSearchHit])
-async def search_modrinth(query: str) -> list[ModrinthSearchHit]:
-    try:
-        return await mod_service.search_modrinth(query)
-    except ModServiceError as error:
-        _raise_mod_error(error)
-
-
-@router.get("/updates", response_model=list[ModUpdateItem])
-async def check_mod_updates() -> list[ModUpdateItem]:
-    try:
-        return await mod_service.check_updates()
-    except ModServiceError as error:
-        _raise_mod_error(error)
-
-
 @router.post("/install", response_model=ModItem, status_code=status.HTTP_201_CREATED)
 async def install_modrinth_mod(payload: ModInstallRequest) -> ModItem:
     try:
         return await mod_service.install_modrinth_mod(
-            payload.project_id, payload.version_id, payload.install_dependencies
+            payload.project_id,
+            version_id=payload.version_id,
+            loader=payload.loader,
+            game_version=payload.game_version,
+            install_dependencies=payload.install_dependencies,
         )
     except ModServiceError as error:
         _raise_mod_error(error)
@@ -107,6 +110,23 @@ async def download_client_pack() -> FileResponse:
         media_type="application/zip",
         filename=export_path.name,
     )
+
+
+# 2. RUTAS PARAMETRIZADAS DINÁMICAS AL FINAL
+@router.post("/{filename}/toggle", response_model=ModToggleResponse)
+async def toggle_mod(filename: str) -> ModToggleResponse:
+    try:
+        return await mod_service.toggle_mod(filename)
+    except ModServiceError as error:
+        _raise_mod_error(error)
+
+
+@router.delete("/{filename}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_mod(filename: str) -> None:
+    try:
+        await mod_service.delete_mod(filename)
+    except ModServiceError as error:
+        _raise_mod_error(error)
 
 
 def _raise_mod_error(error: ModServiceError) -> None:

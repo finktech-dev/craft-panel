@@ -7,8 +7,8 @@
   <header class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <div class="flex items-center gap-2">
-        <span class="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-400">
-          NeoForge 1.21.1
+        <span id="env-badge" class="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-400">
+          Motor: <span id="env-badge-text">Detectando motor...</span>
         </span>
         <span class="text-xs text-zinc-500">·</span>
         <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Ecosistema & Modding</p>
@@ -17,7 +17,7 @@
         Gestor de Mods
       </h1>
       <p class="mt-2 text-sm text-zinc-400 max-w-2xl leading-relaxed">
-        Activá, desactivá, actualizá o instalá modificaciones. El empaquetador automático excluye herramientas administrativas del modpack de tus jugadores.
+        Activá, desactivá, actualizá o instalá modificaciones de forma segura. El empaquetador automático excluye herramientas administrativas del modpack de tus jugadores.
       </p>
     </div>
 
@@ -93,11 +93,11 @@
       </div>
     </div>
 
-    <!-- BARRA DE HERRAMIENTAS Y FILTROS -->
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
-      <!-- Buscador y Filtros Rápidos -->
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 min-w-0">
-        <div class="relative flex-1 min-w-[14rem]">
+    <!-- BARRA DE HERRAMIENTAS Y FILTROS (SIN SCROLLBARS, WRAP TOTAL) -->
+    <div class="flex flex-col gap-3.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+      <!-- Fila 1: Buscador y Acciones Principales -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <div class="relative flex-1 min-w-0">
           <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
             🔍
           </span>
@@ -105,61 +105,65 @@
             id="local-mod-search"
             type="search"
             placeholder="Buscar mod por nombre, modId o archivo..."
-            class="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/70 pl-10 pr-4 py-2 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition"
+            class="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/70 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition"
           >
         </div>
 
-        <!-- Pills de Filtro -->
-        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" role="toolbar" aria-label="Filtros por estado">
-          <button type="button" data-filter="all" class="filter-pill shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-400/20 px-3 py-1.5 text-xs font-bold text-emerald-300 transition">
-            Todos
+        <div class="flex items-center gap-2 shrink-0">
+          <button
+            id="btn-check-updates"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 px-3.5 py-2.5 text-xs font-bold text-sky-300 transition shadow-sm"
+            title="Verificar si existen versiones más nuevas en Modrinth para tu motor"
+          >
+            <span>🔄</span> Buscar Actualizaciones
           </button>
-          <button type="button" data-filter="active" class="filter-pill shrink-0 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">
-            Activos
-          </button>
-          <button type="button" data-filter="disabled" class="filter-pill shrink-0 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">
-            Inactivos
-          </button>
-          <button type="button" data-filter="server_only" class="filter-pill shrink-0 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" title="Exclusivos de servidor (no requeridos en clientes)">
-            Solo Servidor
+          <button
+            id="btn-open-upload-modal"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 px-4 py-2.5 text-xs sm:text-sm font-bold text-zinc-950 transition shadow-sm"
+          >
+            <span>＋</span> Subir .jar
           </button>
         </div>
       </div>
 
-      <!-- Ordenamiento, Master Checkbox y Acciones -->
-      <div class="flex flex-wrap items-center justify-between sm:justify-end gap-3 shrink-0">
-        <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-zinc-400 hover:text-zinc-200 select-none px-2 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 transition">
-          <input id="select-all-mods" type="checkbox" class="rounded border-zinc-700 bg-zinc-800 text-emerald-500 focus:ring-emerald-400 h-4 w-4">
-          <span>Seleccionar todos</span>
-        </label>
+      <!-- Fila 2: Filtros por estado, Selección masiva y Ordenamiento -->
+      <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-zinc-800/60">
+        <!-- Pills sin scrollbars: envolventes con flex-wrap -->
+        <div class="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Filtros por estado">
+          <button type="button" data-filter="all" class="filter-pill rounded-lg border border-emerald-500/40 bg-emerald-400/20 px-3 py-1.5 text-xs font-bold text-emerald-300 transition">
+            Todos
+          </button>
+          <button type="button" data-filter="active" class="filter-pill rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">
+            Activos
+          </button>
+          <button type="button" data-filter="disabled" class="filter-pill rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">
+            Inactivos
+          </button>
+          <button type="button" data-filter="server_only" class="filter-pill rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition" title="Exclusivos de servidor (no requeridos en clientes)">
+            Solo Servidor
+          </button>
+        </div>
 
-        <label for="local-mod-sort" class="sr-only">Ordenar por</label>
-        <select
-          id="local-mod-sort"
-          class="rounded-xl border border-zinc-700/80 bg-zinc-950/70 px-3 py-2 text-xs font-medium text-zinc-300 outline-none focus:border-emerald-400 transition"
-        >
-          <option value="name">Nombre (A-Z)</option>
-          <option value="size_desc">Tamaño (Mayor a menor)</option>
-          <option value="size_asc">Tamaño (Menor a mayor)</option>
-          <option value="recent">Modificado recientemente</option>
-        </select>
+        <!-- Master Checkbox y Ordenamiento -->
+        <div class="flex flex-wrap items-center gap-3">
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-zinc-400 hover:text-zinc-200 select-none px-2.5 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 transition">
+            <input id="select-all-mods" type="checkbox" class="rounded border-zinc-700 bg-zinc-800 text-emerald-500 focus:ring-emerald-400 h-4 w-4">
+            <span>Seleccionar todos</span>
+          </label>
 
-        <button
-          id="btn-check-updates"
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 px-3.5 py-2 text-xs font-bold text-sky-300 transition shadow-sm"
-          title="Verificar si existen versiones más nuevas en Modrinth"
-        >
-          <span>🔄</span> Buscar Actualizaciones
-        </button>
-
-        <button
-          id="btn-open-upload-modal"
-          type="button"
-          class="inline-flex items-center gap-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 px-4 py-2 text-xs sm:text-sm font-bold text-zinc-950 transition shadow-sm"
-        >
-          <span>＋</span> Subir .jar
-        </button>
+          <label for="local-mod-sort" class="sr-only">Ordenar por</label>
+          <select
+            id="local-mod-sort"
+            class="rounded-xl border border-zinc-700/80 bg-zinc-950/70 px-3 py-1.5 text-xs font-medium text-zinc-300 outline-none focus:border-emerald-400 transition"
+          >
+            <option value="name">Nombre (A-Z)</option>
+            <option value="size_desc">Tamaño (Mayor a menor)</option>
+            <option value="size_asc">Tamaño (Menor a mayor)</option>
+            <option value="recent">Modificado recientemente</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -236,29 +240,60 @@
         </div>
         <h3 class="mt-2 text-base font-bold text-zinc-100">Explorar mods en Modrinth</h3>
         <p class="mt-1 text-xs text-zinc-400 leading-relaxed">
-          Buscá e instalá mods directamente compatibles con NeoForge 1.21.1 sin salir del panel. Las librerías requeridas por el mod se descargan automáticamente para prevenir errores de inicio.
+          Buscá e instalá mods directamente compatibles con tu servidor. Las librerías requeridas por el mod se descargan automáticamente para prevenir errores de inicio.
         </p>
       </div>
 
-      <form id="modrinth-search-form" class="mt-5 flex flex-col sm:flex-row gap-3">
-        <div class="relative flex-1">
-          <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
-            🔎
-          </span>
-          <input
-            id="modrinth-query"
-            type="search"
-            placeholder="Ej. Create, FerriteCore, JEI, Waystones, Sodium, Balm..."
-            required
-            class="w-full rounded-xl border border-zinc-700 bg-zinc-950 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition"
+      <form id="modrinth-search-form" class="mt-5 flex flex-col gap-3">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <div class="relative flex-1">
+            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500">
+              🔎
+            </span>
+            <input
+              id="modrinth-query"
+              type="search"
+              placeholder="Ej. Create, FerriteCore, JEI, Waystones, Sodium, Balm..."
+              required
+              class="w-full rounded-xl border border-zinc-700 bg-zinc-950 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition"
+            >
+          </div>
+
+          <button
+            type="submit"
+            class="rounded-xl bg-zinc-100 hover:bg-white px-5 py-2.5 text-xs sm:text-sm font-bold text-zinc-950 transition shadow-sm shrink-0"
           >
+            Buscar en Modrinth
+          </button>
         </div>
-        <button
-          type="submit"
-          class="rounded-xl bg-zinc-100 hover:bg-white px-5 py-2.5 text-xs sm:text-sm font-bold text-zinc-950 transition shadow-sm shrink-0"
-        >
-          Buscar en Modrinth
-        </button>
+
+        <!-- Filtros avanzados dinámicos para Modrinth -->
+        <div class="flex flex-wrap items-center gap-3 pt-2 text-xs text-zinc-400">
+          <div class="flex items-center gap-1.5">
+            <label for="modrinth-loader-select" class="font-medium text-zinc-400">Motor:</label>
+            <select
+              id="modrinth-loader-select"
+              class="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-300 outline-none focus:border-emerald-400"
+            >
+              <option value="auto">Auto-detectar</option>
+              <option value="neoforge">NeoForge</option>
+              <option value="forge">Forge</option>
+              <option value="fabric">Fabric</option>
+              <option value="quilt">Quilt</option>
+              <option value="all">Cualquiera</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <label for="modrinth-version-input" class="font-medium text-zinc-400">Versión Minecraft:</label>
+            <input
+              id="modrinth-version-input"
+              type="text"
+              placeholder="Auto-detectada"
+              class="w-28 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-300 outline-none focus:border-emerald-400 placeholder-zinc-600 font-mono"
+            >
+          </div>
+        </div>
       </form>
     </div>
 
@@ -267,7 +302,7 @@
       <div class="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/20 p-12 text-center text-zinc-500">
         <span class="text-3xl block mb-2">🌐</span>
         <p class="text-sm font-semibold text-zinc-400">Ingresá el nombre de un mod arriba para buscar</p>
-        <p class="text-xs text-zinc-600 mt-1">Se filtrarán automáticamente versiones compatibles con NeoForge 1.21.1</p>
+        <p class="text-xs text-zinc-600 mt-1">Se filtrarán versiones según el motor y versión seleccionados</p>
       </div>
     </div>
   </section>
@@ -292,7 +327,7 @@
     </div>
 
     <p class="mt-4 text-xs text-zinc-400 leading-relaxed">
-      Arrastrá o seleccioná uno o varios mods compatibles con NeoForge 1.21.1. Podés subir múltiples archivos simultáneamente.
+      Arrastrá o seleccioná uno o varios mods compatibles. Podés subir múltiples archivos simultáneamente.
     </p>
 
     <label

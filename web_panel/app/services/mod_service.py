@@ -213,16 +213,77 @@ class ModService:
             message=message,
         )
 
-    async def search_modrinth(self, query: str) -> list[ModrinthSearchHit]:
+    def get_environment(self) -> dict[str, str]:
+        """Detecta dinámicamente el cargador de mods (loader) y versión de Minecraft del servidor."""
+        loader = "neoforge"
+        version = self._settings.minecraft_version or "1.21.1"
+
+        server_root = self._settings.server_directory
+        if server_root and server_root.is_dir():
+            markers = {
+                "neoforge": server_root / "libraries" / "net" / "neoforged" / "neoforge",
+                "forge": server_root / "libraries" / "net" / "minecraftforge" / "forge",
+                "fabric": server_root / "fabric-server-launch.jar",
+                "paper": server_root / "paper.jar",
+                "vanilla": server_root / "server.jar",
+            }
+            for name, marker in markers.items():
+                if marker.exists():
+                    loader = name
+                    break
+
+            try:
+                neoforge_dir = server_root / "libraries" / "net" / "neoforged" / "neoforge"
+                if neoforge_dir.is_dir():
+                    versions = [p.name for p in neoforge_dir.iterdir() if p.is_dir()]
+                    if versions:
+                        latest_ver = sorted(versions)[-1]
+                        parts = latest_ver.split(".")
+                        if len(parts) >= 2 and parts[0].isdigit():
+                            loader = "neoforge"
+                            version = f"1.{parts[0]}.{parts[1]}" if parts[0] != "1" else latest_ver
+
+                forge_dir = server_root / "libraries" / "net" / "minecraftforge" / "forge"
+                if forge_dir.is_dir():
+                    versions = [p.name for p in forge_dir.iterdir() if p.is_dir()]
+                    if versions:
+                        latest_ver = sorted(versions)[-1]
+                        mc_part = latest_ver.split("-")[0]
+                        if mc_part.startswith("1."):
+                            loader = "forge"
+                            version = mc_part
+            except Exception:
+                pass
+
+        return {"loader": loader, "minecraft_version": version}
+
+    async def search_modrinth(
+        self,
+        query: str,
+        loader: str | None = None,
+        game_version: str | None = None,
+    ) -> list[ModrinthSearchHit]:
         cleaned_query = query.strip()
         if not cleaned_query:
             raise ModServiceError("La búsqueda no puede estar vacía.")
 
-        params = {
+        env = self.get_environment()
+        effective_loader = (loader if loader is not None else env["loader"]).lower()
+        effective_version = (game_version if game_version is not None else env["minecraft_version"]).lower()
+
+        facets: list[list[str]] = []
+        if effective_version and effective_version not in ("all", "any", "cualquiera", ""):
+            facets.append([f"versions:{effective_version}"])
+        if effective_loader and effective_loader not in ("all", "any", "cualquiera", "vanilla", "custom", ""):
+            facets.append([f"categories:{effective_loader}"])
+
+        params: dict[str, Any] = {
             "query": cleaned_query,
             "limit": 20,
-            "facets": json.dumps([["versions:1.21.1"], ["categories:neoforge"]]),
         }
+        if facets:
+            params["facets"] = json.dumps(facets)
+
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
                 response = await client.get(f"{_MODRINTH_API}/search", params=params)
@@ -248,11 +309,13 @@ class ModService:
         self,
         project_id: str,
         version_id: str | None = None,
+        loader: str | None = None,
+        game_version: str | None = None,
         install_dependencies: bool = True,
         visited_projects: set[str] | None = None,
     ) -> ModItem:
         self._require_server_stopped("instalar mods")
-        version = await self._get_compatible_version(project_id, version_id)
+        version = await self._get_compatible_version(project_id, version_id, loader, game_version)
         file_data = self._select_download_file(version)
         filename = self._validate_filename(str(file_data.get("filename", "")))
         if not filename.endswith(".jar"):
@@ -318,6 +381,16 @@ class ModService:
         if not candidates:
             return []
 
+        env = self.get_environment()
+        loader = env["loader"].lower()
+        mc_version = env["minecraft_version"].lower()
+
+        query_params: dict[str, Any] = {}
+        if loader not in ("all", "any", "vanilla", "custom", ""):
+            query_params["loaders"] = json.dumps([loader])
+        if mc_version not in ("all", "any", ""):
+            query_params["game_versions"] = json.dumps([mc_version])
+
         results: list[ModUpdateItem] = []
         semaphore = asyncio.Semaphore(5)
 
@@ -337,7 +410,7 @@ class ModService:
                     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
                         resp = await client.get(
                             f"{_MODRINTH_API}/project/{target_id}/version",
-                            params={"loaders": json.dumps(["neoforge"]), "game_versions": json.dumps(["1.21.1"])},
+                            params=query_params or None,
                         )
                         if resp.status_code == 200:
                             versions = resp.json()
@@ -362,7 +435,6 @@ class ModService:
                 results.append(item)
         return results
 
-
     async def export_client_pack(self) -> Path:
         """Empaqueta mods activos y configuraciones presentes sin bloquear FastAPI."""
         await asyncio.to_thread(self.client_pack_path.parent.mkdir, parents=True, exist_ok=True)
@@ -377,7 +449,20 @@ class ModService:
                 await asyncio.to_thread(temporary_path.unlink)
         return self.client_pack_path
 
-    async def _get_compatible_version(self, project_id: str, version_id: str | None) -> dict[str, Any]:
+    async def _get_compatible_version(
+        self,
+        project_id: str,
+        version_id: str | None,
+        loader: str | None = None,
+        game_version: str | None = None,
+    ) -> dict[str, Any]:
+        env = self.get_environment()
+        effective_loader = (loader if loader is not None else env["loader"]).lower()
+        effective_version = (game_version if game_version is not None else env["minecraft_version"]).lower()
+
+        loaders_filter = [effective_loader] if effective_loader not in ("all", "any", "vanilla", "custom", "") else []
+        versions_filter = [effective_version] if effective_version not in ("all", "any", "") else []
+
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
                 if version_id:
@@ -388,9 +473,15 @@ class ModService:
                         raise ModServiceError("La versión indicada no pertenece a ese proyecto.")
                     candidates = [version]
                 else:
+                    query_params: dict[str, Any] = {}
+                    if loaders_filter:
+                        query_params["loaders"] = json.dumps(loaders_filter)
+                    if versions_filter:
+                        query_params["game_versions"] = json.dumps(versions_filter)
+
                     response = await client.get(
                         f"{_MODRINTH_API}/project/{project_id}/version",
-                        params={"loaders": json.dumps(["neoforge"]), "game_versions": json.dumps(["1.21.1"])},
+                        params=query_params or None,
                     )
                     response.raise_for_status()
                     candidates = response.json()
@@ -398,14 +489,23 @@ class ModService:
             logger.warning("Falló la consulta de versión de Modrinth: %s", error)
             raise ModrinthServiceError("No se pudo consultar una versión compatible en Modrinth.") from error
 
-        compatible_versions = [
-            candidate
-            for candidate in candidates
-            if "neoforge" in candidate.get("loaders", []) and "1.21.1" in candidate.get("game_versions", [])
-        ]
+        if not candidates:
+            raise ModNotFoundError(f"No hay versiones disponibles para el proyecto {project_id}.")
+
+        compatible_versions = []
+        for candidate in candidates:
+            c_loaders = [str(l).lower() for l in candidate.get("loaders", [])]
+            c_versions = [str(v).lower() for v in candidate.get("game_versions", [])]
+            match_loader = (not loaders_filter) or any(l in c_loaders for l in loaders_filter)
+            match_version = (not versions_filter) or any(v in c_versions for v in versions_filter)
+            if match_loader and match_version:
+                compatible_versions.append(candidate)
+
         if not compatible_versions:
-            raise ModNotFoundError("No hay una versión NeoForge compatible con Minecraft 1.21.1.")
+            compatible_versions = candidates
+
         return max(compatible_versions, key=lambda candidate: candidate.get("date_published", ""))
+
 
     @staticmethod
     def _select_download_file(version: dict[str, Any]) -> dict[str, Any]:

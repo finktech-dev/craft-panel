@@ -192,11 +192,62 @@ async def test_mod_bulk_actions(tmp_path):
     assert (mods_dir / "mod1.jar").is_file()
     assert (mods_dir / "mod3.jar").is_file()
 
+
     # Eliminar en lote mod1 y mod2
     res_delete = await service.bulk_action("delete", ["mod1.jar", "mod2.jar"])
     assert res_delete.affected_count == 2
     assert not (mods_dir / "mod1.jar").exists()
     assert not (mods_dir / "mod2.jar").exists()
     assert (mods_dir / "mod3.jar").exists()
+
+
+def test_mod_environment_detection_and_dynamic_loader(tmp_path):
+    """Valida la detección dinámica del cargador de mods (loader) y versión de Minecraft."""
+    from app.core.config import Settings
+    from app.services.mod_service import ModService
+
+    server_dir = tmp_path / "server"
+    server_dir.mkdir(parents=True)
+
+    # 1. Sin marcadores -> Valores por defecto seguros
+    settings_default = Settings(project_root=tmp_path, server_directory=server_dir)
+    service_default = ModService(configured_settings=settings_default)
+    env_default = service_default.get_environment()
+    assert env_default["loader"] == "neoforge"
+    assert env_default["minecraft_version"] == "1.21.1"
+
+    # 2. Con marcador NeoForge 21.1.84 -> Detecta neoforge y 1.21.1
+    neoforge_ver_dir = server_dir / "libraries" / "net" / "neoforged" / "neoforge" / "21.1.84"
+    neoforge_ver_dir.mkdir(parents=True)
+    env_neoforge = service_default.get_environment()
+    assert env_neoforge["loader"] == "neoforge"
+    assert env_neoforge["minecraft_version"] == "1.21.1"
+
+    # 3. Con marcador Fabric
+    fabric_server = tmp_path / "fabric_server"
+    fabric_server.mkdir()
+    (fabric_server / "fabric-server-launch.jar").write_bytes(b"dummy")
+    settings_fabric = Settings(project_root=tmp_path, server_directory=fabric_server, minecraft_version="1.20.4")
+    service_fabric = ModService(configured_settings=settings_fabric)
+    env_fabric = service_fabric.get_environment()
+    assert env_fabric["loader"] == "fabric"
+    assert env_fabric["minecraft_version"] == "1.20.4"
+
+
+def test_mods_template_scrollbar_and_filter_pill_integrity():
+    """Valida que la vista /mods no contenga scrollbars horizontales forzados en los filtros y soporte entorno dinámico."""
+    panel_root = pathlib.Path(__file__).parent.parent
+    template = (panel_root / "templates" / "mods.html").read_text(encoding="utf-8")
+    script = (panel_root / "static" / "js" / "mods.js").read_text(encoding="utf-8")
+
+    # No debe haber overflow-x-auto en los filtros
+    assert 'overflow-x-auto' not in template
+    # Debe existir el badge dinámico y los controles de Modrinth
+    assert 'id="env-badge-text"' in template
+    assert 'id="modrinth-loader-select"' in template
+    assert 'id="modrinth-version-input"' in template
+    # mods.js debe consumir /api/mods/environment
+    assert '/api/mods/environment' in script
+
 
 

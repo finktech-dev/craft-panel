@@ -17,8 +17,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let modToDelete = null;
   const selectedFilenames = new Set();
   let updatesMap = {};
+  let detectedEnv = { loader: 'neoforge', minecraft_version: '1.21.1' };
 
   // Elementos DOM principales
+  const envBadgeText = $('#env-badge-text');
+  const modrinthLoaderSelect = $('#modrinth-loader-select');
+  const modrinthVersionInput = $('#modrinth-version-input');
   const installedContainer = $('#installed-mods-container');
   const emptyState = $('#installed-mods-empty');
   const searchInput = $('#local-mod-search');
@@ -59,6 +63,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const exportBtn = $('#btn-export-pack');
   const downloadBtn = $('#btn-download-pack');
   const packInfo = $('#pack-export-info');
+
+  // 0. DETECCIÓN DINÁMICA DE ENTORNO
+  async function loadEnvironment() {
+    try {
+      const env = await Panel.api('/api/mods/environment');
+      if (env && env.loader) {
+        detectedEnv = env;
+        if (envBadgeText) {
+          envBadgeText.textContent = `${env.loader.toUpperCase()} ${env.minecraft_version}`;
+        }
+        if (modrinthVersionInput && !modrinthVersionInput.value) {
+          modrinthVersionInput.placeholder = env.minecraft_version;
+        }
+      }
+    } catch (err) {
+      console.warn('No se pudo detectar el motor del servidor:', err);
+      if (envBadgeText) {
+        envBadgeText.textContent = 'Auto-detectado';
+      }
+    }
+  }
 
   // 1. CARGA DE MODS
   async function loadMods() {
@@ -575,6 +600,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const query = modrinthInput.value.trim();
       if (!query) return;
 
+      const selectedLoader = modrinthLoaderSelect ? modrinthLoaderSelect.value : 'auto';
+      const selectedVersion = modrinthVersionInput ? modrinthVersionInput.value.trim() : '';
+
+      const queryParams = new URLSearchParams({ query });
+      if (selectedLoader && selectedLoader !== 'auto') {
+        queryParams.set('loader', selectedLoader);
+      }
+      if (selectedVersion) {
+        queryParams.set('game_version', selectedVersion);
+      }
+
       modrinthResults.innerHTML = `
         <div class="py-12 text-center text-zinc-500">
           <span class="inline-block animate-spin text-2xl mb-2">⏳</span>
@@ -583,13 +619,15 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
 
       try {
-        const hits = await Panel.api(`/api/mods/search?query=${encodeURIComponent(query)}`);
+        const hits = await Panel.api(`/api/mods/search?${queryParams.toString()}`);
         if (!hits.length) {
+          const currentLoaderDisplay = selectedLoader === 'auto' ? (detectedEnv.loader || 'tu motor') : selectedLoader;
+          const currentVerDisplay = selectedVersion || detectedEnv.minecraft_version || '';
           modrinthResults.innerHTML = `
             <div class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-zinc-500">
               <span class="text-3xl block mb-2">🔍</span>
-              <p class="font-semibold text-zinc-300">No se encontraron mods compatibles con NeoForge 1.21.1</p>
-              <p class="text-xs text-zinc-500 mt-1">Probá con otro término como "Create", "JEI", "Waystones" o "FerriteCore".</p>
+              <p class="font-semibold text-zinc-300">No se encontraron mods compatibles con ${esc(currentLoaderDisplay)} ${esc(currentVerDisplay)}</p>
+              <p class="text-xs text-zinc-500 mt-1">Probá con otro término como "Create", "JEI", "Waystones" o cambiá los filtros de motor/versión.</p>
             </div>
           `;
           return;
@@ -644,12 +682,25 @@ document.addEventListener('DOMContentLoaded', () => {
       const projectId = installBtn.dataset.installProject;
       if (!projectId) return;
 
+      const selectedLoader = modrinthLoaderSelect ? modrinthLoaderSelect.value : 'auto';
+      const selectedVersion = modrinthVersionInput ? modrinthVersionInput.value.trim() : '';
+      const installBody = {
+        project_id: projectId,
+        install_dependencies: true,
+      };
+      if (selectedLoader && selectedLoader !== 'auto') {
+        installBody.loader = selectedLoader;
+      }
+      if (selectedVersion) {
+        installBody.game_version = selectedVersion;
+      }
+
       installBtn.disabled = true;
       installBtn.textContent = 'Instalando mod y librerías...';
       try {
         const mod = await Panel.api('/api/mods/install', {
           method: 'POST',
-          body: { project_id: projectId, install_dependencies: true },
+          body: installBody,
         });
         Panel.toast(`¡Mod "${mod.name}" y sus librerías requeridas instalados correctamente!`, 'success');
         installBtn.replaceWith(document.createRange().createContextualFragment(
@@ -690,5 +741,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Carga inicial
+  loadEnvironment();
   loadMods();
 });

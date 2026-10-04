@@ -50,6 +50,8 @@ class ModrinthSearchHit(BaseModel):
 class ModInstallRequest(BaseModel):
     project_id: str = Field(min_length=1, max_length=128)
     version_id: str | None = Field(default=None, min_length=1, max_length=128)
+    loader: str | None = None
+    game_version: str | None = None
     install_dependencies: bool = True
 
 
@@ -67,3 +69,8 @@ class ClientPackExportResponse(BaseModel):
     filename: str
     size_mb: float = Field(ge=0)
     message: str
+
+
+class ModEnvironmentResponse(BaseModel):
+    loader: str
+    minecraft_version: str
