@@ -20,6 +20,8 @@ aiofiles>=24.1,<25.0
 pyotp>=2.9,<3.0
 qrcode>=8.0,<9.0
 pillow>=10.0,<13.0
+# Schematics, NBT and Configuration parsing
+numpy>=1.26,<3.0
 nbtlib>=2.0,<3.0
 tomlkit>=0.13,<1.0
 json5>=0.10,<1.0
