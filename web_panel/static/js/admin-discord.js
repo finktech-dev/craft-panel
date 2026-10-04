@@ -47,6 +47,36 @@
         if (tJoin) tJoin.checked = cfg.notify_player_join_leave ?? true;
         if (tDeath) tDeath.checked = cfg.notify_player_deaths ?? true;
         if (tAdv) tAdv.checked = cfg.notify_advancements ?? true;
+
+        const msgStartTitle = $('#discord-msg-starting-title');
+        const msgStartDesc = $('#discord-msg-starting-desc');
+        const msgStartedTitle = $('#discord-msg-started-title');
+        const msgStartedDesc = $('#discord-msg-started-desc');
+        const msgStopTitle = $('#discord-msg-stopped-title');
+        const msgStopDesc = $('#discord-msg-stopped-desc');
+        const msgJoinTitle = $('#discord-msg-join-title');
+        const msgJoinDesc = $('#discord-msg-join-desc');
+        const msgLeaveTitle = $('#discord-msg-leave-title');
+        const msgLeaveDesc = $('#discord-msg-leave-desc');
+        const msgDeathTitle = $('#discord-msg-death-title');
+        const msgDeathDesc = $('#discord-msg-death-desc');
+        const msgAdvTitle = $('#discord-msg-adv-title');
+        const msgAdvDesc = $('#discord-msg-adv-desc');
+
+        if (msgStartTitle) msgStartTitle.value = cfg.msg_server_starting_title || '';
+        if (msgStartDesc) msgStartDesc.value = cfg.msg_server_starting_desc || '';
+        if (msgStartedTitle) msgStartedTitle.value = cfg.msg_server_started_title || '';
+        if (msgStartedDesc) msgStartedDesc.value = cfg.msg_server_started_desc || '';
+        if (msgStopTitle) msgStopTitle.value = cfg.msg_server_stopped_title || '';
+        if (msgStopDesc) msgStopDesc.value = cfg.msg_server_stopped_desc || '';
+        if (msgJoinTitle) msgJoinTitle.value = cfg.msg_player_join_title || '';
+        if (msgJoinDesc) msgJoinDesc.value = cfg.msg_player_join_desc || '';
+        if (msgLeaveTitle) msgLeaveTitle.value = cfg.msg_player_leave_title || '';
+        if (msgLeaveDesc) msgLeaveDesc.value = cfg.msg_player_leave_desc || '';
+        if (msgDeathTitle) msgDeathTitle.value = cfg.msg_player_death_title || '';
+        if (msgDeathDesc) msgDeathDesc.value = cfg.msg_player_death_desc || '';
+        if (msgAdvTitle) msgAdvTitle.value = cfg.msg_advancement_title || '';
+        if (msgAdvDesc) msgAdvDesc.value = cfg.msg_advancement_desc || '';
       } catch (e) {
         console.warn('No se pudo cargar la configuración de Discord:', e);
       }
@@ -77,6 +107,20 @@
           notify_player_join_leave: $('#discord-toggle-joinleave')?.checked ?? true,
           notify_player_deaths: $('#discord-toggle-deaths')?.checked ?? true,
           notify_advancements: $('#discord-toggle-advancements')?.checked ?? true,
+          msg_server_starting_title: $('#discord-msg-starting-title')?.value.trim() || '',
+          msg_server_starting_desc: $('#discord-msg-starting-desc')?.value.trim() || '',
+          msg_server_started_title: $('#discord-msg-started-title')?.value.trim() || '',
+          msg_server_started_desc: $('#discord-msg-started-desc')?.value.trim() || '',
+          msg_server_stopped_title: $('#discord-msg-stopped-title')?.value.trim() || '',
+          msg_server_stopped_desc: $('#discord-msg-stopped-desc')?.value.trim() || '',
+          msg_player_join_title: $('#discord-msg-join-title')?.value.trim() || '',
+          msg_player_join_desc: $('#discord-msg-join-desc')?.value.trim() || '',
+          msg_player_leave_title: $('#discord-msg-leave-title')?.value.trim() || '',
+          msg_player_leave_desc: $('#discord-msg-leave-desc')?.value.trim() || '',
+          msg_player_death_title: $('#discord-msg-death-title')?.value.trim() || '',
+          msg_player_death_desc: $('#discord-msg-death-desc')?.value.trim() || '',
+          msg_advancement_title: $('#discord-msg-adv-title')?.value.trim() || '',
+          msg_advancement_desc: $('#discord-msg-adv-desc')?.value.trim() || '',
         };
         const res = await Panel.api('/api/discord/config', { method: 'POST', body: payload });
         Panel.toast(res.message || 'Configuración de Discord guardada con éxito.', 'success');

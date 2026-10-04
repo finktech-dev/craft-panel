@@ -76,6 +76,13 @@ class DiscordService:
             logger.warning("La plantilla de avatar de Discord debe incluir solo {player_name}.")
             return None
 
+    def _format_msg(self, template: str | None, default: str, **kwargs: Any) -> str:
+        raw = template.strip() if template and template.strip() else default
+        try:
+            return raw.format(**kwargs)
+        except Exception:
+            return raw
+
     def save_config(self, new_config: DiscordConfig) -> DiscordConfig:
         """Guarda la configuración persistente en .discord_config.json."""
         target = self._config_file
@@ -216,9 +223,22 @@ class DiscordService:
         if not cfg.notify_server_lifecycle:
             return False
 
+        title = self._format_msg(
+            cfg.msg_server_starting_title,
+            "🟡 Iniciando Servidor de Minecraft...",
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+        )
+        description = self._format_msg(
+            cfg.msg_server_starting_desc,
+            "El servidor se está encendiendo y cargando los mods. Avisaremos apenas los puertos estén abiertos y se pueda entrar.",
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+        )
+
         success, _ = await self._send_embed(
-            title="🟡 Iniciando Servidor de Minecraft...",
-            description="El servidor se está encendiendo y cargando los mods. Avisaremos apenas los puertos estén abiertos y se pueda entrar.",
+            title=title,
+            description=description,
             color=0xF1C40F,
             fields=(
                 ("Estado", "⏳ Cargando mods, chunks y dimensiones..."),
@@ -253,9 +273,24 @@ class DiscordService:
         if elapsed_seconds is not None:
             fields_list.append(("Tiempo de Arranque", f"Listo en {elapsed_seconds:.1f} segundos"))
 
+        title = self._format_msg(
+            cfg.msg_server_started_title,
+            "🟢 ¡Servidor Listo para Jugar!",
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+            addr=addr,
+        )
+        description = self._format_msg(
+            cfg.msg_server_started_desc,
+            "¡El servidor de Minecraft ya terminó de cargar y los puertos están abiertos! ¡Ya se puede entrar!",
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+            addr=addr,
+        )
+
         success, _ = await self._send_embed(
-            title="🟢 ¡Servidor Listo para Jugar!",
-            description="¡El servidor de Minecraft ya terminó de cargar y los puertos están abiertos! ¡Ya se puede entrar!",
+            title=title,
+            description=description,
             color=0x2ECC71,
             content=mention,
             fields=tuple(fields_list),
@@ -267,9 +302,22 @@ class DiscordService:
         if not cfg.notify_server_lifecycle:
             return False
 
+        title = self._format_msg(
+            cfg.msg_server_stopped_title,
+            "🔴 Servidor Detenido",
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+        )
+        description = self._format_msg(
+            cfg.msg_server_stopped_desc,
+            "El servidor de Minecraft se ha apagado ordenadamente. Todos los mundos y progresos fueron guardados en el disco.",
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+        )
+
         success, _ = await self._send_embed(
-            title="🔴 Servidor Detenido",
-            description="El servidor de Minecraft se ha apagado ordenadamente. Todos los mundos y progresos fueron guardados en el disco.",
+            title=title,
+            description=description,
             color=0xE74C3C,
         )
         return success
@@ -315,10 +363,25 @@ class DiscordService:
             return False
 
         avatar_url = self._avatar_url(cfg, player_name)
+        title = self._format_msg(
+            cfg.msg_player_join_title,
+            "👋 {player_name} entró al servidor",
+            player_name=player_name,
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+        )
+        description = self._format_msg(
+            cfg.msg_player_join_desc,
+            "**{player_name}** se unió a la partida.",
+            player_name=player_name,
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+        )
+
         success, _ = await self._send_embed(
             for_events=True,
-            title=f"👋 {player_name} entró al servidor",
-            description=f"**{player_name}** se unió a la partida.",
+            title=title,
+            description=description,
             color=0x2ECC71,
             thumbnail_url=avatar_url,
         )
@@ -330,10 +393,25 @@ class DiscordService:
             return False
 
         avatar_url = self._avatar_url(cfg, player_name)
+        title = self._format_msg(
+            cfg.msg_player_leave_title,
+            "🚪 {player_name} salió del servidor",
+            player_name=player_name,
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+        )
+        description = self._format_msg(
+            cfg.msg_player_leave_desc,
+            "**{player_name}** abandonó la partida.",
+            player_name=player_name,
+            server_name=self._server_name(cfg),
+            world_name=self._world_name(cfg),
+        )
+
         success, _ = await self._send_embed(
             for_events=True,
-            title=f"🚪 {player_name} salió del servidor",
-            description=f"**{player_name}** abandonó la partida.",
+            title=title,
+            description=description,
             color=0x95A5A6,
             thumbnail_url=avatar_url,
         )
@@ -345,10 +423,25 @@ class DiscordService:
             return False
 
         avatar_url = self._avatar_url(cfg, player_name)
+        title = self._format_msg(
+            cfg.msg_player_death_title,
+            "💀 Baja en el Servidor",
+            player_name=player_name,
+            death_message=death_message,
+            server_name=self._server_name(cfg),
+        )
+        description = self._format_msg(
+            cfg.msg_player_death_desc,
+            "**{death_message}**",
+            player_name=player_name,
+            death_message=death_message,
+            server_name=self._server_name(cfg),
+        )
+
         success, _ = await self._send_embed(
             for_events=True,
-            title="💀 Baja en el Servidor",
-            description=f"**{death_message}**",
+            title=title,
+            description=description,
             color=0x992D22,
             thumbnail_url=avatar_url,
         )
@@ -360,10 +453,27 @@ class DiscordService:
             return False
 
         avatar_url = self._avatar_url(cfg, player_name)
+        title = self._format_msg(
+            cfg.msg_advancement_title,
+            "🏆 ¡{player_name} completó un {adv_kind}!",
+            player_name=player_name,
+            advancement_title=advancement_title,
+            adv_kind=adv_kind,
+            server_name=self._server_name(cfg),
+        )
+        description = self._format_msg(
+            cfg.msg_advancement_desc,
+            "**{player_name}** ha desbloqueado: **[{advancement_title}]**",
+            player_name=player_name,
+            advancement_title=advancement_title,
+            adv_kind=adv_kind,
+            server_name=self._server_name(cfg),
+        )
+
         success, _ = await self._send_embed(
             for_events=True,
-            title=f"🏆 ¡{player_name} completó un {adv_kind}!",
-            description=f"**{player_name}** ha desbloqueado: **[{advancement_title}]**",
+            title=title,
+            description=description,
             color=0xF1C40F,
             thumbnail_url=avatar_url,
         )
