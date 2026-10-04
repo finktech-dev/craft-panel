@@ -326,8 +326,8 @@ class ModService:
             for mod_name in SERVER_ONLY_MODS
         )
 
-    @staticmethod
-    def _mod_item_from_path(path: Path) -> ModItem:
+    @classmethod
+    def _mod_item_from_path(cls, path: Path) -> ModItem:
         is_enabled = path.name.endswith(".jar")
         suffix = ".jar" if is_enabled else ".jar.disabled"
         return ModItem(
@@ -336,6 +336,7 @@ class ModService:
             size_mb=round(path.stat().st_size / _MEBIBYTE, 2),
             is_enabled=is_enabled,
             modified_at=datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(),
+            is_server_only=cls._is_server_only_mod(path),
         )
 
     def _resolve_mod_path(self, filename: str) -> Path:

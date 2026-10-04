@@ -74,3 +74,21 @@ async def test_lifespan_build():
     async with lifespan(app):
         # Durante el ciclo de vida, la app está activa
         assert app.title == "Panel del servidor Minecraft"
+
+
+def test_mod_item_schema_and_server_only_classification(tmp_path):
+    from app.services.mod_service import ModService
+
+    server_jar = tmp_path / "spark-1.10.0-neoforge.jar"
+    server_jar.write_bytes(b"dummy")
+    client_jar = tmp_path / "jei-1.21.1-19.0.0.jar"
+    client_jar.write_bytes(b"dummy")
+
+    item_server = ModService._mod_item_from_path(server_jar)
+    item_client = ModService._mod_item_from_path(client_jar)
+
+    assert item_server.is_server_only is True
+    assert item_server.name == "spark-1.10.0-neoforge"
+    assert item_client.is_server_only is False
+    assert item_client.name == "jei-1.21.1-19.0.0"
+

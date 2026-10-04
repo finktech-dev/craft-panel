@@ -11,6 +11,7 @@ class ModItem(BaseModel):
     size_mb: float = Field(ge=0)
     is_enabled: bool
     modified_at: str
+    is_server_only: bool = False
 
 
 class ModToggleResponse(BaseModel):
