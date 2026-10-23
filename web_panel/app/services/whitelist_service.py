@@ -8,6 +8,7 @@ import json
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -33,7 +34,7 @@ class WhitelistPlayer:
     def __init__(self, name: str, player_uuid: str | None = None) -> None:
         self.name = name
         self.uuid = player_uuid or offline_uuid(name)
-        self.avatar_url = f"https://mc-heads.net/avatar/{name}/64"
+        self.avatar_url = f"https://mc-heads.net/avatar/{quote(name, safe='')}/64"
 
     def to_dict(self) -> dict[str, str]:
         return {

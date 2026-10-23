@@ -38,6 +38,7 @@ This repository contains no webhook URLs, player names, world names, or machine-
 - Keep Playit agent keys, Discord webhooks, passwords, worlds, backups, logs, and player data out of Git.
 - Test a restore with a disposable copy before relying on a backup in an emergency. This project can contain bugs and does not replace an external backup.
 - Review pull requests carefully when they change server lifecycle, restore, deletion, or public-access behavior.
+- Read [docs/SECURITY.md](docs/SECURITY.md) before exposing the panel beyond this computer, and to report a vulnerability.
 
 ## Requirements
 

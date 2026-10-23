@@ -86,10 +86,27 @@ def test_flags_orphan_from_previous_panel_session(tmp_path: Path, listener) -> N
     assert found is not None and found.reason == "previous_panel_session"
 
 
-def test_terminate_only_kills_currently_detected_pid(tmp_path: Path, listener) -> None:
+def test_terminate_refuses_programs_that_are_not_java(tmp_path: Path, listener) -> None:
     process, port = listener
     detector = ExternalServerDetector(_settings(tmp_path, port))
 
+    # The listener is a Python process holding the port: never kill it.
+    assert detector.terminate(process.pid) is False
+    assert process.poll() is None
+
+
+def test_terminate_only_kills_currently_detected_java(tmp_path: Path, listener, monkeypatch) -> None:
+    process, port = listener
+    detector = ExternalServerDetector(_settings(tmp_path, port))
+    original_detect = detector.detect
+
+    def as_java(own_pid=None):
+        found = original_detect(own_pid)
+        return None if found is None else external_server_service.ExternalServer(
+            pid=found.pid, name="java.exe", reason=found.reason, port=found.port
+        )
+
+    monkeypatch.setattr(detector, "detect", as_java)
     assert detector.terminate(process.pid + 100_000) is False
     assert detector.terminate(process.pid, own_pid=process.pid) is False
     assert process.poll() is None

@@ -6,7 +6,10 @@
 (() => {
   // Helpers
   const $ = (s) => document.querySelector(s);
-  const esc = (s) => (window.Panel && window.Panel.escapeHtml) ? window.Panel.escapeHtml(s) : String(s);
+  const esc = (s) => (window.Panel && window.Panel.escapeHtml)
+    ? window.Panel.escapeHtml(s)
+    // Fail closed: escape locally if the shared helper is missing.
+    : String(s ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[c]);
 
   const Panel = {
     get api() {
@@ -16,7 +19,7 @@
       return (window.Panel && window.Panel.toast) ? window.Panel.toast : ((msg, type) => console.log(`[Toast ${type || 'info'}] ${msg}`));
     },
     get escapeHtml() {
-      return (window.Panel && window.Panel.escapeHtml) ? window.Panel.escapeHtml : ((s) => String(s));
+      return esc;
     }
   };
 

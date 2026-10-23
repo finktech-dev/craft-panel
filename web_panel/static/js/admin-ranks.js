@@ -9,7 +9,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Helpers
   const $ = s => document.querySelector(s);
-  const esc = (s) => (window.Panel && window.Panel.escapeHtml) ? window.Panel.escapeHtml(s) : String(s);
+  const esc = (s) => (window.Panel && window.Panel.escapeHtml)
+    ? window.Panel.escapeHtml(s)
+    // Fail closed: escape locally if the shared helper is missing.
+    : String(s ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[c]);
 
   // If ranks section is not present on this page, exit early
   if (!$('#ranks') && !$('#lp-ranks-grid')) {

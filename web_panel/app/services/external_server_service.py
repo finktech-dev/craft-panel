@@ -102,6 +102,9 @@ class ExternalServerDetector:
         detected = self.detect(own_pid)
         if detected is None or detected.pid != pid:
             return False
+        # Never kill an unrelated program that merely holds the server port.
+        if detected.name.lower() not in _JAVA_NAMES:
+            return False
         try:
             process = psutil.Process(pid)
             for child in process.children(recursive=True):
