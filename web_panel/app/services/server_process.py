@@ -18,6 +18,7 @@ from typing import Any, Final
 from app.core.config import Settings, settings
 from app.services.crash_analyzer import crash_analyzer
 from app.services.discord_service import discord_service
+from app.services.external_server_service import ExternalServerDetector
 from app.websocket.manager import ConnectionManager, connection_manager
 
 logger = logging.getLogger(__name__)
@@ -54,9 +55,19 @@ class ServerState(StrEnum):
 class ServerProcessError(RuntimeError):
     """Error de operación del proceso Java."""
 
+    status_code = 503
+
 
 class ServerBusyError(ServerProcessError):
     """Another start/stop/restart operation is already in progress."""
+
+    status_code = 409
+
+
+class ExternalServerRunningError(ServerProcessError):
+    """A server the panel did not start is already running (run.bat, previous session...)."""
+
+    status_code = 409
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +105,7 @@ class MinecraftServerManager:
 
         self._settings = configured_settings or settings
         self._websocket_manager = websocket_manager or connection_manager
+        self._external_detector = ExternalServerDetector(self._settings)
         self._process: asyncio.subprocess.Process | None = None
         self._state = ServerState.STOPPED
         self._online_players: dict[str, str] = {}
@@ -189,6 +201,10 @@ class MinecraftServerManager:
                     f"No existe el script de inicio del servidor: {self._settings.server_start_script}"
                 )
 
+            external = await asyncio.to_thread(self._external_detector.detect)
+            if external is not None:
+                raise ExternalServerRunningError(external.message)
+
             self._state = ServerState.STARTING
             self._stop_requested = False
             self._start_requested_time = asyncio.get_running_loop().time()
@@ -218,6 +234,7 @@ class MinecraftServerManager:
             self._watcher_task = asyncio.create_task(
                 self._watch_process(self._process), name="minecraft-process-watcher"
             )
+            await asyncio.to_thread(self._external_detector.remember_panel_process, self._process.pid)
             await self._broadcast_status()
             if not self._dev_mode:
                 asyncio.create_task(discord_service.send_server_starting(), name="discord-server-starting")
@@ -428,6 +445,7 @@ class MinecraftServerManager:
             self._last_death_notified.clear()
             self._state = ServerState.STOPPED if self._stop_requested else ServerState.CRASHED
 
+        await asyncio.to_thread(self._external_detector.forget_panel_process)
         await self._record_log("system", f"Proceso del servidor finalizado con código {exit_code}.")
         await self._broadcast_status()
         if not self._dev_mode:

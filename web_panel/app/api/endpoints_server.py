@@ -19,7 +19,8 @@ from app.services.backup_service import backup_service
 from app.services.metrics_service import metrics_service
 from app.services.player_crash_service import player_crash_service
 from app.services.playit_service import PlayitServiceError, playit_service
-from app.services.server_process import ServerBusyError, ServerProcessError, server_manager
+from app.services.external_server_service import external_server_detector
+from app.services.server_process import ServerProcessError, server_manager
 from app.services.server_properties_service import server_properties_service
 from app.services.spark_service import spark_service
 
@@ -72,9 +73,7 @@ async def start_server(dev_mode: bool = False) -> ServerActionResponse:
     except ServerProcessError as error:
         if started_playit:
             await playit_service.stop()
-        busy = isinstance(error, ServerBusyError)
-        code = status.HTTP_409_CONFLICT if busy else status.HTTP_503_SERVICE_UNAVAILABLE
-        raise HTTPException(status_code=code, detail=str(error)) from error
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El servidor ya está iniciándose o en ejecución.")
     if dev_mode:
@@ -109,14 +108,10 @@ async def _run_restart(restart: Callable[[], Awaitable[bool]], success_message: 
     started_playit = await _start_playit_if_required()
     try:
         restarted = await restart()
-    except ServerBusyError as error:
-        if started_playit:
-            await playit_service.stop()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     except ServerProcessError as error:
         if started_playit:
             await playit_service.stop()
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
     if not restarted:
         if started_playit:
             await playit_service.stop()
@@ -149,6 +144,53 @@ async def kill_server() -> ServerActionResponse:
     if not await server_manager.kill():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El servidor ya está detenido.")
     return _action_response("Se solicitó la finalización forzada del servidor.")
+
+
+class ExternalServerInfo(BaseModel):
+    detected: bool
+    pid: int | None = None
+    process_name: str | None = None
+    reason: str | None = None
+    port: int | None = None
+    message: str | None = None
+
+
+class ExternalServerTerminateRequest(BaseModel):
+    pid: int = Field(gt=0)
+    confirm: bool = False
+
+
+@router.get("/external", response_model=ExternalServerInfo)
+async def external_server() -> ExternalServerInfo:
+    """Report a server running outside the panel (run.bat, previous panel session, port clash)."""
+    found = await asyncio.to_thread(external_server_detector.detect, server_manager.process_pid)
+    if found is None:
+        return ExternalServerInfo(detected=False)
+    return ExternalServerInfo(
+        detected=True,
+        pid=found.pid,
+        process_name=found.name,
+        reason=found.reason,
+        port=found.port,
+        message=found.message,
+    )
+
+
+@router.post("/external/terminate", response_model=ServerActionResponse)
+async def terminate_external_server(request: ExternalServerTerminateRequest) -> ServerActionResponse:
+    if not request.confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirmá explícitamente el cierre: se perderá lo que no se haya guardado.",
+        )
+    if not await asyncio.to_thread(
+        external_server_detector.terminate, request.pid, server_manager.process_pid
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese proceso ya no se detecta como servidor externo o no se pudo cerrar.",
+        )
+    return _action_response("Se cerró el servidor que estaba corriendo fuera del panel.")
 
 
 @router.get("/metrics", response_model=ServerMetrics)
