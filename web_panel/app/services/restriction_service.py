@@ -26,6 +26,7 @@ import tomlkit
 from app.core.config import Settings, settings
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.services.server_properties_service import server_properties_service
+from app.services.server_version_service import ServerVersionService, data_pack_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,7 @@ class RestrictionService:
     ) -> None:
         self._settings = configured_settings
         self._manager = manager
+        self._versions = ServerVersionService(configured_settings)
         self._lock = asyncio.Lock()
         self._catalog_cache: dict[str, Any] | None = None
         self._catalog_mtime: float = 0.0
@@ -423,10 +425,10 @@ class RestrictionService:
             try:
                 root.mkdir(parents=True, exist_ok=True)
 
-                # pack.mcmeta (Formato 48 para 1.21.1)
+                # pack.mcmeta format follows the installed Minecraft version.
                 mcmeta = {
                     "pack": {
-                        "pack_format": 48,
+                        **data_pack_metadata(self._versions.detect().minecraft_version),
                         "description": "Panel Restrictions - Native NeoForge Mob & Villager Block",
                     }
                 }

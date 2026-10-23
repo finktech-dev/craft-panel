@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let modToDelete = null;
   const selectedFilenames = new Set();
   let updatesMap = {};
-  let detectedEnv = { loader: 'neoforge', minecraft_version: '1.21.1' };
+  let detectedEnv = { loader: null, minecraft_version: null };
 
   // Elementos DOM principales
   const envBadgeText = $('#env-badge-text');

@@ -72,5 +72,9 @@ class ClientPackExportResponse(BaseModel):
 
 
 class ModEnvironmentResponse(BaseModel):
-    loader: str
-    minecraft_version: str
+    """Installed server as detected from its files; ``None`` means unknown."""
+
+    loader: str | None
+    minecraft_version: str | None
+    loader_version: str | None = None
+    label: str | None = None

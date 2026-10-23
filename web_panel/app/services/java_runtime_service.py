@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import platform
+import re
 import shutil
 import tarfile
 import uuid
@@ -35,14 +36,21 @@ class JavaRuntimeService:
 
     @staticmethod
     def required_major(minecraft_version: str) -> int:
-        """Minecraft's general Java baseline; mod loaders can impose stricter rules."""
-        try:
-            major, minor, *patch = (int(part) for part in minecraft_version.split("."))
-        except ValueError as error:
-            raise JavaRuntimeValidationError("La versión de Minecraft no es válida.") from error
+        """Minimum Java major for a Minecraft release; mod loaders can impose stricter rules.
+
+        Matches the ``javaVersion.majorVersion`` that Mojang publishes per
+        release: up to 1.16.5 -> 8, 1.17 -> 16, 1.18 to 1.20.4 -> 17,
+        1.20.5 to 1.21.11 -> 21, and the year-based releases (26.1+) -> 25.
+        """
+        numeric = re.match(r"^\s*(\d+)\.(\d+)(?:\.(\d+))?", minecraft_version or "")
+        if numeric is None:
+            raise JavaRuntimeValidationError("La versión de Minecraft no es válida.")
+        major, minor, patch = int(numeric.group(1)), int(numeric.group(2)), int(numeric.group(3) or 0)
+        if major >= 26:
+            return 25
         if major != 1:
-            raise JavaRuntimeValidationError("Solo se admiten versiones modernas de Minecraft 1.x.")
-        if minor >= 20 and (minor > 20 or (patch and patch[0] >= 5)):
+            raise JavaRuntimeValidationError("La versión de Minecraft no es válida.")
+        if minor > 20 or (minor == 20 and patch >= 5):
             return 21
         if minor >= 18:
             return 17

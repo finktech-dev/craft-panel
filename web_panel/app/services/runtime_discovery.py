@@ -22,6 +22,8 @@ from app.schemas.runtime import (
     JavaRuntimeStatus,
     MinecraftInstallationStatus,
 )
+from app.services.java_runtime_service import JavaRuntimeService, JavaRuntimeValidationError
+from app.services.server_version_service import ServerVersionInfo, ServerVersionService
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
 
@@ -47,14 +49,21 @@ class RuntimeDiscoveryService:
         self._environ = environ if environ is not None else os.environ
         self._which = which
         self._command_runner = command_runner
+        self._versions = ServerVersionService(configured_settings)
 
-    def discover(self) -> HostRuntimeDiscovery:
+    def discover(self, minecraft_version: str | None = None) -> HostRuntimeDiscovery:
+        """Inspect the host; ``minecraft_version`` is the user's pick when no server exists yet."""
+        installed = self._versions.detect()
         return HostRuntimeDiscovery(
             operating_system=self._operating_system(),
-            java=self._discover_java(),
-            minecraft=self._discover_minecraft(),
+            java=self._discover_java(installed.minecraft_version or minecraft_version),
+            minecraft=self._discover_minecraft(installed),
             accounts=self._discover_account_protection(),
         )
+
+    def java_status(self, minecraft_version: str | None) -> JavaRuntimeStatus:
+        """Java check for one specific Minecraft version, used before running an installer."""
+        return self._discover_java(minecraft_version)
 
     def _operating_system(self) -> Literal["windows", "linux", "macos", "other"]:
         normalized = self._system_name.casefold()
@@ -85,12 +94,13 @@ class RuntimeDiscoveryService:
                 unique.append(candidate)
         return tuple(unique)
 
-    def _discover_java(self) -> JavaRuntimeStatus:
+    def _discover_java(self, minecraft_version: str | None) -> JavaRuntimeStatus:
         candidates = self._java_candidates()
         if not candidates:
             return JavaRuntimeStatus(state="missing", message="No se encontró Java. Podés instalarlo en el sistema o descomprimirlo en tools/java/bin dentro de este proyecto.")
 
-        required_major = self._required_java_major()
+        required_major = self._required_java_major(minecraft_version)
+        target = f"Minecraft {minecraft_version}" if minecraft_version and required_major else "Minecraft"
         first_available: tuple[Path, str, int | None] | None = None
         for executable in candidates:
             for version_flag in ("--version", "-version"):
@@ -102,30 +112,31 @@ class RuntimeDiscoveryService:
                 version = self._parse_java_version(output)
                 if result.returncode == 0 and version is not None:
                     major_version = self._java_major(version)
-                    if major_version is not None and major_version >= required_major:
-                        return JavaRuntimeStatus(state="available", executable=str(executable), version=version, major_version=major_version, message=f"Java {major_version} está disponible y es compatible con Minecraft {self._settings.minecraft_version}.")
+                    if major_version is not None and major_version >= (required_major or 0):
+                        message = (
+                            f"Java {major_version} está disponible y es compatible con {target}."
+                            if required_major
+                            else f"Java {major_version} está disponible."
+                        )
+                        return JavaRuntimeStatus(state="available", executable=str(executable), version=version, major_version=major_version, message=message)
                     if first_available is None:
                         first_available = (executable, version, major_version)
                     break
         if first_available is not None:
             executable, version, major_version = first_available
-            return JavaRuntimeStatus(state="unusable", executable=str(executable), version=version, major_version=major_version, message=f"Se encontró Java {major_version or version}, pero Minecraft {self._settings.minecraft_version} necesita Java {required_major} o superior.")
+            return JavaRuntimeStatus(state="unusable", executable=str(executable), version=version, major_version=major_version, message=f"Se encontró Java {major_version or version}, pero {target} necesita Java {required_major} o superior.")
         return JavaRuntimeStatus(state="unusable", executable=str(candidates[0]), message="Se encontró Java, pero ninguna instalación detectada respondió correctamente a la consulta de versión.")
 
-    def _required_java_major(self) -> int:
-        parts = self._settings.minecraft_version.split(".")
+    @staticmethod
+    def _required_java_major(minecraft_version: str | None) -> int | None:
+        """None when the version is unknown: any working Java counts until one is chosen."""
+        if not minecraft_version:
+            return None
         try:
-            minor = int(parts[1])
-            patch = int(parts[2]) if len(parts) > 2 else 0
-        except (IndexError, ValueError):
-            return 21
-        if minor > 20 or (minor == 20 and patch >= 5):
-            return 21
-        if minor >= 18:
-            return 17
-        if minor == 17:
-            return 16
-        return 8
+            return JavaRuntimeService.required_major(minecraft_version)
+        except JavaRuntimeValidationError:
+            return None
+
     @staticmethod
     def _parse_java_version(output: str) -> str | None:
         match = re.search(r'(?:openjdk|java)\s+(?:version\s+)?["\']?(\d+(?:[._]\d+)*)', output, re.IGNORECASE)
@@ -143,7 +154,7 @@ class RuntimeDiscoveryService:
         assert self._settings.server_directory is not None
         return self._settings.server_directory
 
-    def _discover_minecraft(self) -> MinecraftInstallationStatus:
+    def _discover_minecraft(self, installed: ServerVersionInfo) -> MinecraftInstallationStatus:
         root = self._server_root()
         native_script = root / ("run.bat" if self._operating_system() == "windows" else "run.sh")
         markers = {
@@ -153,7 +164,8 @@ class RuntimeDiscoveryService:
             "paper": root / "paper.jar",
             "vanilla": root / "server.jar",
         }
-        loader = next((name for name, marker in markers.items() if marker.exists()), None)
+        detected_loader = installed.loader if installed.loader != "unknown" else None
+        loader = detected_loader or next((name for name, marker in markers.items() if marker.exists()), None)
         has_runtime = loader is not None or any(root.glob("*.jar"))
         if not has_runtime:
             return MinecraftInstallationStatus(
@@ -166,6 +178,8 @@ class RuntimeDiscoveryService:
             state="detected",
             root=str(root),
             loader=loader or "custom",
+            loader_version=installed.loader_version,
+            minecraft_version=installed.minecraft_version,
             start_script=str(start_script) if start_script else None,
             message="Se detectó una instalación local sin iniciar ni modificar el servidor.",
         )

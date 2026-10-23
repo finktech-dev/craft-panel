@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 from app.core.config import Settings, settings
 from app.services.metrics_service import MetricsService, metrics_service
 from app.services.playit_service import PlayitService, playit_service
+from app.services.server_version_service import ServerVersionService
 
 
 class BannerService:
@@ -21,6 +22,7 @@ class BannerService:
         self._settings = configured_settings
         self._metrics = metrics
         self._tunnel = tunnel
+        self._versions = ServerVersionService(configured_settings)
 
     def generate_status_banner(self) -> bytes:
         metrics = self._metrics.get_server_metrics()
@@ -41,7 +43,8 @@ class BannerService:
         subtitle = (
             self._settings.banner_subtitle.strip()
             or self._settings.discord_server_software_label.strip()
-            or f"Minecraft {self._settings.minecraft_version}"
+            or self._versions.detect().label
+            or "Minecraft"
         )
         draw.text((43, 50), subtitle, fill=(161, 161, 170), font=small_font)
         draw.ellipse((43, 83, 55, 95), fill=state_color)
