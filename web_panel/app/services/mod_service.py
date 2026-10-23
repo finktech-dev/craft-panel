@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import tomllib
 import uuid
 import zipfile
@@ -17,7 +18,10 @@ import aiofiles
 import httpx
 from fastapi import UploadFile
 
+from app.core.archive_safety import read_member_capped
 from app.core.config import Settings, settings
+from app.core.net_safety import MODRINTH_HOSTS, allowed_client, download_to_file, is_allowed_url
+from app.core.path_safety import is_safe_component
 from app.schemas.mod import (
     ModBulkActionResponse,
     ModItem,
@@ -33,6 +37,11 @@ _MEBIBYTE: Final = 1024 * 1024
 _MODRINTH_API: Final = "https://api.modrinth.com/v2"
 _MAX_UPLOAD_BYTES: Final = 1_024 * _MEBIBYTE
 _DOWNLOAD_CHUNK_SIZE: Final = 64 * 1024
+_MAX_METADATA_BYTES: Final = 1 * _MEBIBYTE
+_MAX_DEPENDENCY_INSTALLS: Final = 30
+# Modrinth project/version IDs are base62; slugs add "-", "_" and ".".
+_MODRINTH_ID: Final = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_ZIP_MAGIC: Final = (b"PK\x03\x04", b"PK\x05\x06")
 SERVER_ONLY_MODS: Final[frozenset[str]] = frozenset({
     "chunky",
     "bluemap",
@@ -138,10 +147,14 @@ class ModService:
         try:
             async with aiofiles.open(temporary_path, "wb") as target_file:
                 while chunk := await uploaded_file.read(_DOWNLOAD_CHUNK_SIZE):
+                    if written_bytes == 0 and not chunk.startswith(_ZIP_MAGIC):
+                        raise ModServiceError("El archivo no es un .jar válido.")
                     written_bytes += len(chunk)
                     if written_bytes > _MAX_UPLOAD_BYTES:
                         raise ModServiceError("El archivo supera el límite de 1024 MB.")
                     await target_file.write(chunk)
+            if not await asyncio.to_thread(zipfile.is_zipfile, temporary_path):
+                raise ModServiceError("El archivo no es un .jar válido.")
             await asyncio.to_thread(temporary_path.rename, destination)
         except FileExistsError as error:
             raise ModConflictError("Ya existe un mod con ese nombre.") from error
@@ -285,7 +298,7 @@ class ModService:
             params["facets"] = json.dumps(facets)
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+            async with allowed_client(MODRINTH_HOSTS, timeout=20.0, follow_redirects=False) as client:
                 response = await client.get(f"{_MODRINTH_API}/search", params=params)
                 response.raise_for_status()
             hits = response.json().get("hits", [])
@@ -315,6 +328,8 @@ class ModService:
         visited_projects: set[str] | None = None,
     ) -> ModItem:
         self._require_server_stopped("instalar mods")
+        if visited_projects is not None and len(visited_projects) > _MAX_DEPENDENCY_INSTALLS:
+            raise ModServiceError("El mod tiene demasiadas dependencias para instalarlas automáticamente.")
         version = await self._get_compatible_version(project_id, version_id, loader, game_version)
         file_data = self._select_download_file(version)
         filename = self._validate_filename(str(file_data.get("filename", "")))
@@ -327,24 +342,24 @@ class ModService:
             raise ModConflictError("Ese archivo ya está instalado.")
 
         download_url = file_data.get("url")
-        if not isinstance(download_url, str) or not download_url.startswith("https://"):
+        if not isinstance(download_url, str) or not is_allowed_url(download_url, MODRINTH_HOSTS):
             raise ModrinthServiceError("Modrinth no entregó una URL de descarga segura.")
+        expected_hash = self._expected_hash(file_data)
+        declared_size = file_data.get("size")
+        max_bytes = (
+            declared_size
+            if isinstance(declared_size, int) and 0 < declared_size <= _MAX_UPLOAD_BYTES
+            else _MAX_UPLOAD_BYTES
+        )
 
-        temporary_path = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.downloading")
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(90.0), follow_redirects=True) as client:
-                async with client.stream("GET", download_url) as response:
-                    response.raise_for_status()
-                    async with aiofiles.open(temporary_path, "wb") as target_file:
-                        async for chunk in response.aiter_bytes(_DOWNLOAD_CHUNK_SIZE):
-                            await target_file.write(chunk)
-            await asyncio.to_thread(temporary_path.rename, destination)
+            async with allowed_client(MODRINTH_HOSTS, timeout=90.0) as client:
+                await download_to_file(
+                    client, download_url, destination, max_bytes=max_bytes, expected_hash=expected_hash
+                )
         except (httpx.HTTPError, OSError) as error:
             logger.warning("Falló la descarga de %s: %s", project_id, error)
             raise ModrinthServiceError("No se pudo descargar el mod desde Modrinth.") from error
-        finally:
-            if temporary_path.exists():
-                await asyncio.to_thread(temporary_path.unlink)
 
         # Resolución automática de dependencias requeridas
         if install_dependencies:
@@ -357,7 +372,7 @@ class ModService:
                 for dep in dependencies:
                     if dep.get("dependency_type") == "required" and dep.get("project_id"):
                         dep_proj = dep["project_id"]
-                        if dep_proj not in visited_projects:
+                        if dep_proj not in visited_projects and len(visited_projects) <= _MAX_DEPENDENCY_INSTALLS:
                             visited_projects.add(dep_proj)
                             try:
                                 await self.install_modrinth_mod(
@@ -377,7 +392,10 @@ class ModService:
     async def check_updates(self) -> list[ModUpdateItem]:
         """Comprueba de forma asíncrona si hay versiones más nuevas en Modrinth para los mods instalados."""
         installed = await self.list_mods()
-        candidates = [m for m in installed if m.is_enabled and (m.mod_id or m.name)]
+        candidates = [
+            m for m in installed
+            if m.is_enabled and (m.mod_id or m.name) and _MODRINTH_ID.match(m.mod_id or m.name)
+        ]
         if not candidates:
             return []
 
@@ -407,7 +425,7 @@ class ModService:
             )
             async with semaphore:
                 try:
-                    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+                    async with allowed_client(MODRINTH_HOSTS, timeout=10.0, follow_redirects=False) as client:
                         resp = await client.get(
                             f"{_MODRINTH_API}/project/{target_id}/version",
                             params=query_params or None,
@@ -456,6 +474,9 @@ class ModService:
         loader: str | None = None,
         game_version: str | None = None,
     ) -> dict[str, Any]:
+        for identifier in (project_id, version_id):
+            if identifier is not None and not _MODRINTH_ID.match(identifier):
+                raise ModServiceError("El identificador de Modrinth no es válido.")
         env = self.get_environment()
         effective_loader = (loader if loader is not None else env["loader"]).lower()
         effective_version = (game_version if game_version is not None else env["minecraft_version"]).lower()
@@ -464,7 +485,7 @@ class ModService:
         versions_filter = [effective_version] if effective_version not in ("all", "any", "") else []
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+            async with allowed_client(MODRINTH_HOSTS, timeout=20.0, follow_redirects=False) as client:
                 if version_id:
                     response = await client.get(f"{_MODRINTH_API}/version/{version_id}")
                     response.raise_for_status()
@@ -508,6 +529,17 @@ class ModService:
 
 
     @staticmethod
+    def _expected_hash(file_data: dict[str, Any]) -> tuple[str, str] | None:
+        hashes = file_data.get("hashes")
+        if not isinstance(hashes, dict):
+            return None
+        for algorithm, length in (("sha512", 128), ("sha1", 40)):
+            value = hashes.get(algorithm)
+            if isinstance(value, str) and len(value) == length:
+                return algorithm, value
+        return None
+
+    @staticmethod
     def _select_download_file(version: dict[str, Any]) -> dict[str, Any]:
         files = version.get("files", [])
         if not isinstance(files, list) or not files:
@@ -518,7 +550,7 @@ class ModService:
         with zipfile.ZipFile(destination, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             written_names: set[str] = set()
             for mod_file in self._iter_active_mod_files():
-                if self._is_server_only_mod(mod_file):
+                if mod_file.is_symlink() or self._is_server_only_mod(mod_file):
                     continue
                 archive.write(mod_file, arcname=Path("mods") / mod_file.name)
                 written_names.add(mod_file.name.lower())
@@ -526,21 +558,24 @@ class ModService:
             client_mods_dir = self._settings.server_directory / "client_only_mods"
             if client_mods_dir.is_dir():
                 for client_mod in client_mods_dir.glob("*.jar"):
-                    if client_mod.name.lower() not in written_names:
+                    if not client_mod.is_symlink() and client_mod.name.lower() not in written_names:
                         archive.write(client_mod, arcname=Path("mods") / client_mod.name)
                         written_names.add(client_mod.name.lower())
             extra_directories = getattr(self._settings, "client_pack_extra_directories", []) or []
             pack_directories = ("config", "defaultconfigs", *extra_directories)
             for directory_name in pack_directories:
+                # Extra directories come from settings; keep them inside server/.
+                if not is_safe_component(directory_name):
+                    continue
                 source_directory = self._settings.server_directory / directory_name
-                if source_directory.is_dir():
+                if source_directory.is_dir() and not source_directory.is_symlink():
                     self._add_directory_to_archive(archive, source_directory, Path(directory_name))
 
     @staticmethod
     def _add_directory_to_archive(archive: zipfile.ZipFile, source: Path, archive_root: Path) -> None:
         server_only_dirs = frozenset({"luckperms", "bluemap", "spark", "chunky", "worldedit", "skinrestorer"})
         for file_path in source.rglob("*"):
-            if file_path.is_file():
+            if file_path.is_file() and not file_path.is_symlink():
                 rel = file_path.relative_to(source)
                 if any(part.lower() in server_only_dirs for part in rel.parts):
                     continue
@@ -582,7 +617,10 @@ class ModService:
                         break
 
                 if toml_candidate:
-                    raw_toml = archive.read(toml_candidate).decode("utf-8", errors="replace")
+                    raw_bytes = read_member_capped(archive, toml_candidate, _MAX_METADATA_BYTES)
+                    if raw_bytes is None:
+                        return result
+                    raw_toml = raw_bytes.decode("utf-8", errors="replace")
                     data = tomllib.loads(raw_toml)
                     mods = data.get("mods")
                     if isinstance(mods, list) and mods:
@@ -603,7 +641,10 @@ class ModService:
 
                 # 2. Fabric / Quilt fabric.mod.json
                 if "fabric.mod.json" in namelist:
-                    raw_json = archive.read("fabric.mod.json").decode("utf-8", errors="replace")
+                    raw_bytes = read_member_capped(archive, "fabric.mod.json", _MAX_METADATA_BYTES)
+                    if raw_bytes is None:
+                        return result
+                    raw_json = raw_bytes.decode("utf-8", errors="replace")
                     data = json.loads(raw_json)
                     result["mod_id"] = data.get("id")
                     result["display_name"] = data.get("name")
@@ -707,7 +748,7 @@ class ModService:
 
     @staticmethod
     def _validate_filename(filename: str) -> str:
-        if not filename or Path(filename).name != filename:
+        if not filename or Path(filename).name != filename or not is_safe_component(filename):
             raise ModServiceError("El nombre del archivo no es válido.")
         if not (filename.endswith(".jar") or filename.endswith(".jar.disabled")):
             raise ModServiceError("El archivo debe terminar en .jar o .jar.disabled.")

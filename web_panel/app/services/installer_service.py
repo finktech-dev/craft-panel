@@ -4,17 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import hashlib
 import os
-import uuid
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-import aiofiles
 import httpx
 
 from app.core.config import Settings, settings
+from app.core.net_safety import (
+    FABRIC_HOSTS,
+    MOJANG_HOSTS,
+    NEOFORGE_HOSTS,
+    UnsafeDownloadError,
+    allowed_client,
+    download_to_file,
+)
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.websocket.manager import ConnectionManager, connection_manager
@@ -22,6 +28,9 @@ from app.websocket.manager import ConnectionManager, connection_manager
 _DOWNLOAD_CHUNK_SIZE = 64 * 1024
 _MOJANG_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 _FABRIC_INSTALLERS = "https://meta.fabricmc.net/v2/versions/installer"
+_INSTALLER_HOSTS = MOJANG_HOSTS | FABRIC_HOSTS | NEOFORGE_HOSTS
+_MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
+_FABRIC_VERSION = re.compile(r"^[0-9][0-9A-Za-z.+-]{0,40}$")
 
 
 class InstallerServiceError(RuntimeError):
@@ -104,7 +113,7 @@ class InstallerService:
     async def _install_vanilla(self, minecraft_version: str) -> None:
         await self._publish("Finding the official Vanilla server download…")
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
+            async with allowed_client(_INSTALLER_HOSTS, timeout=60.0) as client:
                 manifest_response = await client.get(_MOJANG_MANIFEST)
                 manifest_response.raise_for_status()
                 manifest = manifest_response.json()
@@ -142,7 +151,7 @@ class InstallerService:
     async def _install_fabric(self, minecraft_version: str) -> None:
         await self._publish("Finding the Fabric installer…")
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
+            async with allowed_client(_INSTALLER_HOSTS, timeout=60.0) as client:
                 installers_response = await client.get(_FABRIC_INSTALLERS)
                 installers_response.raise_for_status()
                 installers = installers_response.json()
@@ -150,6 +159,8 @@ class InstallerService:
                 if not isinstance(selected, dict) or not isinstance(selected.get("version"), str):
                     raise InstallerServiceError("No stable Fabric installer is available right now.")
                 version = selected["version"]
+                if not _FABRIC_VERSION.match(version):
+                    raise InstallerServiceError("The Fabric installer manifest returned an invalid version.")
                 url = f"https://maven.fabricmc.net/net/fabricmc/fabric-installer/{version}/fabric-installer-{version}.jar"
                 assert self._settings.tools_directory is not None
                 installer = self._settings.tools_directory / f"fabric-installer-{version}.jar"
@@ -185,28 +196,23 @@ class InstallerService:
             raise InstallerServiceError("The installer stopped with an error. No world or existing configuration was replaced.")
 
     async def _download_url(self, url: str, destination: Path) -> None:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0), follow_redirects=True) as client:
+        async with allowed_client(_INSTALLER_HOSTS, timeout=120.0) as client:
             await self._download(client, url, destination)
 
     async def _download(self, client: httpx.AsyncClient, url: str, destination: Path, sha1: str | None = None) -> None:
         await asyncio.to_thread(destination.parent.mkdir, parents=True, exist_ok=True)
-        temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.download")
-        digest = hashlib.sha1()
         try:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                async with aiofiles.open(temporary, "wb") as file:
-                    async for chunk in response.aiter_bytes(_DOWNLOAD_CHUNK_SIZE):
-                        digest.update(chunk)
-                        await file.write(chunk)
-            if sha1 and digest.hexdigest().casefold() != sha1.casefold():
-                raise InstallerServiceError("The official download checksum did not match; it was discarded.")
-            await asyncio.to_thread(os.replace, temporary, destination)
+            await download_to_file(
+                client,
+                url,
+                destination,
+                max_bytes=_MAX_DOWNLOAD_BYTES,
+                expected_hash=("sha1", sha1) if sha1 else None,
+            )
+        except UnsafeDownloadError as error:
+            raise InstallerServiceError("The download was rejected (unexpected host, size or checksum) and discarded.") from error
         except (httpx.HTTPError, OSError) as error:
             raise InstallerServiceError("The official server download failed. Check the connection and try again.") from error
-        finally:
-            if temporary.exists():
-                await asyncio.to_thread(temporary.unlink)
 
     def _write_safe_server_files(self, flavor: str) -> None:
         assert self._settings.server_directory is not None
