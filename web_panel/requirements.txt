@@ -4,7 +4,7 @@ uvicorn[standard]>=0.30,<1.0
 
 # Validation and configuration
 pydantic>=2.8,<3.0
-pydantic-settings>=2.4,<3.0
+pydantic-settings>=2.7,<3.0
 
 # Server-rendered UI and form uploads
 jinja2>=3.1,<4.0

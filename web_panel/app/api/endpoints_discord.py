@@ -6,6 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.security import get_current_admin
+from app.core.rate_limit import rate_limit
 from app.schemas.discord import DiscordActionResponse, DiscordConfig, DiscordTestRequest
 from app.services.discord_service import discord_service
 
@@ -41,7 +42,7 @@ async def save_discord_config(config: DiscordConfig) -> DiscordActionResponse:
         ) from error
 
 
-@router.post("/test", response_model=DiscordActionResponse)
+@router.post("/test", response_model=DiscordActionResponse, dependencies=[Depends(rate_limit("discord-test", 10, 60))])
 async def test_discord_webhook(req: DiscordTestRequest) -> DiscordActionResponse:
     """Envía un mensaje de prueba al webhook especificado o al configurado."""
     target_url = req.webhook_url.strip() if req.webhook_url else None

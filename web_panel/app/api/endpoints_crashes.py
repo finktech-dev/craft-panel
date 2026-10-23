@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.security import get_current_admin
+from app.core.rate_limit import rate_limit
 from app.schemas.player_crashes import PlayerCrashEvent, PlayerCrashesListResponse
 from app.services.player_crash_service import player_crash_service
 
@@ -35,7 +36,7 @@ async def get_player_crash(crash_id: str) -> PlayerCrashEvent:
     return event
 
 
-@router.post("/scan")
+@router.post("/scan", dependencies=[Depends(rate_limit("crash-scan", 6, 60))])
 async def scan_player_crashes() -> dict[str, Any]:
     count = await player_crash_service.scan_logs()
     return {"success": True, "new_events": count, "message": f"Escaneo completado: {count} eventos nuevos detectados."}

@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.security import get_current_admin
+from app.core.rate_limit import rate_limit
 from app.services.scheduler_service import scheduler_service
 from app.services.server_process import ServerProcessError
 from app.services.spark_service import spark_service
@@ -15,7 +16,7 @@ async def spark_status():
     return spark_service.status()
 
 
-@router.post("/spark/audit")
+@router.post("/spark/audit", dependencies=[Depends(rate_limit("spark-audit", 4, 300))])
 async def spark_audit():
     try:
         return await spark_service.audit()

@@ -68,6 +68,11 @@ class BackupService:
         self._operation_lock = asyncio.Lock()
 
     @property
+    def is_busy(self) -> bool:
+        """Whether a backup, restore, delete or audit is running right now."""
+        return self._operation_lock.locked()
+
+    @property
     def backups_directory(self) -> Path:
         assert self._settings.backups_directory is not None
         return self._settings.backups_directory

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 
 from app.core.security import get_current_admin
+from app.core.rate_limit import rate_limit
 from app.schemas.mod import (
     ClientPackExportResponse,
     ModBulkActionRequest,
@@ -37,7 +38,7 @@ async def get_mod_environment() -> ModEnvironmentResponse:
     )
 
 
-@router.get("/updates", response_model=list[ModUpdateItem])
+@router.get("/updates", response_model=list[ModUpdateItem], dependencies=[Depends(rate_limit("mods-updates", 6, 60))])
 async def check_mod_updates() -> list[ModUpdateItem]:
     try:
         return await mod_service.check_updates()
@@ -45,11 +46,11 @@ async def check_mod_updates() -> list[ModUpdateItem]:
         _raise_mod_error(error)
 
 
-@router.get("/search", response_model=list[ModrinthSearchHit])
+@router.get("/search", response_model=list[ModrinthSearchHit], dependencies=[Depends(rate_limit("mods-search", 30, 60))])
 async def search_modrinth(
-    query: str,
-    loader: str | None = None,
-    game_version: str | None = None,
+    query: str = Query(max_length=100),
+    loader: str | None = Query(default=None, max_length=32),
+    game_version: str | None = Query(default=None, max_length=32),
 ) -> list[ModrinthSearchHit]:
     try:
         return await mod_service.search_modrinth(query, loader=loader, game_version=game_version)
@@ -73,7 +74,12 @@ async def upload_mod(file: UploadFile = File(...)) -> ModItem:
         _raise_mod_error(error)
 
 
-@router.post("/install", response_model=ModItem, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/install",
+    response_model=ModItem,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("mods-install", 20, 60))],
+)
 async def install_modrinth_mod(payload: ModInstallRequest) -> ModItem:
     try:
         return await mod_service.install_modrinth_mod(
@@ -87,7 +93,11 @@ async def install_modrinth_mod(payload: ModInstallRequest) -> ModItem:
         _raise_mod_error(error)
 
 
-@router.post("/export-client-pack", response_model=ClientPackExportResponse)
+@router.post(
+    "/export-client-pack",
+    response_model=ClientPackExportResponse,
+    dependencies=[Depends(rate_limit("mods-export", 6, 60))],
+)
 async def export_client_pack() -> ClientPackExportResponse:
     try:
         export_path = await mod_service.export_client_pack()
