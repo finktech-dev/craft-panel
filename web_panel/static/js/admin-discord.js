@@ -90,7 +90,7 @@
       if (!btn) return;
       btn.disabled = true;
       const prev = btn.innerHTML;
-      btn.innerHTML = '<span>⏳</span> Guardando...';
+      btn.textContent = 'Guardando…';
       try {
         const payload = {
           webhook_url: $('#discord-webhook-url')?.value.trim() || '',
@@ -123,7 +123,7 @@
           msg_advancement_desc: $('#discord-msg-adv-desc')?.value.trim() || '',
         };
         const res = await Panel.api('/api/discord/config', { method: 'POST', body: payload });
-        Panel.toast(res.message || 'Configuración de Discord guardada con éxito.', 'success');
+        Panel.toast(res.message || 'Avisos de Discord guardados.', 'success');
       } catch (err) {
         Panel.toast(err.message, 'error');
       } finally {
@@ -145,18 +145,18 @@
       if (!btn) return;
       btn.disabled = true;
       const prev = btn.innerHTML;
-      btn.innerHTML = '<span>⏳</span> Probando...';
+      btn.textContent = 'Probando…';
       try {
         const testUrl = $('#discord-webhook-url')?.value.trim() || '';
         if (!testUrl) {
-          Panel.toast('Por favor, ingresá la URL del Webhook Principal para probar.', 'error');
+          Panel.toast('Primero pegá el enlace del canal.', 'error');
           return;
         }
         const res = await Panel.api('/api/discord/test', {
           method: 'POST',
           body: { webhook_url: testUrl, test_type: 'test' },
         });
-        Panel.toast(res.message || 'Alerta de estado enviada a Discord.', 'success');
+        Panel.toast(res.message || 'Aviso de prueba enviado. Fijate en tu canal de Discord.', 'success');
       } catch (err) {
         Panel.toast(err.message, 'error');
       } finally {
@@ -177,18 +177,18 @@
       const btn = e.currentTarget;
       btn.disabled = true;
       const prev = btn.innerHTML;
-      btn.innerHTML = '<span>⏳</span> Probando feed...';
+      btn.textContent = 'Probando…';
       try {
         const eventsUrl = $('#discord-events-url')?.value.trim() || $('#discord-webhook-url')?.value.trim() || '';
         if (!eventsUrl) {
-          Panel.toast('Ingresá la URL del Webhook de Jugadores o la Principal para probar.', 'error');
+          Panel.toast('Primero pegá el enlace de algún canal.', 'error');
           return;
         }
         const res = await Panel.api('/api/discord/test', {
           method: 'POST',
           body: { webhook_url: eventsUrl, test_type: 'events' },
         });
-        Panel.toast(res.message || 'Prueba de muerte y avatar enviada al canal de Jugadores.', 'success');
+        Panel.toast(res.message || 'Muerte de prueba enviada. Fijate en tu canal de Discord.', 'success');
       } catch (err) {
         Panel.toast(err.message, 'error');
       } finally {
@@ -202,23 +202,23 @@
       const btn = e.currentTarget;
       btn.disabled = true;
       const prev = btn.innerHTML;
-      btn.innerHTML = '<span>⏳</span> Probando mención...';
+      btn.textContent = 'Probando…';
       try {
         const mainUrl = $('#discord-webhook-url')?.value.trim() || '';
         const mention = $('#discord-mention-role')?.value.trim() || '';
         if (!mainUrl) {
-          Panel.toast('Se necesita la URL del Webhook Principal para enviar la mención de prueba.', 'error');
+          Panel.toast('Para probar la mención, primero pegá el enlace del canal.', 'error');
           return;
         }
         if (!mention) {
-          Panel.toast('Ingresá una mención o rol (ej. @everyone o <@&ID>) para probar.', 'error');
+          Panel.toast('Escribí a quién mencionar, por ejemplo @everyone.', 'error');
           return;
         }
         const res = await Panel.api('/api/discord/test', {
           method: 'POST',
           body: { webhook_url: mainUrl, test_type: 'mention', mention_role: mention },
         });
-        Panel.toast(res.message || 'Mención enviada a Discord con éxito.', 'success');
+        Panel.toast(res.message || 'Mención de prueba enviada.', 'success');
       } catch (err) {
         Panel.toast(err.message, 'error');
       } finally {

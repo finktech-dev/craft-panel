@@ -30,18 +30,26 @@
   let searchDebounceItems, searchDebounceMobs;
   let worldEditEnabled = false;
 
+  // Filter pills: same look as the filters on the mods page.
+  const FILTER_ON_CLASSES = ['active', 'bg-zinc-800', 'text-zinc-50'];
+  const FILTER_OFF_CLASSES = ['text-zinc-400', 'hover:text-zinc-200'];
+  const FILTER_ON = FILTER_ON_CLASSES.join(' ');
+  const FILTER_OFF = FILTER_OFF_CLASSES.join(' ');
+
   // 1. Pestañas (Tabs)
   function switchTab(tabName) {
     if (tabName === 'worldedit') document.querySelector('#worldedit-optional-tab')?.setAttribute('open', '');
+    // Underline sub-tabs: only the border colour and text colour change.
     document.querySelectorAll('.tab-btn').forEach(btn => {
       const isActive = btn.dataset?.tab === tabName;
       btn.classList.toggle('active', isActive);
+      if (btn.setAttribute) btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
       if (isActive) {
-        btn.classList.add('bg-emerald-500/20', 'text-emerald-300', 'border', 'border-emerald-500/30');
-        btn.classList.remove('text-zinc-400', 'hover:text-zinc-200');
+        btn.classList.add('border-emerald-400', 'text-zinc-50');
+        btn.classList.remove('border-transparent', 'text-zinc-400', 'hover:text-zinc-200');
       } else {
-        btn.classList.remove('bg-emerald-500/20', 'text-emerald-300', 'border', 'border-emerald-500/30');
-        btn.classList.add('text-zinc-400', 'hover:text-zinc-200');
+        btn.classList.remove('border-emerald-400', 'text-zinc-50');
+        btn.classList.add('border-transparent', 'text-zinc-400', 'hover:text-zinc-200');
       }
     });
 
@@ -71,44 +79,45 @@
       const btn = $('#btn-toggle-worldedit');
       const msg = $('#we-feedback-msg');
 
+      // State is plain text; the button is the only emphasis.
       if (worldEditEnabled) {
         if (badge) {
-          badge.textContent = 'ACTIVADO (LIVE)';
-          badge.className = 'rounded-full px-4 py-1.5 text-sm font-black tracking-wide shadow bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 ring-1 ring-emerald-500/30';
+          badge.textContent = 'encendido';
+          badge.className = 'font-semibold text-zinc-50';
         }
         if (tabBadge) {
-          tabBadge.textContent = 'ON';
-          tabBadge.className = 'ml-1 rounded-full bg-emerald-500/20 text-emerald-300 px-2 py-0.5 text-[10px] font-bold';
+          tabBadge.textContent = '· encendidas';
+          tabBadge.className = 'font-normal text-zinc-500';
         }
         if (quickBadge) {
-          quickBadge.textContent = 'HOT-TOGGLE (ON)';
-          quickBadge.className = 'rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-500/30';
+          quickBadge.textContent = 'encendido';
+          quickBadge.className = 'text-sm text-zinc-500';
         }
         if (btn) {
-          btn.innerHTML = '<span>🛑</span> Desactivar WorldEdit';
-          btn.className = 'w-full mt-2 rounded-xl py-3 px-5 text-xs font-bold transition shadow-lg flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-400 text-white cursor-pointer';
+          btn.textContent = 'Apagar WorldEdit';
+          btn.className = 'v2-button btn-quiet';
         }
       } else {
         if (badge) {
-          badge.textContent = 'DESACTIVADO';
-          badge.className = 'rounded-full px-4 py-1.5 text-sm font-black tracking-wide shadow bg-zinc-800 text-zinc-400 border border-zinc-700';
+          badge.textContent = 'apagado';
+          badge.className = 'font-semibold text-zinc-400';
         }
         if (tabBadge) {
-          tabBadge.textContent = 'OFF';
-          tabBadge.className = 'ml-1 rounded-full bg-zinc-800 text-zinc-400 px-2 py-0.5 text-[10px]';
+          tabBadge.textContent = '· apagadas';
+          tabBadge.className = 'font-normal text-zinc-500';
         }
         if (quickBadge) {
-          quickBadge.textContent = 'HOT-TOGGLE (OFF)';
-          quickBadge.className = 'rounded bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-400 border border-zinc-700';
+          quickBadge.textContent = 'apagado';
+          quickBadge.className = 'text-sm text-zinc-500';
         }
         if (btn) {
-          btn.innerHTML = '<span>⚡</span> Activar WorldEdit';
-          btn.className = 'w-full mt-2 rounded-xl py-3 px-5 text-xs font-bold transition shadow-lg flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 cursor-pointer';
+          btn.textContent = 'Encender WorldEdit';
+          btn.className = 'v2-button btn-primary';
         }
       }
       if (msg && s.last_updated) {
         const time = new Date(s.last_updated).toLocaleTimeString();
-        msg.textContent = `Último cambio: ${time} (${s.method || 'LuckPerms Live'})`;
+        msg.textContent = `Último cambio: ${time}`;
       }
     } catch (err) {
       console.error('Error cargando estado de WorldEdit:', err);
@@ -125,29 +134,29 @@
       const villCount = restrictionsSummary.disabled_villagers?.length || 0;
 
       const sumEl = $('#restrictions-quick-summary');
-      if (sumEl) sumEl.textContent = `${itemsCount} ítems · ${mobsCount} mobs · ${villCount} mesas bloqueadas`;
+      if (sumEl) sumEl.textContent = `${itemsCount} objetos prohibidos · ${mobsCount} criaturas quitadas · ${villCount} oficios apagados`;
       const tcItems = $('#tab-count-items'); if (tcItems) tcItems.textContent = itemsCount;
       const tcMobs = $('#tab-count-mobs'); if (tcMobs) tcMobs.textContent = mobsCount;
       const tcVill = $('#tab-count-villagers'); if (tcVill) tcVill.textContent = villCount;
-      const bItems = $('#badge-blocked-items-count'); if (bItems) bItems.textContent = `${itemsCount} bloqueados`;
-      const bMobs = $('#badge-blocked-mobs-count'); if (bMobs) bMobs.textContent = `${mobsCount} suprimidos`;
+      const bItems = $('#badge-blocked-items-count'); if (bItems) bItems.textContent = `${itemsCount} prohibidos`;
+      const bMobs = $('#badge-blocked-mobs-count'); if (bMobs) bMobs.textContent = `${mobsCount} criaturas`;
 
+      // Rows separated by a hairline, same pattern as the mods list.
       const listItems = $('#list-blocked-items');
       if (listItems) {
         if (itemsCount === 0) {
-          listItems.innerHTML = '<li class="text-xs text-zinc-500 italic p-3 text-center">No hay ítems restringidos actualmente.</li>';
+          listItems.innerHTML = '<li class="py-6 text-zinc-500">No hay objetos prohibidos.</li>';
         } else {
           listItems.innerHTML = restrictionsSummary.blocked_items.map(id => {
             const mod = id.includes(':') ? id.split(':')[0].replace('!', '') : 'item';
             const isWildcard = id.includes('*') || id.startsWith('!');
             return `
-              <li class="flex items-center justify-between rounded-lg bg-zinc-900/80 px-3 py-2 border border-zinc-800/90 hover:border-zinc-700 transition">
-                <div class="flex items-center gap-2 min-w-0">
-                  <span class="rounded ${isWildcard ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-zinc-800 text-emerald-400'} px-1.5 py-0.5 text-[10px] font-mono shrink-0">${esc(mod)}</span>
-                  <span class="font-mono text-xs text-zinc-200 truncate" title="${esc(id)}">${esc(id)}</span>
-                  ${isWildcard ? '<span class="text-[10px] text-amber-400 font-bold shrink-0">WILDCARD</span>' : ''}
+              <li class="flex items-center gap-4 border-b border-zinc-800 py-3">
+                <div class="min-w-0 flex-1">
+                  <p class="truncate font-mono text-sm text-zinc-100" title="${esc(id)}">${esc(id)}</p>
+                  <p class="text-sm text-zinc-500">${esc(mod)}${isWildcard ? ' · todo lo que coincida' : ''}</p>
                 </div>
-                <button data-unblock-item="${esc(id)}" class="text-xs font-semibold text-rose-400 hover:text-rose-300 ml-2 px-2 py-1 rounded hover:bg-rose-500/10 transition shrink-0 cursor-pointer">Quitar</button>
+                <button type="button" data-unblock-item="${esc(id)}" class="shrink-0 rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100">Permitir de nuevo</button>
               </li>
             `;
           }).join('');
@@ -157,17 +166,17 @@
       const listMobs = $('#list-blocked-mobs');
       if (listMobs) {
         if (mobsCount === 0) {
-          listMobs.innerHTML = '<li class="text-xs text-zinc-500 italic p-3 text-center">No hay spawns de mobs suprimidos actualmente.</li>';
+          listMobs.innerHTML = '<li class="py-6 text-zinc-500">Todas las criaturas aparecen normalmente.</li>';
         } else {
           listMobs.innerHTML = restrictionsSummary.blocked_mobs.map(id => {
             const mod = id.includes(':') ? id.split(':')[0] : 'mob';
             return `
-              <li class="flex items-center justify-between rounded-lg bg-zinc-900/80 px-3 py-2 border border-zinc-800/90 hover:border-zinc-700 transition">
-                <div class="flex items-center gap-2 min-w-0">
-                  <span class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-mono text-purple-400 shrink-0">${esc(mod)}</span>
-                  <span class="font-mono text-xs text-zinc-200 truncate" title="${esc(id)}">${esc(id)}</span>
+              <li class="flex items-center gap-4 border-b border-zinc-800 py-3">
+                <div class="min-w-0 flex-1">
+                  <p class="truncate font-mono text-sm text-zinc-100" title="${esc(id)}">${esc(id)}</p>
+                  <p class="text-sm text-zinc-500">${esc(mod)}</p>
                 </div>
-                <button data-unblock-mob="${esc(id)}" class="text-xs font-semibold text-rose-400 hover:text-rose-300 ml-2 px-2 py-1 rounded hover:bg-rose-500/10 transition shrink-0 cursor-pointer">Quitar</button>
+                <button type="button" data-unblock-mob="${esc(id)}" class="shrink-0 rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100">Dejar que aparezca</button>
               </li>
             `;
           }).join('');
@@ -180,60 +189,28 @@
     }
   }
 
-  const VILLAGER_ICONS = {
-    'armorer': '🛡️',
-    'weaponsmith': '⚔️',
-    'toolsmith': '⛏️',
-    'fletcher': '🏹',
-    'cleric': '✨',
-    'librarian': '📚',
-    'cartographer': '🗺️',
-    'farmer': '🌾',
-    'butcher': '🥩',
-    'fisherman': '🎣',
-    'shepherd': '🐑',
-    'leatherworker': '👞',
-    'mason': '🧱'
-  };
-
+  // One row per profession; a turned-off profession is dimmed, like a disabled mod.
   function renderVillagersGrid() {
     const grid = $('#villagers-grid');
     if (!grid) return;
     const list = restrictionsSummary.villagers || [];
     if (list.length === 0) {
-      grid.innerHTML = '<p class="text-xs text-zinc-500 italic p-4 col-span-3 text-center">No se detectaron profesiones configurables.</p>';
+      grid.innerHTML = '<p class="py-6 text-zinc-500">No encontramos oficios para configurar.</p>';
       return;
     }
 
     grid.innerHTML = list.map(v => {
       const isDis = !!v.disabled;
-      const vid = String(v.id || v.profession || '');
-      const icon = VILLAGER_ICONS[vid] || (vid.includes(':') ? VILLAGER_ICONS[vid.split(':').pop()] : null) || '👨‍🌾';
       return `
-        <div class="rounded-xl border ${isDis ? 'border-rose-500/40 bg-rose-950/20' : 'border-zinc-800 bg-zinc-950/70'} p-4 flex flex-col justify-between transition-all hover:border-zinc-700">
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <div class="flex items-center gap-2">
-                <span class="text-2xl">${icon}</span>
-                <div>
-                  <b class="text-xs font-bold ${isDis ? 'text-rose-200' : 'text-zinc-100'} block">${esc(v.name)}</b>
-                  <span class="text-[10px] font-mono text-zinc-500">${esc(v.id)}</span>
-                </div>
-              </div>
-              <span class="rounded px-2 py-0.5 text-[10px] font-bold ${isDis ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
-                ${isDis ? 'DESACTIVADO' : 'ACTIVO'}
-              </span>
+        <div class="flex items-center gap-4 border-b border-zinc-800 py-4 ${isDis ? 'opacity-60' : ''}">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-baseline gap-x-2">
+              <h4 class="font-semibold text-zinc-50">${esc(v.name)}</h4>
+              <span class="text-sm text-zinc-500">${isDis ? '· apagado' : '· encendido'}</span>
             </div>
-            <div class="mt-2 text-[11px] text-zinc-400 bg-zinc-900/60 p-2 rounded-lg border border-zinc-800/80">
-              <span class="text-zinc-500 block text-[10px] uppercase font-mono">Mesa de trabajo (POI):</span>
-              <code class="text-zinc-300 font-mono text-[11px]">${esc(v.workstation || 'N/A')}</code>
-            </div>
+            <p class="mt-0.5 truncate text-sm text-zinc-500">Mesa de trabajo: <span class="font-mono">${esc(v.workstation || 'sin mesa')}</span></p>
           </div>
-          <div class="mt-4 pt-3 border-t border-zinc-800/80">
-            <button data-villager-id="${esc(v.id)}" data-disable="${!isDis}" class="w-full py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${isDis ? 'bg-emerald-500 hover:bg-emerald-400 text-zinc-950' : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30'}">
-              <span>${isDis ? '✅ Activar Profesión' : '🚫 Desactivar Mesa'}</span>
-            </button>
-          </div>
+          <button type="button" data-villager-id="${esc(v.id)}" data-disable="${!isDis}" class="v2-button btn-quiet min-h-0 shrink-0 py-1.5 text-sm">${isDis ? 'Encender' : 'Apagar'}</button>
         </div>
       `;
     }).join('');
@@ -244,11 +221,11 @@
     try {
       const itContainer = $('#items-catalog-container');
       if (itContainer && (!restrictionsCatalog.items || restrictionsCatalog.items.length === 0)) {
-        itContainer.innerHTML = '<p class="text-xs text-emerald-400/80 italic p-4 text-center animate-pulse">Escaneando mods instalados (22.000+ ítems)...</p>';
+        itContainer.innerHTML = '<p class="py-6 text-zinc-500">Revisando tus mods…</p>';
       }
       const mobContainer = $('#mobs-catalog-container');
       if (mobContainer && (!restrictionsCatalog.mobs || restrictionsCatalog.mobs.length === 0)) {
-        mobContainer.innerHTML = '<p class="text-xs text-purple-400/80 italic p-4 text-center animate-pulse">Escaneando mods instalados (mobs y entidades)...</p>';
+        mobContainer.innerHTML = '<p class="py-6 text-zinc-500">Revisando tus mods…</p>';
       }
       restrictionsCatalog = await Panel.api('/api/restrictions/catalog');
       populateDynamicModFilters();
@@ -274,11 +251,20 @@
     const detectedMods = Object.keys(modCounts).sort((a, b) => modCounts[b] - modCounts[a]).slice(0, 8);
 
     filtersContainer.innerHTML = `
-      <button type="button" data-mod="all" class="mod-filter-btn ${curItemsMod === 'all' ? 'active bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-bold">Todos</button>
+      <button type="button" data-mod="all" class="mod-filter-btn ${curItemsMod === 'all' ? FILTER_ON : FILTER_OFF} rounded-full px-3 py-1.5 font-medium">Todos</button>
       ${detectedMods.map(m => `
-        <button type="button" data-mod="${esc(m)}" class="mod-filter-btn ${curItemsMod === m ? 'active bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500 capitalize">${esc(m)}</button>
+        <button type="button" data-mod="${esc(m)}" class="mod-filter-btn ${curItemsMod === m ? FILTER_ON : FILTER_OFF} rounded-full px-3 py-1.5 font-medium">${esc(m)}</button>
       `).join('')}
     `;
+  }
+
+  function markFilter(container, selector, activeBtn) {
+    container.querySelectorAll(selector).forEach(b => {
+      b.classList.remove(...FILTER_ON_CLASSES);
+      b.classList.add(...FILTER_OFF_CLASSES);
+    });
+    activeBtn.classList.add(...FILTER_ON_CLASSES);
+    activeBtn.classList.remove(...FILTER_OFF_CLASSES);
   }
 
   function populateDynamicMobsModFilters() {
@@ -295,9 +281,9 @@
     const detectedMods = Object.keys(modCounts).sort((a, b) => modCounts[b] - modCounts[a]).slice(0, 8);
 
     filtersContainer.innerHTML = `
-      <button type="button" data-mob-mod="all" class="mob-filter-btn ${curMobsMod === 'all' ? 'active bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-bold">Todos</button>
+      <button type="button" data-mob-mod="all" class="mob-filter-btn ${curMobsMod === 'all' ? FILTER_ON : FILTER_OFF} rounded-full px-3 py-1.5 font-medium">Todos</button>
       ${detectedMods.map(m => `
-        <button type="button" data-mob-mod="${esc(m)}" class="mob-filter-btn ${curMobsMod === m ? 'active bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-zinc-800/80 text-zinc-300 border-zinc-700'} rounded-md border px-2.5 py-1 text-[11px] font-semibold hover:border-zinc-500 capitalize">${esc(m)}</button>
+        <button type="button" data-mob-mod="${esc(m)}" class="mob-filter-btn ${curMobsMod === m ? FILTER_ON : FILTER_OFF} rounded-full px-3 py-1.5 font-medium">${esc(m)}</button>
       `).join('')}
     `;
   }
@@ -315,24 +301,11 @@
     }).slice(0, 80);
 
     if (filtered.length === 0) {
-      container.innerHTML = '<p class="text-xs text-zinc-500 italic p-4 text-center">No se encontraron ítems con los filtros aplicados.</p>';
+      container.innerHTML = '<p class="py-6 text-zinc-500">No encontramos objetos con esa búsqueda.</p>';
       return;
     }
 
-    container.innerHTML = filtered.map(x => `
-      <div class="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-2.5 hover:border-zinc-700 transition">
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
-            <span class="rounded bg-zinc-800/90 px-1.5 py-0.5 text-[10px] font-mono text-emerald-400 shrink-0">${esc(x.mod)}</span>
-            <b class="text-xs text-zinc-200 truncate">${esc(x.name)}</b>
-          </div>
-          <span class="text-[11px] font-mono text-zinc-500 block truncate mt-0.5">${esc(x.id)}</span>
-        </div>
-        <button data-block-item="${esc(x.id)}" class="shrink-0 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 px-2.5 py-1 text-xs font-semibold text-rose-300 transition cursor-pointer">
-          Bloquear
-        </button>
-      </div>
-    `).join('');
+    container.innerHTML = filtered.map(x => catalogRow(x, `data-block-item="${esc(x.id)}"`, 'Prohibir')).join('');
   }
 
   function renderMobsCatalog() {
@@ -348,24 +321,27 @@
     }).slice(0, 80);
 
     if (filtered.length === 0) {
-      container.innerHTML = '<p class="text-xs text-zinc-500 italic p-4 text-center">No se encontraron mobs con los filtros aplicados.</p>';
+      container.innerHTML = '<p class="py-6 text-zinc-500">No encontramos criaturas con esa búsqueda.</p>';
       return;
     }
 
-    container.innerHTML = filtered.map(x => `
-      <div class="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-2.5 hover:border-zinc-700 transition">
+    container.innerHTML = filtered.map(x => catalogRow(x, `data-block-mob="${esc(x.id)}"`, 'Quitar del mundo')).join('');
+  }
+
+  // A catalogue entry (item or mob). `actionAttr` must already be escaped.
+  function catalogRow(x, actionAttr, actionLabel) {
+    return `
+      <div class="flex items-center gap-4 border-b border-zinc-800 py-3">
         <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
-            <span class="rounded bg-zinc-800/90 px-1.5 py-0.5 text-[10px] font-mono text-purple-400 shrink-0">${esc(x.mod)}</span>
-            <b class="text-xs text-zinc-200 truncate">${esc(x.name)}</b>
+          <div class="flex flex-wrap items-baseline gap-x-2">
+            <span class="truncate font-medium text-zinc-100">${esc(x.name)}</span>
+            <span class="text-sm text-zinc-500">${esc(x.mod)}</span>
           </div>
-          <span class="text-[11px] font-mono text-zinc-500 block truncate mt-0.5">${esc(x.id)}</span>
+          <p class="truncate font-mono text-xs text-zinc-500">${esc(x.id)}</p>
         </div>
-        <button data-block-mob="${esc(x.id)}" class="shrink-0 rounded bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 px-2.5 py-1 text-xs font-semibold text-purple-300 transition cursor-pointer">
-          Suprimir Spawn
-        </button>
+        <button type="button" ${actionAttr} class="v2-button btn-quiet min-h-0 shrink-0 py-1.5 text-sm">${esc(actionLabel)}</button>
       </div>
-    `).join('');
+    `;
   }
 
   // 5. Navegación por Hash
@@ -415,7 +391,7 @@
       const btn = $('#btn-toggle-worldedit');
       if (!btn) return;
       const prev = btn.innerHTML;
-      btn.innerHTML = '<span>⏳</span> Aplicando permisos...';
+      btn.textContent = 'Aplicando…';
       btn.disabled = true;
       try {
         const res = await Panel.api('/api/worldedit/toggle', {
@@ -425,6 +401,7 @@
         Panel.toast(res.message, res.enabled ? 'success' : 'info');
         await loadWorldEditStatus();
       } catch (err) {
+        btn.innerHTML = prev;
         Panel.toast(err.message, 'error');
       } finally {
         btn.disabled = false;
@@ -441,12 +418,7 @@
     $('#items-mod-filters')?.addEventListener('click', (e) => {
       const btn = e.target.closest('.mod-filter-btn');
       if (!btn) return;
-      document.querySelectorAll('#items-mod-filters .mod-filter-btn').forEach(b => {
-        b.classList.remove('active', 'bg-emerald-500/20', 'text-emerald-300', 'border-emerald-500/30');
-        b.classList.add('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
-      });
-      btn.classList.add('active', 'bg-emerald-500/20', 'text-emerald-300', 'border-emerald-500/30');
-      btn.classList.remove('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
+      markFilter(document, '#items-mod-filters .mod-filter-btn', btn);
       curItemsMod = btn.dataset.mod || 'all';
       renderItemsCatalog();
     });
@@ -460,7 +432,7 @@
           method: 'POST',
           body: { item_id: itemId }
         });
-        Panel.toast(res.message || `${itemId} bloqueado.`, 'success');
+        Panel.toast(res.message || `${itemId} quedó prohibido.`, 'success');
         await loadRestrictionsSummary();
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -475,7 +447,7 @@
         const res = await Panel.api('/api/restrictions/items/' + encodeURIComponent(itemId), {
           method: 'DELETE'
         });
-        Panel.toast(res.message || `${itemId} desbloqueado.`, 'info');
+        Panel.toast(res.message || `${itemId} se puede usar de nuevo.`, 'info');
         await loadRestrictionsSummary();
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -493,7 +465,7 @@
           body: { item_id: val }
         });
         if (inp) inp.value = '';
-        Panel.toast(res.message || `${val} bloqueado.`, 'success');
+        Panel.toast(res.message || `${val} quedó prohibido.`, 'success');
         await loadRestrictionsSummary();
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -510,12 +482,7 @@
     $('#mobs-mod-filters')?.addEventListener('click', (e) => {
       const btn = e.target.closest('.mob-filter-btn');
       if (!btn) return;
-      document.querySelectorAll('#mobs-mod-filters .mob-filter-btn').forEach(b => {
-        b.classList.remove('active', 'bg-purple-500/20', 'text-purple-300', 'border-purple-500/30');
-        b.classList.add('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
-      });
-      btn.classList.add('active', 'bg-purple-500/20', 'text-purple-300', 'border-purple-500/30');
-      btn.classList.remove('bg-zinc-800/80', 'text-zinc-300', 'border-zinc-700');
+      markFilter(document, '#mobs-mod-filters .mob-filter-btn', btn);
       curMobsMod = btn.dataset.mobMod || 'all';
       renderMobsCatalog();
     });
@@ -529,7 +496,7 @@
           method: 'POST',
           body: { entity_id: entityId }
         });
-        Panel.toast(res.message || `Spawn de ${entityId} suprimido.`, 'success');
+        Panel.toast(res.message || `${entityId} ya no aparece solo.`, 'success');
         await loadRestrictionsSummary();
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -544,7 +511,7 @@
         const res = await Panel.api('/api/restrictions/mobs/' + encodeURIComponent(entityId), {
           method: 'DELETE'
         });
-        Panel.toast(res.message || `Spawn de ${entityId} restaurado.`, 'info');
+        Panel.toast(res.message || `${entityId} vuelve a aparecer.`, 'info');
         await loadRestrictionsSummary();
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -562,7 +529,7 @@
           body: { entity_id: val }
         });
         if (inp) inp.value = '';
-        Panel.toast(res.message || `Spawn de ${val} suprimido.`, 'success');
+        Panel.toast(res.message || `${val} ya no aparece solo.`, 'success');
         await loadRestrictionsSummary();
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -580,7 +547,7 @@
           method: 'POST',
           body: { profession_id: id, disable: disable }
         });
-        Panel.toast(res.message || `Profesión ${id} actualizada.`, disable ? 'warning' : 'success');
+        Panel.toast(res.message || `Oficio ${id} actualizado.`, disable ? 'warning' : 'success');
         await loadRestrictionsSummary();
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -592,14 +559,14 @@
       const btn = $('#btn-restrictions-reload');
       if (!btn) return;
       const prev = btn.innerHTML;
-      btn.innerHTML = '<span>⏳</span> Recargando...';
+      btn.textContent = 'Aplicando…';
       btn.disabled = true;
       try {
         const res = await Panel.api('/api/console', {
           method: 'POST',
           body: { command: 'reload' }
         });
-        Panel.toast(res.message || 'Servidor recargado (/reload exitoso).', 'success');
+        Panel.toast(res.message || 'Reglas aplicadas.', 'success');
       } catch (err) {
         Panel.toast(err.message, 'error');
       } finally {
