@@ -10,18 +10,19 @@
   <link rel="stylesheet" href="/static/css/panel-v2.css">
   <script defer src="/static/js/app.js"></script>
 </head>
+{%- from "_icons.html" import pixel -%}
 {%- set main_links = [
-  ('/', 'Inicio', 'dashboard'),
-  ('/worlds#whitelist', 'Jugadores', none),
-  ('/worlds', 'Mundo', 'worlds'),
-  ('/mods', 'Mods', 'mods'),
-  ('/backups', 'Copias', 'backups'),
+  ('/', 'Inicio', 'dashboard', 'home'),
+  ('/worlds#whitelist', 'Jugadores', none, 'players'),
+  ('/worlds', 'Mundo', 'worlds', 'world'),
+  ('/mods', 'Mods', 'mods', 'mods'),
+  ('/backups', 'Copias', 'backups', 'backups'),
 ] -%}
 {%- set more_links = [
-  ('/console', 'Consola', 'Lo que pasa en el servidor, en vivo', 'console'),
-  ('/crashes', 'Problemas', 'Por qué se cerró el servidor', 'crashes'),
-  ('/administration', 'Ajustes', 'Acceso, Discord, rangos y más', 'administration'),
-  ('/schematics', 'Esquemáticos', 'Construcciones para importar', 'schematics'),
+  ('/console', 'Consola', 'Lo que pasa en el servidor, en vivo', 'console', 'console'),
+  ('/crashes', 'Problemas', 'Por qué se cerró el servidor', 'crashes', 'problems'),
+  ('/administration', 'Ajustes', 'Acceso, Discord, rangos y más', 'administration', 'settings'),
+  ('/schematics', 'Esquemáticos', 'Construcciones para importar', 'schematics', 'schematics'),
 ] -%}
 <body data-page="{{ current_page }}" class="panel-shell min-h-screen font-sans antialiased">
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
@@ -29,13 +30,13 @@
   {% if is_admin %}
   <header class="topbar sticky top-0 z-30">
     <div class="mx-auto flex h-16 max-w-5xl items-center gap-2 px-4 sm:px-6">
-      <a href="/" class="mr-3 flex items-center gap-2.5 font-display text-[1.05rem] font-semibold text-zinc-50"><span class="brand-block" aria-hidden="true"></span>Craft Panel</a>
+      <a href="/" class="mr-3 flex items-center gap-2.5 font-display text-[1.05rem] font-semibold text-zinc-50">{{ pixel('grass', 24) }}Craft Panel</a>
       <nav class="hidden items-center gap-0.5 md:flex" aria-label="Navegación principal">
-        {% for href, label, page in main_links %}<a href="{{ href }}" class="nav-link"{% if page and current_page == page %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+        {% for href, label, page, icon in main_links %}<a href="{{ href }}" class="nav-link gap-2"{% if page and current_page == page %} aria-current="page"{% endif %}>{{ pixel(icon) }}{{ label }}</a>{% endfor %}
         <details class="relative" data-menu>
           <summary class="nav-link cursor-pointer list-none{% if current_page in ['console', 'crashes', 'administration', 'schematics'] %} text-zinc-50{% endif %}">Más<span aria-hidden="true" class="ml-1.5 text-xs">▾</span></summary>
           <div class="menu-panel absolute left-0 top-12 w-72 p-1.5">
-            {% for href, label, hint, page in more_links %}<a href="{{ href }}" class="menu-item"{% if current_page == page %} aria-current="page"{% endif %}><span>{{ label }}</span><small>{{ hint }}</small></a>{% endfor %}
+            {% for href, label, hint, page, icon in more_links %}<a href="{{ href }}" class="menu-item"{% if current_page == page %} aria-current="page"{% endif %}><span class="flex items-center gap-2">{{ pixel(icon) }}{{ label }}</span><small class="pl-5">{{ hint }}</small></a>{% endfor %}
           </div>
         </details>
       </nav>
@@ -46,9 +47,9 @@
         <details class="relative md:hidden" data-menu>
           <summary class="nav-link cursor-pointer list-none" aria-label="Abrir menú">Menú</summary>
           <div class="menu-panel absolute right-0 top-12 w-72 p-1.5">
-            {% for href, label, page in main_links %}<a href="{{ href }}" class="menu-item"{% if page and current_page == page %} aria-current="page"{% endif %}><span>{{ label }}</span></a>{% endfor %}
+            {% for href, label, page, icon in main_links %}<a href="{{ href }}" class="menu-item"{% if page and current_page == page %} aria-current="page"{% endif %}><span class="flex items-center gap-2">{{ pixel(icon) }}{{ label }}</span></a>{% endfor %}
             <hr class="my-1.5 border-zinc-800">
-            {% for href, label, hint, page in more_links %}<a href="{{ href }}" class="menu-item"><span>{{ label }}</span><small>{{ hint }}</small></a>{% endfor %}
+            {% for href, label, hint, page, icon in more_links %}<a href="{{ href }}" class="menu-item"><span class="flex items-center gap-2">{{ pixel(icon) }}{{ label }}</span><small class="pl-5">{{ hint }}</small></a>{% endfor %}
             <hr class="my-1.5 border-zinc-800">
             <button type="button" class="menu-item w-full text-left" data-logout>Salir</button>
           </div>

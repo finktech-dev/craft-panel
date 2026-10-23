@@ -1,0 +1,71 @@
+{#- Original pixel-art icons on a 12x12 grid, drawn for Craft Panel (no Mojang assets).
+    "x" pixels use currentColor; letters map to the fixed palette below.
+    Render at multiples of 12px (12, 24, 48) so every pixel stays crisp. -#}
+{%- set PIXEL_PALETTE = {
+  'g': '#88bd56', 'G': '#56832e', 'd': '#8a6440', 'D': '#6b4a2e',
+  's': '#a29e95', 'S': '#66635d', 'w': '#b08850', 'W': '#7a5a34',
+  'y': '#e8b04b', 'r': '#ec7a6a', 'l': '#f7f6f3',
+} -%}
+{%- set PIXEL_ICONS = {
+  'grass': [
+    'gggggggggggg', 'gGggggGggggg', 'ggggGgggggGg', 'gdgGgdggdgGd',
+    'dddgdddgdddd', 'dDdddddddDdd', 'ddddDddddddd', 'ddddddddDddd',
+    'dDdddddddddd', 'ddddddDddddd', 'dddddddddDdd', 'dddddddddddd',
+  ],
+  'home': [
+    '.....xx.....', '....xxxx....', '...xxxxxx...', '..xxxxxxxx..',
+    '.xxxxxxxxxx.', '..x......x..', '..x.xx...x..', '..x.xx.xxx..',
+    '..x.xx.xxx..', '..x.xx...x..', '..xxxxxxxx..', '............',
+  ],
+  'players': [
+    '....xxxx....', '....xxxx....', '....xxxx....', '....xxxx....',
+    '............', '..xxxxxxxx..', '..xxxxxxxx..', '..x.xxxx.x..',
+    '..x.xxxx.x..', '....x..x....', '....x..x....', '....x..x....',
+  ],
+  'world': [
+    '...xxxxxx...', '..xxxxxxxx..', '.xxxxxxxxxx.', '.xxxxxxxxxx.',
+    '.xxxxxxxxxx.', '..xxxxxxxx..', '.....xx.....', '.....xx.....',
+    '.....xx.....', '.....xx.....', '...xxxxxx...', '............',
+  ],
+  'mods': [
+    '....xxxx....', '.....xx.....', '.....xx.....', '....x..x....',
+    '...x....x...', '..x......x..', '..xxxxxxxx..', '..xxxxxxxx..',
+    '..xxxxxxxx..', '...xxxxxx...', '............', '............',
+  ],
+  'backups': [
+    '............', '.xxxxxxxxxx.', '.x........x.', '.x........x.',
+    '.xxxxxxxxxx.', '.x...xx...x.', '.x...xx...x.', '.x........x.',
+    '.x........x.', '.xxxxxxxxxx.', '............', '............',
+  ],
+  'console': [
+    '............', 'xxxxxxxxxxxx', 'x..........x', 'x.x........x',
+    'x..x.......x', 'x...x......x', 'x..x.......x', 'x.x...xxx..x',
+    'x..........x', 'xxxxxxxxxxxx', '............', '............',
+  ],
+  'problems': [
+    '.....xx.....', '....xxxx....', '....x..x....', '...xx..xx...',
+    '...x.xx.x...', '..xx.xx.xx..', '..x..xx..x..', '.xx......xx.',
+    '.x...xx...x.', 'xx...xx...xx', 'xxxxxxxxxxxx', '............',
+  ],
+  'settings': [
+    '............', '....x..x....', '..xxxxxxxx..', '..xxxxxxxx..',
+    'xxxx....xxxx', '.xx......xx.', '.xx......xx.', 'xxxx....xxxx',
+    '..xxxxxxxx..', '..xxxxxxxx..', '....x..x....', '............',
+  ],
+  'schematics': [
+    '............', 'xxxxxxxxxxxx', 'x....x.....x', 'x....x.....x',
+    'xxxxxxxxxxxx', 'x....x.....x', 'x....x.....x', 'x....x.....x',
+    'xxxxxxxxxxxx', '............', '............', '............',
+  ],
+  'heart': [
+    '............', '.xxx....xxx.', 'xxxxx..xxxxx', 'xxxxxxxxxxxx',
+    'xxxxxxxxxxxx', '.xxxxxxxxxx.', '..xxxxxxxx..', '...xxxxxx...',
+    '....xxxx....', '.....xx.....', '............', '............',
+  ],
+} -%}
+{%- macro pixel(name, size=12, label=none, class='') -%}
+{%- set rows = PIXEL_ICONS[name] -%}
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" width="{{ size }}" height="{{ size }}" shape-rendering="crispEdges" class="pixel-icon {{ class }}"{% if label %} role="img" aria-label="{{ label }}"{% else %} aria-hidden="true"{% endif %}>
+{%- for row in rows %}{% set y = loop.index0 %}{% for ch in row %}{% if ch != '.' %}<rect x="{{ loop.index0 }}" y="{{ y }}" width="1" height="1" fill="{{ PIXEL_PALETTE.get(ch, 'currentColor') }}"/>{% endif %}{% endfor %}{% endfor -%}
+</svg>
+{%- endmacro -%}
