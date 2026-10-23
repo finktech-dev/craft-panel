@@ -48,6 +48,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Modales
   const uploadModal = $('#modal-upload-mod');
+  // The empty state's button opens the same upload dialog (no inline handlers: strict CSP).
+  $('#btn-empty-upload')?.addEventListener('click', () => $('#btn-open-upload-modal')?.click());
   const deleteModal = $('#modal-delete-mod');
   const fileInput = $('#mod-file-input');
   const dropZone = $('#modal-drop-zone');
