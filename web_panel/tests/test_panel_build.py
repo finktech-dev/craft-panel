@@ -209,12 +209,12 @@ def test_mod_environment_detection_and_dynamic_loader(tmp_path):
     server_dir = tmp_path / "server"
     server_dir.mkdir(parents=True)
 
-    # 1. Sin marcadores -> Valores por defecto seguros
+    # 1. No markers -> unknown, never a guessed version
     settings_default = Settings(project_root=tmp_path, server_directory=server_dir)
     service_default = ModService(configured_settings=settings_default)
     env_default = service_default.get_environment()
-    assert env_default["loader"] == "neoforge"
-    assert env_default["minecraft_version"] == "1.21.1"
+    assert env_default["loader"] == ""
+    assert env_default["minecraft_version"] == ""
 
     # 2. Con marcador NeoForge 21.1.84 -> Detecta neoforge y 1.21.1
     neoforge_ver_dir = server_dir / "libraries" / "net" / "neoforged" / "neoforge" / "21.1.84"

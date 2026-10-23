@@ -21,6 +21,7 @@ from app.services.server_process import server_manager
 from app.services.cloudflare_service import cloudflare_quick_tunnel_service
 from app.services.playit_service import playit_service
 from app.services.scheduler_service import scheduler_service
+from app.services.server_version_service import server_version_service
 from app.websocket.terminal import router as terminal_router
 
 logging.basicConfig(
@@ -97,7 +98,7 @@ def _template_context(request: Request, current_page: str) -> dict[str, object]:
         "current_page": current_page,
         "is_admin": request_has_admin_session(request),
         "public_address": settings.server_public_address or "IP no configurada",
-        "minecraft_version": settings.minecraft_version,
+        "minecraft_version": server_version_service.detect().minecraft_version or "",
         "two_factor_enabled": two_factor_enabled,
         "csrf_token": get_csrf_token(request) if request_has_admin_session(request) else None,
         "initial_admin_pin": settings.admin_pin.get_secret_value() if settings.admin_pin_generated_this_start else None,

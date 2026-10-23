@@ -6,16 +6,19 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.core.config import Settings
 from app.services.onboarding_service import OnboardingService
 
 
 class ReadyDiscovery:
-    def discover(self):
+    def discover(self, minecraft_version=None):
         return SimpleNamespace(
             operating_system="windows",
             java=SimpleNamespace(state="available", message="Java listo"),
-            minecraft=SimpleNamespace(state="detected", start_script="run.bat", loader="vanilla", message="Servidor listo"),
+            minecraft=SimpleNamespace(state="detected", start_script="run.bat", loader="vanilla", message="Servidor listo",
+                                       minecraft_version="1.21.1", loader_version=None),
         )
 
 
@@ -35,18 +38,21 @@ def _service(tmp_path: Path, *, playit_enabled: bool, whitelist: bool, players: 
     return OnboardingService(configured_settings=configured, discovery=ReadyDiscovery(), tunnel=LinkedTunnel())
 
 
-def test_public_server_without_friends_list_stops_at_friends_step(tmp_path: Path) -> None:
-    status = _service(tmp_path, playit_enabled=True, whitelist=False, players=0).status()
+@pytest.mark.asyncio
+async def test_public_server_without_friends_list_stops_at_friends_step(tmp_path: Path) -> None:
+    status = await (_service(tmp_path, playit_enabled=True, whitelist=False, players=0).status())
     assert status.first_step == "connection"
     assert status.whitelist_enabled is False
 
 
-def test_public_server_with_friends_list_is_ready(tmp_path: Path) -> None:
-    status = _service(tmp_path, playit_enabled=True, whitelist=True, players=2).status()
+@pytest.mark.asyncio
+async def test_public_server_with_friends_list_is_ready(tmp_path: Path) -> None:
+    status = await (_service(tmp_path, playit_enabled=True, whitelist=True, players=2).status())
     assert status.first_step == "ready"
     assert status.whitelisted_players == 2
 
 
-def test_local_only_server_is_not_blocked(tmp_path: Path) -> None:
-    status = _service(tmp_path, playit_enabled=False, whitelist=False, players=0).status()
+@pytest.mark.asyncio
+async def test_local_only_server_is_not_blocked(tmp_path: Path) -> None:
+    status = await (_service(tmp_path, playit_enabled=False, whitelist=False, players=0).status())
     assert status.first_step == "ready"

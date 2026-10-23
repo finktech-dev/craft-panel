@@ -136,3 +136,32 @@ def test_discovery_falls_back_when_java_home_is_an_old_runtime(tmp_path: Path) -
     assert result.java.major_version == 21
     assert any("java8" in call[0].casefold() for call in calls)
     assert any("java21" in call[0].casefold() for call in calls)
+
+
+def _java17_runner(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=[], returncode=0, stdout="openjdk 17.0.12 2024-07-16\n", stderr="")
+
+
+def test_java_requirement_follows_the_installed_server(tmp_path: Path) -> None:
+    configured = _settings(tmp_path)
+    assert configured.server_directory is not None
+    (configured.server_directory / "libraries/net/neoforged/neoforge/20.4.237").mkdir(parents=True)
+    service = RuntimeDiscoveryService(configured, system_name="Windows", environ={}, which=lambda _: "java", command_runner=_java17_runner)
+
+    result = service.discover()
+
+    assert result.java.state == "available"
+    assert "Minecraft 1.20.4" in result.java.message
+    assert result.minecraft.minecraft_version == "1.20.4"
+    assert result.minecraft.loader_version == "20.4.237"
+
+
+def test_java_requirement_uses_the_picked_version_before_a_server_exists(tmp_path: Path) -> None:
+    service = RuntimeDiscoveryService(
+        _settings(tmp_path), system_name="Windows", environ={}, which=lambda _: "java", command_runner=_java17_runner
+    )
+
+    assert service.discover().java.state == "available"
+    picked = service.discover(minecraft_version="26.1")
+    assert picked.java.state == "unusable"
+    assert "Java 25" in picked.java.message

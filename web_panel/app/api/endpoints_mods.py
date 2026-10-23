@@ -32,8 +32,10 @@ async def list_mods() -> list[ModItem]:
 async def get_mod_environment() -> ModEnvironmentResponse:
     env = mod_service.get_environment()
     return ModEnvironmentResponse(
-        loader=env["loader"],
-        minecraft_version=env["minecraft_version"],
+        loader=env["loader"] or None,
+        minecraft_version=env["minecraft_version"] or None,
+        loader_version=env["loader_version"] or None,
+        label=env["label"] or None,
     )
 
 

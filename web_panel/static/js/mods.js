@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let modToDelete = null;
   const selectedFilenames = new Set();
   let updatesMap = {};
-  let detectedEnv = { loader: 'neoforge', minecraft_version: '1.21.1' };
+  let detectedEnv = { loader: null, minecraft_version: null };
 
   // Elementos DOM principales
   const envBadgeText = $('#env-badge-text');
@@ -68,13 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadEnvironment() {
     try {
       const env = await Panel.api('/api/mods/environment');
-      if (env && env.loader) {
+      if (env) {
         detectedEnv = env;
-        if (envBadgeText) {
-          const loaderNames = { neoforge: 'NeoForge', forge: 'Forge', fabric: 'Fabric', quilt: 'Quilt', vanilla: 'sin mods' };
-          envBadgeText.textContent = `Minecraft ${env.minecraft_version} con ${loaderNames[env.loader] || env.loader}`;
-        }
-        if (modrinthVersionInput && !modrinthVersionInput.value) {
+        // The backend builds the label and leaves out whatever it could not detect.
+        if (envBadgeText) envBadgeText.textContent = env.label || 'Minecraft';
+        if (modrinthVersionInput && !modrinthVersionInput.value && env.minecraft_version) {
           modrinthVersionInput.placeholder = env.minecraft_version;
         }
       }

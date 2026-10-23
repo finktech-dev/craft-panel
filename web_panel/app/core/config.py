@@ -70,8 +70,9 @@ class Settings(BaseSettings):
     banner_title: str = "Minecraft server status"
     banner_subtitle: str = ""
     server_public_address: str | None = None
-    minecraft_version: str = "1.21.1"
-    neoforge_version: str = "21.1.250"
+    # Optional overrides; by default the panel reads both from the installed server.
+    minecraft_version: str | None = None
+    neoforge_version: str | None = None
     allocated_ram_gb: int = Field(default=5, ge=1, le=64)
     playit_enabled: bool = True
     graceful_stop_timeout_seconds: int = Field(default=30, ge=1, le=300)

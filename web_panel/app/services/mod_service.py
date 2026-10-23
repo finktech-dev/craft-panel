@@ -27,6 +27,7 @@ from app.schemas.mod import (
 )
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 from app.services.server_process import MinecraftServerManager, server_manager
+from app.services.server_version_service import ServerVersionService
 
 logger = logging.getLogger(__name__)
 _MEBIBYTE: Final = 1024 * 1024
@@ -74,6 +75,7 @@ class ModService:
     ) -> None:
         self._settings = configured_settings
         self._manager = manager
+        self._versions = ServerVersionService(configured_settings)
 
     def _require_server_stopped(self, operation: str) -> None:
         try:
@@ -214,48 +216,17 @@ class ModService:
         )
 
     def get_environment(self) -> dict[str, str]:
-        """Detecta dinámicamente el cargador de mods (loader) y versión de Minecraft del servidor."""
-        loader = "neoforge"
-        version = self._settings.minecraft_version or "1.21.1"
+        """Loader and Minecraft version of the installed server; empty strings when unknown.
 
-        server_root = self._settings.server_directory
-        if server_root and server_root.is_dir():
-            markers = {
-                "neoforge": server_root / "libraries" / "net" / "neoforged" / "neoforge",
-                "forge": server_root / "libraries" / "net" / "minecraftforge" / "forge",
-                "fabric": server_root / "fabric-server-launch.jar",
-                "paper": server_root / "paper.jar",
-                "vanilla": server_root / "server.jar",
-            }
-            for name, marker in markers.items():
-                if marker.exists():
-                    loader = name
-                    break
-
-            try:
-                neoforge_dir = server_root / "libraries" / "net" / "neoforged" / "neoforge"
-                if neoforge_dir.is_dir():
-                    versions = [p.name for p in neoforge_dir.iterdir() if p.is_dir()]
-                    if versions:
-                        latest_ver = sorted(versions)[-1]
-                        parts = latest_ver.split(".")
-                        if len(parts) >= 2 and parts[0].isdigit():
-                            loader = "neoforge"
-                            version = f"1.{parts[0]}.{parts[1]}" if parts[0] != "1" else latest_ver
-
-                forge_dir = server_root / "libraries" / "net" / "minecraftforge" / "forge"
-                if forge_dir.is_dir():
-                    versions = [p.name for p in forge_dir.iterdir() if p.is_dir()]
-                    if versions:
-                        latest_ver = sorted(versions)[-1]
-                        mc_part = latest_ver.split("-")[0]
-                        if mc_part.startswith("1."):
-                            loader = "forge"
-                            version = mc_part
-            except Exception:
-                pass
-
-        return {"loader": loader, "minecraft_version": version}
+        Empty values disable the matching Modrinth filter instead of guessing a version.
+        """
+        info = self._versions.detect()
+        return {
+            "loader": "" if info.loader == "unknown" else info.loader,
+            "minecraft_version": info.minecraft_version or "",
+            "loader_version": info.loader_version or "",
+            "label": info.label or "",
+        }
 
     async def search_modrinth(
         self,

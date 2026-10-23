@@ -15,6 +15,7 @@ from app.core.config import Settings, settings
 from app.schemas.backup import BackupItem
 from app.schemas.crash import CrashReportSummary
 from app.schemas.discord import DiscordConfig
+from app.services.server_version_service import ServerVersionService
 
 logger = logging.getLogger(__name__)
 _DISCORD_MAX_FIELD_LENGTH: Final = 1024
@@ -26,6 +27,7 @@ class DiscordService:
     def __init__(self, configured_settings: Settings = settings) -> None:
         self._settings = configured_settings
         self._cached_config: DiscordConfig | None = None
+        self._versions = ServerVersionService(configured_settings)
 
     @property
     def _config_file(self) -> Path | None:
@@ -61,7 +63,7 @@ class DiscordService:
         configured = self._display_value(cfg.server_software_label, "discord_server_software_label")
         if configured:
             return configured
-        return f"Minecraft {self._settings.minecraft_version}"
+        return self._versions.detect().label or "Minecraft"
 
     def _world_name(self, cfg: DiscordConfig) -> str:
         return self._display_value(cfg.world_name, "discord_world_name", "No configurado")

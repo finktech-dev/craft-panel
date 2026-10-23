@@ -79,7 +79,9 @@ class MinecraftInstallationStatus(BaseModel):
 
     state: Literal["detected", "not_detected"]
     root: str
-    loader: Literal["neoforge", "forge", "fabric", "paper", "vanilla", "unknown"] | None = None
+    loader: Literal["neoforge", "forge", "fabric", "quilt", "paper", "vanilla", "custom", "unknown"] | None = None
+    loader_version: str | None = None
+    minecraft_version: str | None = None
     start_script: str | None = None
     message: str
 
