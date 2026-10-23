@@ -1,0 +1,43 @@
+name: Dependency audit
+
+# Separate from the test workflow so a newly published advisory in a third-party
+# package does not block unrelated pull requests; it still fails visibly here.
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  pull_request:
+    paths:
+      - web_panel/requirements.txt
+      - requirements-dev.txt
+      - web_panel/frontend/package.json
+      - web_panel/frontend/package-lock.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Audit Python dependencies
+        run: |
+          python -m pip install pip-audit
+          python -m pip_audit -r web_panel/requirements.txt
+
+  node:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Audit stylesheet build tooling
+        working-directory: web_panel/frontend
+        run: npm audit --audit-level=high

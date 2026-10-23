@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import socket
 import subprocess
 import sys
@@ -21,7 +22,8 @@ from app.services.server_process import ExternalServerRunningError, MinecraftSer
 _LISTENER = (
     "import socket, sys, time\n"
     "s = socket.socket(); s.bind(('127.0.0.1', int(sys.argv[1]))); s.listen()\n"
-    "print('ready', flush=True); time.sleep(120)\n"
+    "import os\n"
+    "print('ready', os.getpid(), flush=True); time.sleep(120)\n"
 )
 
 
@@ -39,15 +41,42 @@ def _settings(tmp_path: Path, port: int) -> Settings:
     return configured
 
 
+class ListenerProcess:
+    """The process that really holds the port.
+
+    A Windows venv's python.exe is a launcher that spawns the real interpreter,
+    so Popen.pid is not the listening process; the child reports its own PID.
+    """
+
+    def __init__(self, popen: subprocess.Popen[str], pid: int) -> None:
+        self._popen = popen
+        self.pid = pid
+
+    def poll(self) -> int | None:
+        try:
+            alive = psutil.Process(self.pid).status() != psutil.STATUS_ZOMBIE
+        except psutil.NoSuchProcess:
+            alive = False
+        return None if alive else 0
+
+    def stop(self) -> None:
+        with contextlib.suppress(psutil.NoSuchProcess):
+            psutil.Process(self.pid).kill()
+        if self._popen.poll() is None:
+            self._popen.kill()
+        self._popen.wait()
+
+
 @pytest.fixture
-def listener() -> Iterator[tuple[subprocess.Popen[str], int]]:
+def listener() -> Iterator[tuple[ListenerProcess, int]]:
     port = _free_port()
-    process = subprocess.Popen([sys.executable, "-c", _LISTENER, str(port)], stdout=subprocess.PIPE, text=True)
-    assert process.stdout is not None and process.stdout.readline().strip() == "ready"
+    popen = subprocess.Popen([sys.executable, "-c", _LISTENER, str(port)], stdout=subprocess.PIPE, text=True)
+    assert popen.stdout is not None
+    status, _, pid = popen.stdout.readline().strip().partition(" ")
+    assert status == "ready"
+    process = ListenerProcess(popen, int(pid))
     yield process, port
-    if process.poll() is None:
-        process.kill()
-        process.wait()
+    process.stop()
 
 
 def test_server_port_defaults_and_reads_properties(tmp_path: Path) -> None:
