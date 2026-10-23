@@ -74,7 +74,7 @@ _PROPERTY_METADATA: dict[str, dict[str, Any]] = {
         "type": "boolean",
         "default": "true",
         "recommended": "true",
-        "description": "Permite que los jugadores se hagan daño con ataques cuerpo a cuerpo, flechas o proyectiles de Point Blank.",
+        "description": "Permite que los jugadores se hagan daño con ataques cuerpo a cuerpo, flechas o proyectiles de mods.",
         "impact": "Si está desactivado, protege a los jugadores de ataques accidentales o fuego amigo.",
     },
     "allow-flight": {
