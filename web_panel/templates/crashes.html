@@ -1,134 +1,96 @@
 {% extends "base.html" %}
-{% block title %}Crashes y Desconexiones · Panel Minecraft{% endblock %}
+{% from "_icons.html" import pixel %}
+{% block title %}Problemas · Craft Panel{% endblock %}
 {% block content %}
-<section class="space-y-6" aria-labelledby="crashes-title">
-  <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-    <div>
-      <p class="text-sm font-medium text-rose-400">Auditoría y Diagnóstico</p>
-      <h1 id="crashes-title" class="mt-1 text-2xl font-bold sm:text-3xl">Crashes y Desconexiones por Jugador</h1>
-      <p class="mt-2 text-sm text-zinc-400">Registro detallado de errores, incompatibilidades y desconexiones con trazas de log completas.</p>
-    </div>
-    <div class="flex flex-wrap items-center gap-2">
-      <button id="btn-scan-logs" class="rounded-lg border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-sm font-semibold text-zinc-300 hover:border-emerald-400/60 hover:text-zinc-100 transition flex items-center gap-1.5">
-        <span>↻</span> <span>Escanear logs ahora</span>
-      </button>
-      <button id="btn-rescan-clean" class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/20 hover:border-amber-500/60 transition flex items-center gap-1.5" title="Vacía el historial previo y re-escanea todos los logs desde cero">
-        <span>🧹</span> <span>Re-escanear historial limpio</span>
-      </button>
-      <button id="btn-clear-logs" class="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/20 transition">
-        Limpiar historial
-      </button>
+<section class="mx-auto max-w-3xl" aria-labelledby="crashes-title">
+  <header class="pb-8">
+    <h1 id="crashes-title" class="font-display text-4xl font-semibold text-zinc-50">Problemas</h1>
+    <p class="mt-3 max-w-xl text-lg leading-relaxed text-zinc-400">Cuando alguien se cae del servidor o el servidor se cierra solo, acá te contamos qué pasó y qué podés hacer.</p>
+    <p class="mt-3 text-sm text-zinc-500">
+      <span id="stat-critical">0</span> problemas · <span id="stat-normal">0</span> salidas normales · <span id="stat-total">0</span> en total · <span id="stat-players">0</span> jugadores
+    </p>
+    <div class="mt-6 flex flex-wrap items-center gap-3">
+      <button id="btn-scan-logs" type="button" class="v2-button btn-primary">Buscar problemas nuevos</button>
     </div>
   </header>
 
-  <!-- TARJETAS DE ESTADÍSTICAS -->
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <article class="rounded-xl border border-rose-500/30 bg-rose-950/20 p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold uppercase tracking-wider text-rose-400">Crashes / Errores Críticos</p>
-        <span class="text-base text-rose-400">💥</span>
-      </div>
-      <p id="stat-critical" class="mt-2 text-3xl font-bold text-rose-300">0</p>
-      <p class="mt-1 text-xs text-rose-300/70">Fallos de mods, NBT o datos corruptos</p>
-    </article>
+  <section class="border-t border-zinc-800 py-9" aria-labelledby="events-title">
+    <h2 id="events-title" class="text-lg font-semibold text-zinc-50">Lo que pasó</h2>
 
-    <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Salidas Voluntarias</p>
-        <span class="text-base text-zinc-400">🚪</span>
-      </div>
-      <p id="stat-normal" class="mt-2 text-3xl font-bold text-zinc-300">0</p>
-      <p class="mt-1 text-xs text-zinc-500">Desconexiones normales (informativo)</p>
-    </article>
-
-    <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Total de Eventos</p>
-        <span class="text-base text-zinc-400">📋</span>
-      </div>
-      <p id="stat-total" class="mt-2 text-3xl font-bold text-zinc-100">0</p>
-      <p class="mt-1 text-xs text-zinc-500">Histórico de desconexiones detectadas</p>
-    </article>
-
-    <article class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold uppercase tracking-wider text-emerald-400">Jugadores Auditados</p>
-        <span class="text-base text-emerald-400">👥</span>
-      </div>
-      <p id="stat-players" class="mt-2 text-3xl font-bold text-emerald-400">0</p>
-      <p class="mt-1 text-xs text-zinc-500">Jugadores que tuvieron actividad</p>
-    </article>
-  </div>
-
-  <!-- BARRA DE FILTROS -->
-  <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
-    <div class="grid gap-3 sm:grid-cols-3">
-      <div>
-        <label for="filter-player" class="block text-xs font-semibold text-zinc-400">Filtrar por Jugador</label>
-        <select id="filter-player" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none">
-          <option value="">Todos los jugadores</option>
-        </select>
-      </div>
-      <div>
-        <label for="filter-category" class="block text-xs font-semibold text-zinc-400">Tipo de Error / Causa</label>
-        <select id="filter-category" class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none">
-          <option value="">Todas las causas</option>
-        </select>
-      </div>
-      <div>
-        <label for="filter-search" class="block text-xs font-semibold text-zinc-400">Búsqueda en trazas y textos</label>
-        <input id="filter-search" type="search" placeholder="ej: Capability, LuckPerms, timeout..." class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none">
-      </div>
+    <div class="mt-4 flex flex-col gap-3 sm:flex-row">
+      <label for="filter-search" class="sr-only">Buscar</label>
+      <input id="filter-search" type="search" placeholder="Buscar por jugador, mod o palabra" class="min-h-11 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400">
     </div>
-
-    <!-- Filtro rápido de anomalías vs salidas normales -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-zinc-800/80 pt-3">
-      <label class="inline-flex items-center gap-2.5 cursor-pointer select-none text-xs text-zinc-300 hover:text-zinc-100">
-        <input type="checkbox" id="filter-errors-only" class="rounded border-zinc-700 bg-zinc-950 text-rose-500 focus:ring-rose-400/40 h-4 w-4 cursor-pointer">
-        <span class="font-medium">Solo mostrar errores y desconexiones anómalas <span class="text-zinc-500 font-normal">(ocultar salidas normales)</span></span>
+    <div class="mt-3 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
+      <label for="filter-player" class="sr-only">Jugador</label>
+      <select id="filter-player" class="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-zinc-300 outline-none focus:border-emerald-400">
+        <option value="">Todos los jugadores</option>
+      </select>
+      <label for="filter-category" class="sr-only">Qué pasó</label>
+      <select id="filter-category" class="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-zinc-300 outline-none focus:border-emerald-400">
+        <option value="">Cualquier motivo</option>
+      </select>
+      <label class="inline-flex cursor-pointer select-none items-center gap-2">
+        <input type="checkbox" id="filter-errors-only" class="h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-emerald-500">
+        <span>Ocultar las salidas normales</span>
       </label>
-      <div id="filter-counter" class="text-xs text-zinc-400 font-medium"></div>
     </div>
-  </div>
+    <p id="filter-counter" class="mt-3 text-sm text-zinc-500" aria-live="polite"></p>
 
-  <!-- LISTA DE EVENTOS -->
-  <div id="crashes-list" class="space-y-3">
-    <div class="p-8 text-center text-sm text-zinc-500">Cargando eventos de desconexión...</div>
-  </div>
+    <div id="crashes-list" class="mt-2 border-t border-zinc-800" aria-live="polite">
+      <p class="py-12 text-center text-zinc-500">Buscando…</p>
+    </div>
+
+    <template id="crashes-empty-template">
+      <div class="py-14 text-center">
+        <div class="flex justify-center text-emerald-400">{{ pixel('heart', 48) }}</div>
+        <h3 class="mt-4 text-lg font-semibold text-zinc-100" data-empty-title>Todo tranquilo</h3>
+        <p class="mx-auto mt-1 max-w-sm text-zinc-400" data-empty-text>No encontramos problemas.</p>
+      </div>
+    </template>
+  </section>
+
+  <details class="border-t border-zinc-800 py-7">
+    <summary class="cursor-pointer list-none text-zinc-400 hover:text-zinc-200"><span class="font-semibold">Más acciones</span> <span class="text-sm">· revisar todo de nuevo o borrar el historial</span></summary>
+    <div class="mt-5 space-y-4">
+      <div>
+        <button id="btn-rescan-clean" type="button" class="v2-button btn-quiet">Revisar todo de nuevo desde cero</button>
+        <p class="mt-2 text-sm leading-relaxed text-zinc-500">Borra la lista de acá y vuelve a leer todos los registros del servidor.</p>
+      </div>
+      <div>
+        <button id="btn-clear-logs" type="button" class="v2-button border border-[#ec7a6a]/40 text-[#f3a79b] hover:bg-[#ec7a6a]/10">Borrar el historial</button>
+        <p class="mt-2 text-sm leading-relaxed text-zinc-500">Solo se borra la lista de esta página. Los registros del servidor quedan guardados.</p>
+      </div>
+    </div>
+  </details>
 </section>
 
-<!-- MODAL VISOR DE LOG COMPLETO Y TRAZA -->
-<dialog id="modal-log-viewer" class="m-auto w-[min(94vw,56rem)] rounded-xl border border-zinc-700 bg-zinc-950 p-6 text-zinc-100 shadow-2xl backdrop:bg-black/80">
-  <div class="flex items-start justify-between border-b border-zinc-800 pb-4">
-    <div class="flex items-center gap-3">
-      <img id="viewer-player-avatar" src="" alt="Avatar" class="h-10 w-10 rounded-lg border border-zinc-700 bg-zinc-900 object-cover">
-      <div>
-        <div class="flex items-center gap-2">
-          <h3 id="viewer-player-name" class="text-base font-bold"></h3>
-          <span id="viewer-category-badge"></span>
+<dialog id="modal-log-viewer" class="m-auto w-[min(94vw,52rem)] rounded-2xl border border-zinc-800 bg-zinc-900 p-0 text-zinc-100 backdrop:bg-black/70">
+  <div class="p-6">
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex min-w-0 items-center gap-3">
+        <img id="viewer-player-avatar" src="" alt="" class="h-10 w-10 shrink-0 rounded-lg bg-zinc-800 object-cover">
+        <div class="min-w-0">
+          <h3 id="viewer-player-name" class="truncate text-lg font-semibold text-zinc-50"></h3>
+          <p class="text-sm text-zinc-500"><span id="viewer-category-badge"></span> · <span id="viewer-timestamp"></span></p>
         </div>
-        <p id="viewer-timestamp" class="text-xs text-zinc-400"></p>
       </div>
+      <button id="close-log-viewer" type="button" class="nav-link shrink-0" aria-label="Cerrar">Cerrar</button>
     </div>
-    <div class="flex items-center gap-2">
-      <button id="btn-copy-log" class="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-emerald-400/60 hover:text-emerald-300 transition">Copiar log completo</button>
-      <button id="close-log-viewer" class="text-zinc-400 hover:text-zinc-100 text-xl font-bold leading-none px-2" aria-label="Cerrar modal">×</button>
-    </div>
-  </div>
 
-  <!-- Diagnóstico y recomendación adaptada -->
-  <div id="viewer-suggestion-box" class="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-4 text-xs leading-relaxed">
-    <p id="viewer-suggestion-title" class="font-bold uppercase tracking-wider text-[10px]">💡 Diagnóstico sugerido</p>
-    <p id="viewer-suggestion-text" class="mt-1 font-medium"></p>
-  </div>
-
-  <!-- Contenedor del log con stack trace -->
-  <div class="mt-4">
-    <div class="flex items-center justify-between text-xs text-zinc-400 pb-1">
-      <span id="viewer-source-file">Archivo: latest.log</span>
-      <span>Traza del servidor (Contexto completo)</span>
+    <div id="viewer-suggestion-box" class="mt-5 rounded-xl bg-zinc-950 p-4">
+      <p id="viewer-suggestion-title" class="font-semibold text-zinc-50">Qué pasó</p>
+      <p id="viewer-suggestion-text" class="mt-1 leading-relaxed text-zinc-300"></p>
     </div>
-    <pre id="viewer-log-content" class="max-h-[50vh] overflow-y-auto rounded-lg border border-zinc-800 bg-black p-4 font-mono text-xs leading-5 text-zinc-300 whitespace-pre-wrap break-words select-text"></pre>
+
+    <div class="mt-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-2 text-sm text-zinc-500">
+        <span id="viewer-source-file">Archivo: latest.log</span>
+        <button id="btn-copy-log" type="button" class="link">Copiar todo</button>
+      </div>
+      <pre id="viewer-log-content" class="max-h-[50vh] select-text overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-zinc-950 p-4 font-mono text-xs leading-5 text-zinc-300"></pre>
+      <p class="mt-2 text-sm text-zinc-500">Si pedís ayuda en un foro o a un amigo que sepa, pasale este texto.</p>
+    </div>
   </div>
 </dialog>
 {% endblock %}
