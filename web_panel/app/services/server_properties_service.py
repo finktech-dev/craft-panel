@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import Settings, settings
+from app.core.path_safety import is_safe_component
 from app.services.runtime_guard import require_server_stopped
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.schemas.worlds import (
@@ -17,6 +18,9 @@ from app.schemas.worlds import (
     ServerPropertyDefinition,
     ServerPropertyOption,
 )
+
+_PROPERTY_KEY = re.compile(r"^[a-z0-9][a-z0-9.\-]{0,63}$")
+_MAX_PROPERTY_VALUE_LENGTH = 1024
 
 _PROPERTY_METADATA: dict[str, dict[str, Any]] = {
     # 🎮 Jugabilidad y Dificultad
@@ -459,7 +463,28 @@ class ServerPropertiesService:
             await asyncio.to_thread(self._write_updates, updates)
         return await self.get_properties_response()
 
+    @staticmethod
+    def _validate_updates(updates: dict[str, str]) -> None:
+        """Refuse keys/values that could add or merge extra properties.
+
+        A newline would inject a new line (e.g. ``enable-rcon=true``) and a
+        trailing backslash makes Java join the next line into this value.
+        """
+        for key, value in updates.items():
+            if not _PROPERTY_KEY.match(key):
+                raise ValueError(f"La propiedad '{key[:40]}' no es válida.")
+            if not isinstance(value, str) or len(value) > _MAX_PROPERTY_VALUE_LENGTH:
+                raise ValueError(f"El valor de '{key}' es demasiado largo.")
+            if any(ord(character) < 32 or ord(character) == 127 for character in value):
+                raise ValueError(f"El valor de '{key}' no puede tener saltos de línea ni caracteres de control.")
+            if (len(value) - len(value.rstrip("\\"))) % 2 == 1:
+                raise ValueError(f"El valor de '{key}' no puede terminar en una barra invertida.")
+        level_name = updates.get("level-name")
+        if level_name is not None and not is_safe_component(level_name):
+            raise ValueError("El nombre del mundo no es válido.")
+
     def _write_updates(self, updates: dict[str, str]) -> None:
+        self._validate_updates(updates)
         if not self.file_path.is_file():
             # Crear desde cero si no existiera
             lines = [f"{k}={v}" for k, v in updates.items()]

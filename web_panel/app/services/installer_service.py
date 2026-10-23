@@ -7,15 +7,21 @@ import contextlib
 import hashlib
 import os
 import re
-import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-import aiofiles
 import httpx
 
 from app.core.config import Settings, settings
+from app.core.net_safety import (
+    FABRIC_HOSTS,
+    MOJANG_HOSTS,
+    NEOFORGE_HOSTS,
+    UnsafeDownloadError,
+    allowed_client,
+    download_to_file,
+)
 from app.services.runtime_discovery import RuntimeDiscoveryService
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 from app.services.server_process import MinecraftServerManager, server_manager
@@ -36,6 +42,8 @@ _DOWNLOAD_CHUNK_SIZE = 64 * 1024
 _MOJANG_MANIFEST = MOJANG_MANIFEST_URL
 _MINECRAFT_VERSION = re.compile(r"^\d+\.\d+(?:\.\d+)?$")
 _SHA1 = re.compile(r"^[0-9a-fA-F]{40}$")
+_INSTALLER_HOSTS = MOJANG_HOSTS | FABRIC_HOSTS | NEOFORGE_HOSTS
+_MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
 
 
 class InstallerServiceError(RuntimeError):
@@ -134,7 +142,7 @@ class InstallerService:
     async def _install_vanilla(self, minecraft_version: str) -> None:
         await self._publish("Finding the official Vanilla server download…")
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
+            async with allowed_client(_INSTALLER_HOSTS, timeout=60.0) as client:
                 manifest_response = await client.get(_MOJANG_MANIFEST)
                 manifest_response.raise_for_status()
                 manifest = manifest_response.json()
@@ -179,7 +187,7 @@ class InstallerService:
         build = await self._resolve_neoforge_build(minecraft_version)
         url = self.neoforge_installer_url(build)
         await self._publish(f"Downloading the official NeoForge {build} installer…")
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0), follow_redirects=True) as client:
+        async with allowed_client(_INSTALLER_HOSTS, timeout=120.0) as client:
             checksum = await self._published_sha1(client, url)
             await self._download(client, url, self._settings.neoforge_installer_path, checksum)
         assert self._settings.server_directory is not None
@@ -202,7 +210,7 @@ class InstallerService:
         url = f"{FABRIC_MAVEN_URL}/{version}/fabric-installer-{version}.jar"
         assert self._settings.tools_directory is not None
         installer = self._settings.tools_directory / f"fabric-installer-{version}.jar"
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0), follow_redirects=True) as client:
+        async with allowed_client(_INSTALLER_HOSTS, timeout=120.0) as client:
             checksum = await self._published_sha1(client, url)
             await self._download(client, url, installer, checksum)
         assert self._settings.server_directory is not None
@@ -237,7 +245,7 @@ class InstallerService:
         try:
             response = await client.get(f"{url}.sha1")
             response.raise_for_status()
-        except httpx.HTTPError as error:
+        except (httpx.HTTPError, UnsafeDownloadError) as error:
             raise InstallerServiceError("No se pudo obtener la suma de verificación oficial del instalador.") from error
         text = response.text.strip()
         checksum = text.split()[0] if text else ""
@@ -249,23 +257,18 @@ class InstallerService:
         if not url.startswith("https://"):
             raise InstallerServiceError("Only official HTTPS downloads are allowed.")
         await asyncio.to_thread(destination.parent.mkdir, parents=True, exist_ok=True)
-        temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.download")
-        digest = hashlib.sha1()
         try:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                async with aiofiles.open(temporary, "wb") as file:
-                    async for chunk in response.aiter_bytes(_DOWNLOAD_CHUNK_SIZE):
-                        digest.update(chunk)
-                        await file.write(chunk)
-            if sha1 and digest.hexdigest().casefold() != sha1.casefold():
-                raise InstallerServiceError("The official download checksum did not match; it was discarded.")
-            await asyncio.to_thread(os.replace, temporary, destination)
+            await download_to_file(
+                client,
+                url,
+                destination,
+                max_bytes=_MAX_DOWNLOAD_BYTES,
+                expected_hash=("sha1", sha1) if sha1 else None,
+            )
+        except UnsafeDownloadError as error:
+            raise InstallerServiceError("The download was rejected (unexpected host, size or checksum) and discarded.") from error
         except (httpx.HTTPError, OSError) as error:
             raise InstallerServiceError("The official server download failed. Check the connection and try again.") from error
-        finally:
-            if temporary.exists():
-                await asyncio.to_thread(temporary.unlink)
 
     def _write_safe_server_files(self, flavor: str) -> None:
         assert self._settings.server_directory is not None

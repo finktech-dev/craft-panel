@@ -6,10 +6,14 @@ import asyncio
 import json
 from pathlib import Path
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.luckperms import LuckPermsAvailability, LuckPermsEditorResponse, LuckPermsPanelConfig
 from app.services.server_process import server_manager
+
+# "<PlayerName> message" is how Minecraft logs player chat.
+_CHAT_LINE = re.compile(r"<[A-Za-z0-9_]{1,16}>")
 
 
 DEFAULT_PRIMARY_RANKS: list[dict[str, Any]] = [
@@ -188,6 +192,7 @@ class LuckPermsService:
             )
 
         async with self._lock:
+            sent_at = datetime.now(UTC).isoformat()
             try:
                 # Enviar comando /lp editor
                 await server_manager.send_command("/lp editor")
@@ -206,6 +211,10 @@ class LuckPermsService:
                 # Revisar las últimas 25 líneas
                 for entry in reversed(history[-25:]):
                     msg = entry.get("message", "")
+                    # Ignore older lines and player chat: anyone in game could
+                    # post their own editor link to hijack the admin's session.
+                    if str(entry.get("timestamp", "")) < sent_at or _CHAT_LINE.search(msg):
+                        continue
                     match = url_pattern.search(msg)
                     if match:
                         editor_url = match.group(1)

@@ -13,8 +13,9 @@ router = APIRouter(prefix="/advancements", tags=["advancements"], dependencies=[
 
 
 class AdvancementActionRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=32)
-    advancement_id: str = Field(min_length=1, max_length=128)  # 'everything' o ID de logro
+    username: str = Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9_]+$")
+    # 'everything' or a namespaced advancement id; spaces would add command arguments.
+    advancement_id: str = Field(min_length=1, max_length=128, pattern=r"^(everything|[a-z0-9_.-]+:[a-z0-9_./-]+)$")
     world_name: str | None = Field(default=None, max_length=64)
 
 

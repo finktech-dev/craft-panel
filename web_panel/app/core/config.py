@@ -8,10 +8,10 @@ import os
 import secrets
 import sys
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     client_pack_directory: Path | None = None
     client_config_directory: Path | None = None
     client_pack_filename: str = "modpack.zip"
-    client_pack_extra_directories: list[str] = Field(
+    client_pack_extra_directories: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
         description="Directorios adicionales del servidor a empaquetar en el cliente (ej. resourcepacks, datapacks)"
     )
@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     local_secrets_path: Path | None = None
 
     panel_host: str = "127.0.0.1"
+    allowed_hosts: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="Extra domain names allowed in the Host header (e.g. a reverse proxy domain or *.example.com)",
+    )
     panel_port: int = Field(default=8080, ge=1, le=65535)
     panel_mode: Literal["local", "internet"] = "local"
     admin_pin: SecretStr | None = Field(default=None, min_length=12, max_length=128)
@@ -106,7 +110,7 @@ class Settings(BaseSettings):
         "-XX:MaxTenuringThreshold=1",
     )
 
-    @field_validator("client_pack_extra_directories", mode="before")
+    @field_validator("client_pack_extra_directories", "allowed_hosts", mode="before")
     @classmethod
     def _parse_client_pack_extra_directories(cls, v: Any) -> list[str]:
         if isinstance(v, str):
@@ -211,13 +215,10 @@ class Settings(BaseSettings):
         except (OSError, json.JSONDecodeError):
             return
     def _write_local_secrets(self, values: dict[str, str]) -> None:
+        from app.core.path_safety import write_private_text
+
         assert self.local_secrets_path is not None
-        self.local_secrets_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.local_secrets_path.with_suffix(".tmp")
-        temporary_path.write_text(json.dumps(values, indent=2), encoding="utf-8")
-        with contextlib.suppress(OSError):
-            os.chmod(temporary_path, 0o600)
-        os.replace(temporary_path, self.local_secrets_path)
+        write_private_text(self.local_secrets_path, json.dumps(values, indent=2))
 
     @property
     def effective_cookie_secure(self) -> bool:

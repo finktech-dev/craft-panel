@@ -4,10 +4,12 @@ import asyncio, json, os, re, uuid
 from pathlib import Path
 import json5, tomlkit
 from app.core.config import Settings, settings
+from app.core.path_safety import UnsafePathError, safe_relative_parts
 from app.schemas.universal import ConfigDocument, ConfigFile, ConfigNode
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 from app.services.server_process import MinecraftServerManager, server_manager
 
+_MAX_CONFIG_BYTES=4*1024*1024
 class ConfigServiceError(RuntimeError): status_code=400
 class ConfigConflictError(ConfigServiceError): status_code=409
 class ConfigService:
@@ -31,13 +33,16 @@ class ConfigService:
   if any(token in path for token in ('voice','sound','accessories','emote','client')): return 'Experiencia y jugadores'
   return 'Otros mods'
  def path(self, rel:str)->Path:
-  if not rel or '\\' in rel: raise ConfigServiceError('Ruta de configuración inválida.')
+  # Rejects "..", backslashes, drive letters, NTFS streams ("a.toml:x") and device names.
+  try: safe_relative_parts(rel)
+  except UnsafePathError: raise ConfigServiceError('Ruta de configuración inválida.') from None
   p=(self.root/rel).resolve()
   if not p.is_relative_to(self.root.resolve()) or p.suffix.lower() not in {'.toml','.json','.json5','.jsonc','.cfg','.conf','.properties'}: raise ConfigServiceError('Archivo de configuración no permitido.')
   return p
  async def read(self, rel:str)->ConfigDocument:
   p=self.path(rel)
   if not p.is_file(): raise ConfigServiceError('No existe el archivo solicitado.')
+  if p.stat().st_size>_MAX_CONFIG_BYTES: raise ConfigServiceError('El archivo es demasiado grande para el editor.')
   return await asyncio.to_thread(self._read,p,rel)
  def _read(self,p,rel):
   raw=p.read_text(encoding='utf-8'); fmt=p.suffix.lower().lstrip('.')
@@ -69,6 +74,7 @@ class ConfigService:
     content=tomlkit.dumps(doc)
    except Exception as e: raise ConfigServiceError(f'No se pudo aplicar el cambio: {e}') from e
   if content is None: raise ConfigServiceError('No se recibió contenido para guardar.')
+  if len(content.encode('utf-8'))>_MAX_CONFIG_BYTES: raise ConfigServiceError('El contenido es demasiado grande.')
   try: require_server_stopped(self.m, 'guardar configuraciones de mods')
   except ServerActiveError as e: raise ConfigConflictError(str(e)) from e
   try: tomlkit.parse(content) if fmt=='toml' else (json5.loads(content) if fmt in {'json','json5','jsonc'} else self._cfg(content))

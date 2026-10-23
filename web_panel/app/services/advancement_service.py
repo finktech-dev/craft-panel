@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import Settings, settings
+from app.core.path_safety import is_safe_component
 from app.services.server_process import server_manager
 from app.services.server_properties_service import server_properties_service
 
@@ -55,6 +56,8 @@ class AdvancementService:
         active_world = props.get("level-name", "world")
         
         target_name = (world_name.strip() if world_name else "") or active_world
+        if not is_safe_component(target_name):
+            target_name = active_world if is_safe_component(active_world) else "world"
         world_dir = self.server_dir / target_name
         if not world_dir.is_dir():
             world_dir = self.server_dir / active_world

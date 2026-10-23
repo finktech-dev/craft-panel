@@ -7,6 +7,7 @@ import logging
 import re
 import shutil
 from datetime import UTC, datetime
+from pathlib import Path
 
 from app.core.config import Settings, settings
 from app.schemas.runtime import CloudflareQuickTunnelStatus

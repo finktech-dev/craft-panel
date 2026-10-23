@@ -1,25 +1,33 @@
+# Minimum versions are security floors: each one is the first release
+# without a published vulnerability that affects the panel (checked with
+# pip-audit). Raise them, never lower them.
+
 # Web framework and ASGI server
-fastapi>=0.115,<1.0
+fastapi>=0.161,<1.0
+starlette>=1.3.1,<2.0
 uvicorn[standard]>=0.30,<1.0
+h11>=0.16.0
+anyio>=4.14.2
 
 # Validation and configuration
 pydantic>=2.8,<3.0
-pydantic-settings>=2.4,<3.0
+pydantic-settings>=2.7,<3.0
 
 # Server-rendered UI and form uploads
-jinja2>=3.1,<4.0
-python-multipart>=0.0.9,<1.0
+jinja2>=3.1.6,<4.0
+python-multipart>=0.0.31,<1.0
 itsdangerous>=2.2,<3.0
 
 # Runtime services
 psutil>=6.0,<8.0
 httpx>=0.27,<1.0
+idna>=3.15
 aiofiles>=24.1,<25.0
 
 # 2FA Security and Image generation
 pyotp>=2.9,<3.0
 qrcode>=8.0,<9.0
-pillow>=10.0,<13.0
+pillow>=13.0,<14.0
 # Schematics, NBT and Configuration parsing
 numpy>=1.26,<3.0
 nbtlib>=2.0,<3.0

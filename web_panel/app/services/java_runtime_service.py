@@ -14,9 +14,14 @@ from pathlib import Path
 
 import httpx
 
+from app.core.archive_safety import ArchiveLimits, ArchiveSafetyError, extract_tar, extract_zip
 from app.core.config import Settings, settings
+from app.core.net_safety import ADOPTIUM_HOSTS, allowed_client, download_to_file, is_allowed_url
 
 _ADOPTIUM_API = "https://api.adoptium.net/v3/assets/latest/{major}/hotspot"
+# A JDK archive is ~200 MB and unpacks to ~350 MB; leave generous headroom.
+_MAX_DOWNLOAD_BYTES = 1024**3
+_RUNTIME_LIMITS = ArchiveLimits(max_members=20_000, max_total_bytes=2 * 1024**3, max_member_bytes=1024**3)
 
 
 class JavaRuntimeServiceError(RuntimeError):
@@ -75,14 +80,14 @@ class JavaRuntimeService:
             staging = target.parent / f".java-{uuid.uuid4().hex}.extract"
             try:
                 package = await self._find_package(required)
-                await self._download(package["link"], archive)
+                await self._download(package["link"], archive, package.get("checksum"))
                 await asyncio.to_thread(self._extract_runtime, archive, staging)
                 executable = self._find_java(staging)
                 if executable is None:
                     raise JavaRuntimeServiceError("La descarga oficial no contenía un ejecutable Java utilizable.")
                 runtime_root = executable.parents[1]
                 await asyncio.to_thread(os.replace, runtime_root, target)
-            except (httpx.HTTPError, OSError, tarfile.TarError, zipfile.BadZipFile) as error:
+            except (httpx.HTTPError, OSError, tarfile.TarError, zipfile.BadZipFile, ArchiveSafetyError) as error:
                 if isinstance(error, JavaRuntimeServiceError):
                     raise
                 raise JavaRuntimeServiceError("No se pudo descargar o preparar Java desde Adoptium. Revisá la conexión e intentá de nuevo.") from error
@@ -97,7 +102,7 @@ class JavaRuntimeService:
             raise JavaRuntimeValidationError("Este sistema operativo todavía no está soportado para descarga automática de Java.")
         machine = platform.machine().casefold()
         architecture = "aarch64" if machine in {"arm64", "aarch64"} else "x64"
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
+        async with allowed_client(ADOPTIUM_HOSTS, timeout=60.0) as client:
             for image_type in ("jre", "jdk"):
                 response = await client.get(
                     _ADOPTIUM_API.format(major=major),
@@ -111,17 +116,23 @@ class JavaRuntimeService:
                     continue
                 package = releases[0].get("binary", {}).get("package", {})
                 link = package.get("link") if isinstance(package, dict) else None
-                if isinstance(link, str) and link.startswith("https://"):
-                    return {"link": link}
+                checksum = package.get("checksum") if isinstance(package, dict) else None
+                if isinstance(link, str) and is_allowed_url(link, ADOPTIUM_HOSTS):
+                    result = {"link": link}
+                    if isinstance(checksum, str) and len(checksum) == 64:
+                        result["checksum"] = checksum
+                    return result
         raise JavaRuntimeServiceError("Adoptium no ofreció un runtime compatible para esta computadora.")
 
-    async def _download(self, url: str, destination: Path) -> None:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0), follow_redirects=True) as client:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                with destination.open("wb") as output:
-                    async for chunk in response.aiter_bytes(64 * 1024):
-                        output.write(chunk)
+    async def _download(self, url: str, destination: Path, sha256: str | None = None) -> None:
+        async with allowed_client(ADOPTIUM_HOSTS, timeout=120.0) as client:
+            await download_to_file(
+                client,
+                url,
+                destination,
+                max_bytes=_MAX_DOWNLOAD_BYTES,
+                expected_hash=("sha256", sha256) if sha256 else None,
+            )
 
     def _extract_runtime(self, archive: Path, destination: Path) -> None:
         destination.mkdir(parents=True, exist_ok=False)
@@ -134,21 +145,17 @@ class JavaRuntimeService:
 
     @staticmethod
     def _safe_extract_zip(contents: zipfile.ZipFile, destination: Path) -> None:
-        root = destination.resolve()
-        for member in contents.infolist():
-            candidate = (destination / member.filename).resolve()
-            if not candidate.is_relative_to(root):
-                raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.")
-        contents.extractall(destination)
+        try:
+            extract_zip(contents, destination, _RUNTIME_LIMITS)
+        except ArchiveSafetyError as error:
+            raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.") from error
 
     @staticmethod
     def _safe_extract_tar(contents: tarfile.TarFile, destination: Path) -> None:
-        root = destination.resolve()
-        for member in contents.getmembers():
-            candidate = (destination / member.name).resolve()
-            if not candidate.is_relative_to(root) or member.issym() or member.islnk():
-                raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.")
-        contents.extractall(destination)
+        try:
+            extract_tar(contents, destination, _RUNTIME_LIMITS)
+        except ArchiveSafetyError as error:
+            raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.") from error
 
     def _find_java(self, root: Path) -> Path | None:
         executable = "java.exe" if os.name == "nt" else "java"

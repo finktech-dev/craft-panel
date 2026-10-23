@@ -32,7 +32,7 @@ def test_playit_asset_selection_uses_the_platform_specific_portable_binary(monke
     monkeypatch.setattr("app.services.playit_service.platform.system", lambda: "Linux")
     monkeypatch.setattr("app.services.playit_service.platform.machine", lambda: "x86_64")
 
-    assert PlayitService._select_asset(release).endswith("/linux")
+    assert PlayitService._select_asset(release)[0].endswith("/linux")
 
 def test_playit_asset_selection_accepts_current_cli_release_names(monkeypatch):
     release = {
@@ -44,7 +44,7 @@ def test_playit_asset_selection_accepts_current_cli_release_names(monkeypatch):
     monkeypatch.setattr("app.services.playit_service.platform.system", lambda: "Darwin")
     monkeypatch.setattr("app.services.playit_service.platform.machine", lambda: "arm64")
 
-    assert PlayitService._select_asset(release).endswith("/apple")
+    assert PlayitService._select_asset(release)[0].endswith("/apple")
 
 @pytest.mark.asyncio
 async def test_playit_output_exposes_a_shareable_address(tmp_path):

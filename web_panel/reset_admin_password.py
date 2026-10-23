@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import contextlib
 import getpass
 import json
-import os
-from pathlib import Path
+import secrets
 
 from app.core.config import settings
+from app.core.path_safety import write_private_text
 
 
 def main() -> None:
@@ -18,6 +17,10 @@ def main() -> None:
 
     if len(password) < 12:
         raise SystemExit("La contraseña debe tener al menos 12 caracteres.")
+    if len(password) > 128:
+        raise SystemExit("La contraseña puede tener como máximo 128 caracteres.")
+    if len(set(password)) < 5:
+        raise SystemExit("La contraseña es demasiado predecible. Usá letras, números y símbolos variados.")
     if password != confirmation:
         raise SystemExit("Las contraseñas no coinciden. No se modificó nada.")
 
@@ -30,12 +33,10 @@ def main() -> None:
         raise SystemExit("El archivo local de secretos no tiene un formato válido.")
 
     values["admin_pin"] = password
-    temporary_path = Path(f"{secrets_path}.tmp")
-    temporary_path.write_text(json.dumps(values, indent=2), encoding="utf-8")
-    with contextlib.suppress(OSError):
-        os.chmod(temporary_path, 0o600)
-    os.replace(temporary_path, secrets_path)
-    print("Contraseña actualizada. Iniciá nuevamente el panel para usarla.")
+    # A new session secret signs out every browser that used the old password.
+    values["session_secret"] = secrets.token_urlsafe(48)
+    write_private_text(secrets_path, json.dumps(values, indent=2))
+    print("Contraseña actualizada y sesiones abiertas cerradas. Iniciá nuevamente el panel para usarla.")
 
 
 if __name__ == "__main__":

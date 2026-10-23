@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.security import get_current_admin
+from app.core.rate_limit import rate_limit
 from app.schemas.server import ServerActionResponse, ServerMetrics
 from app.schemas.runtime import FriendConnectionInfo, TunnelStatus
 from app.services.backup_service import backup_service
@@ -368,7 +369,7 @@ async def get_health_summary() -> dict[str, Any]:
     }
 
 
-@router.post("/spark-audit")
+@router.post("/spark-audit", dependencies=[Depends(rate_limit("spark-audit", 4, 300))])
 async def spark_audit() -> dict[str, Any]:
     if not server_manager.is_running:
         raise HTTPException(status_code=400, detail="El servidor debe estar encendido para ejecutar Spark.")

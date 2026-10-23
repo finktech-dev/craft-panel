@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
+from app.core.archive_safety import read_member_capped
 from app.core.config import settings
 from app.core.security import get_current_admin
 from app.schemas.universal import Gamerule, PlayerAction, PlayerItem, RegistryItem
@@ -20,6 +21,8 @@ router = APIRouter(tags=["registry-players"], dependencies=[Depends(get_current_
 _registry_cache: list[RegistryItem] | None = None
 _registry_mtime: float = 0
 _icon_cache: dict[str, bytes] = {}
+_MAX_ICON_BYTES = 512 * 1024
+_MAX_CACHED_ICONS = 2_000
 _gamerules = {"keepInventory": "false", "naturalRegeneration": "true", "mobGriefing": "true", "doFireTick": "true", "doDaylightCycle": "true", "doWeatherCycle": "true", "randomTickSpeed": "3", "maxEntityCramming": "24"}
 
 
@@ -36,7 +39,7 @@ async def registry_item_icon(item_id: str):
     icon_bytes = await asyncio.to_thread(_find_item_icon, mod_id, item_name)
     if not icon_bytes:
         raise HTTPException(404, "Ícono no encontrado.")
-    return Response(content=icon_bytes, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+    return Response(content=icon_bytes, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
 
 
 def _find_item_icon(mod_id: str, item_name: str) -> bytes | None:
@@ -54,8 +57,11 @@ def _find_item_icon(mod_id: str, item_name: str) -> bytes | None:
                 names = set(archive.namelist())
                 for candidate in candidates:
                     if candidate in names:
-                        data = archive.read(candidate)
-                        _icon_cache[cache_key] = data
+                        data = read_member_capped(archive, candidate, _MAX_ICON_BYTES)
+                        if data is None:
+                            continue
+                        if len(_icon_cache) < _MAX_CACHED_ICONS:
+                            _icon_cache[cache_key] = data
                         return data
         except (OSError, zipfile.BadZipFile):
             continue

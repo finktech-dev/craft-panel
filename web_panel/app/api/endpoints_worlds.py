@@ -66,3 +66,5 @@ async def update_server_properties(req: ServerPropertiesSaveRequest) -> ServerPr
         return await server_properties_service.update_properties(req.properties)
     except ServerActiveError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

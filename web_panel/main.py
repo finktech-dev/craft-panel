@@ -15,8 +15,14 @@ from fastapi.templating import Jinja2Templates
 
 from app.api.router import router as api_router
 from app.core.config import settings
-from app.core.security import TwoFactorError, get_csrf_token, request_has_admin_session, totp_manager
-from app.core.security_middleware import SecurityHeadersAndCsrfMiddleware
+from app.core.security import (
+    TwoFactorError,
+    get_csrf_token,
+    request_has_admin_session,
+    request_is_direct_loopback,
+    totp_manager,
+)
+from app.core.security_middleware import RequestGuardMiddleware, SecurityHeadersAndCsrfMiddleware
 from app.services.server_process import server_manager
 from app.services.cloudflare_service import cloudflare_quick_tunnel_service
 from app.services.playit_service import playit_service
@@ -61,6 +67,11 @@ app = FastAPI(
     title="Panel del servidor Minecraft",
     version="0.1.0",
     lifespan=lifespan,
+    # The interactive API docs are not needed by the UI and only widen what an
+    # Internet visitor can probe.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 # SessionMiddleware queda por fuera del control CSRF para que este último pueda
 # leer la sesión firmada antes de procesar una acción administrativa.
@@ -73,6 +84,9 @@ app.add_middleware(
     same_site="strict",
     https_only=settings.effective_cookie_secure,
 )
+# Outermost: reject forged Host headers (DNS rebinding) and oversized bodies
+# before sessions, routing or multipart parsing do any work.
+app.add_middleware(RequestGuardMiddleware)
 
 assert settings.static_directory is not None
 assert settings.panel_directory is not None
@@ -101,7 +115,13 @@ def _template_context(request: Request, current_page: str) -> dict[str, object]:
         "minecraft_version": server_version_service.detect().minecraft_version or "",
         "two_factor_enabled": two_factor_enabled,
         "csrf_token": get_csrf_token(request) if request_has_admin_session(request) else None,
-        "initial_admin_pin": settings.admin_pin.get_secret_value() if settings.admin_pin_generated_this_start else None,
+        # The first-run password is only ever shown to a browser on this PC,
+        # never through a tunnel, reverse proxy or LAN address.
+        "initial_admin_pin": (
+            settings.admin_pin.get_secret_value()
+            if settings.admin_pin_generated_this_start and request_is_direct_loopback(request)
+            else None
+        ),
     }
 
 

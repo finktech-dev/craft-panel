@@ -26,7 +26,7 @@ def test_setup_template_uses_read_only_runtime_endpoint() -> None:
 
 
 def test_setup_page_requires_an_admin_session() -> None:
-    client = TestClient(app, raise_server_exceptions=True)
+    client = TestClient(app, base_url="http://127.0.0.1", raise_server_exceptions=True)
     response = client.get("/setup", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/"

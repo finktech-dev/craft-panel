@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
 from app.core.security import get_current_admin
+from app.core.rate_limit import rate_limit
 from app.schemas.backup import BackupAuditResponse, BackupCreateResponse, BackupItem, BackupSafetyOverview
 from app.schemas.crash import CrashReportSummary
 from app.services.backup_service import BackupServiceError, backup_service
@@ -26,8 +27,14 @@ async def backup_safety_overview() -> BackupSafetyOverview:
     return await backup_service.safety_overview()
 
 
-@router.post("", response_model=BackupCreateResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=BackupCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("backups-create", 6, 600))],
+)
 async def create_backup() -> BackupCreateResponse:
+    _raise_if_busy()
     try:
         backup = await backup_service.create_backup()
     except BackupServiceError as error:
@@ -35,8 +42,9 @@ async def create_backup() -> BackupCreateResponse:
     return BackupCreateResponse(success=True, backup=backup, message="Backup creado correctamente.")
 
 
-@router.post("/audit", response_model=BackupAuditResponse)
+@router.post("/audit", response_model=BackupAuditResponse, dependencies=[Depends(rate_limit("backups-audit", 4, 300))])
 async def audit_backups() -> BackupAuditResponse:
+    _raise_if_busy()
     try:
         return await backup_service.audit_and_purge_backups()
     except (BackupServiceError, OSError) as error:
@@ -81,6 +89,15 @@ async def get_crash_report() -> CrashReportSummary:
     if report is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay crash-reports disponibles.")
     return report
+
+
+def _raise_if_busy() -> None:
+    """Queueing more copies behind a running one only wastes disk and CPU."""
+    if backup_service.is_busy:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya hay una operación de backups en curso. Esperá a que termine.",
+        )
 
 
 def _raise_backup_error(error: BackupServiceError) -> None:
