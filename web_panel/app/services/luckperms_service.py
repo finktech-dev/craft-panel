@@ -138,7 +138,7 @@ class LuckPermsService:
                 )
             return LuckPermsAvailability(
                 enabled=False,
-                message="LuckPerms es opcional. Creá web_panel/.luckperms_config.json para activarlo.",
+                message="Los rangos son opcionales. Necesitan el mod LuckPerms; tocá \"Activar rangos\" para empezar.",
             )
         try:
             raw = json.loads(self._config_file.read_text(encoding="utf-8"))

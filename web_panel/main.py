@@ -97,7 +97,7 @@ def _template_context(request: Request, current_page: str) -> dict[str, object]:
         "request": request,
         "current_page": current_page,
         "is_admin": request_has_admin_session(request),
-        "public_address": settings.server_public_address or "IP no configurada",
+        "public_address": settings.server_public_address,
         "minecraft_version": server_version_service.detect().minecraft_version or "",
         "two_factor_enabled": two_factor_enabled,
         "csrf_token": get_csrf_token(request) if request_has_admin_session(request) else None,
