@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const filterErrorsOnly = $('#filter-errors-only');
   const filterCounter = $('#filter-counter');
   const crashesList = $('#crashes-list');
+  const emptyTemplate = $('#crashes-empty-template');
 
   const logModal = $('#modal-log-viewer');
   const closeLogViewer = $('#close-log-viewer');
@@ -23,137 +24,143 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // Generador de metadatos y badges visuales para cada categoría
+  const isCriticalEvent = (evt) =>
+    evt.category === 'MOD_ERROR' ||
+    evt.category === 'INVALID_DATA' ||
+    evt.category === 'SERVER_CRASH' ||
+    evt.severity === 'error';
+
+  // Short, plain label for each category (also used in the copied report).
   const getBadgeData = (evt) => {
+    switch (evt.category) {
+      case 'NORMAL_DISCONNECT': return { label: 'Salida normal' };
+      case 'TIMEOUT': return { label: 'Se cortó la conexión' };
+      case 'KICKED_BANNED': return { label: 'Lo sacaron del servidor' };
+      case 'MOD_ERROR': return { label: 'Problema con un mod' };
+      case 'INVALID_DATA': return { label: 'Datos dañados' };
+      case 'CLIENT_MISMATCH': return { label: 'Juego distinto al del servidor' };
+      case 'SERVER_CRASH': return { label: 'El servidor se cerró' };
+      default: return { label: evt.category_label || 'Desconexión' };
+    }
+  };
+
+  // Plain-language explanation shown first; the raw report stays behind "Ver el detalle técnico".
+  const explain = (evt) => {
+    const player = evt.player || 'Un jugador';
+    const mod = evt.suspected_mod;
     switch (evt.category) {
       case 'NORMAL_DISCONNECT':
         return {
-          label: 'Salida Voluntaria',
-          icon: '🚪',
-          classes: 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50',
+          headline: `${player} salió del juego.`,
+          advice: 'Todo normal, no tenés que hacer nada.',
         };
       case 'TIMEOUT':
         return {
-          label: 'Tiempo Agotado / Lag',
-          icon: '⏳',
-          classes: 'bg-violet-950/50 text-violet-300 border border-violet-700/50',
+          headline: `${player} se desconectó porque la conexión se cortó o andaba muy lenta.`,
+          advice: 'Suele ser el internet de quien juega o el de tu casa. Si pasa seguido, revisá la conexión o probá con menos mods pesados.',
         };
       case 'KICKED_BANNED':
         return {
-          label: 'Expulsión / Kick',
-          icon: '🚫',
-          classes: 'bg-sky-950/50 text-sky-300 border border-sky-700/50',
-        };
-      case 'MOD_ERROR':
-        return {
-          label: 'Fallo Crítico / Crash',
-          icon: '💥',
-          classes: 'bg-rose-950/60 text-rose-300 border border-rose-600/60 shadow-sm shadow-rose-900/30',
+          headline: `${player} fue sacado del servidor.`,
+          advice: 'Pasa si no está en la lista de jugadores permitidos o si alguien lo expulsó. Podés revisarlo en Jugadores.',
         };
       case 'INVALID_DATA':
         return {
-          label: 'Fallo Crítico / Crash',
-          icon: '💥',
-          classes: 'bg-rose-950/60 text-rose-300 border border-rose-600/60 shadow-sm shadow-rose-900/30',
+          headline: `${player} se desconectó porque sus datos de jugador están dañados.`,
+          advice: 'Puede ser un objeto con error en su inventario. Antes de tocar nada, hacé una copia del mundo.',
         };
       case 'CLIENT_MISMATCH':
         return {
-          label: 'Cliente Incompatible',
-          icon: '🔌',
-          classes: 'bg-amber-950/50 text-amber-300 border border-amber-700/50',
+          headline: `${player} no pudo jugar porque su juego no coincide con el del servidor.`,
+          advice: 'Necesita la misma versión de Minecraft y los mismos mods. Pasale el paquete para amigos desde la página Mods.',
+        };
+      case 'MOD_ERROR':
+        return {
+          headline: mod
+            ? `${player} se desconectó por un problema con el mod ${mod}.`
+            : `${player} se desconectó por un problema con un mod.`,
+          advice: 'Fijate en la página Mods si hay una actualización. Si sigue pasando, probá apagar ese mod.',
         };
       case 'SERVER_CRASH':
         return {
-          label: 'Fallo de Servidor',
-          icon: '🔥',
-          classes: 'bg-rose-950/70 text-rose-200 border border-rose-500',
+          headline: mod
+            ? `El servidor se cerró por un problema con el mod ${mod}.`
+            : `El servidor se cerró de golpe mientras ${player} jugaba.`,
+          advice: 'Volvé a encenderlo desde el inicio. Si se repite, buscá una actualización del mod o apagalo un rato.',
         };
       default:
         return {
-          label: evt.category_label || 'Desconexión',
-          icon: 'ℹ️',
-          classes: 'bg-zinc-800 text-zinc-300 border border-zinc-700/50',
+          headline: `${player} se desconectó por un motivo poco común.`,
+          advice: 'Mirá el detalle técnico para saber más.',
         };
     }
   };
 
-  const renderSeverityBadge = (evt) => {
-    const b = getBadgeData(evt);
-    return `<span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${b.classes}"><span>${b.icon}</span><span>${esc(b.label)}</span></span>`;
+  const markClass = (evt) => {
+    if (evt.category === 'NORMAL_DISCONNECT') return '';
+    return isCriticalEvent(evt) ? 'state-error' : 'state-busy';
   };
 
-  // Renderizado dinámico de tarjetas de eventos
+  const renderEmpty = (title, text) => {
+    if (emptyTemplate && emptyTemplate.content) {
+      const node = emptyTemplate.content.cloneNode(true);
+      node.querySelector('[data-empty-title]').textContent = title;
+      node.querySelector('[data-empty-text]').textContent = text;
+      crashesList.replaceChildren(node);
+      return;
+    }
+    crashesList.innerHTML = `<p class="py-12 text-center text-zinc-500">${esc(text)}</p>`;
+  };
+
+  // One row per event: plain sentence first, technical detail collapsed.
   const renderEvents = (events) => {
     if (!events.length) {
-      crashesList.innerHTML = `
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-12 text-center text-sm text-zinc-500">
-          No se encontraron desconexiones o errores con los filtros aplicados.
-        </div>
-      `;
+      if (allLoadedEvents.length) {
+        renderEmpty('Nada para mostrar', 'Ningún evento coincide con lo que elegiste. Probá cambiar los filtros.');
+      } else {
+        renderEmpty('Todo tranquilo', 'No encontramos problemas. Si algo falla, va a aparecer acá.');
+      }
       return;
     }
 
     crashesList.innerHTML = events.map((evt) => {
-      const isNormal = evt.category === 'NORMAL_DISCONNECT';
-      const isCritical = evt.category === 'MOD_ERROR' || evt.category === 'INVALID_DATA' || evt.severity === 'error';
-      const isTimeout = evt.category === 'TIMEOUT';
-      const isKick = evt.category === 'KICKED_BANNED';
-
-      let cardClasses = 'rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 sm:p-5 transition hover:border-zinc-700 space-y-3 opacity-90 hover:opacity-100';
-      if (isCritical) {
-        cardClasses = 'rounded-xl border border-rose-500/30 bg-rose-950/10 p-4 sm:p-5 transition hover:border-rose-500/60 space-y-3 border-l-4 border-l-rose-500 shadow-sm';
-      } else if (isTimeout) {
-        cardClasses = 'rounded-xl border border-violet-500/30 bg-violet-950/10 p-4 sm:p-5 transition hover:border-violet-500/60 space-y-3 border-l-4 border-l-violet-500';
-      } else if (isKick) {
-        cardClasses = 'rounded-xl border border-sky-500/30 bg-sky-950/10 p-4 sm:p-5 transition hover:border-sky-500/60 space-y-3 border-l-4 border-l-sky-500';
-      } else if (!isNormal) {
-        cardClasses = 'rounded-xl border border-amber-500/30 bg-amber-950/10 p-4 sm:p-5 transition hover:border-amber-500/60 space-y-3 border-l-4 border-l-amber-500';
-      }
+      const info = explain(evt);
+      const label = getBadgeData(evt).label;
+      const suggestion = evt.suggestion
+        ? `<p class="mt-2 text-zinc-400">${esc(evt.suggestion)}</p>`
+        : '';
+      const suspectedMod = evt.suspected_mod
+        ? `<p class="mt-2 text-zinc-500">Mod que pudo causarlo: <span class="font-mono text-zinc-300">${esc(evt.suspected_mod)}</span></p>`
+        : '';
 
       return `
-        <article class="${cardClasses}">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-              <img src="${evt.avatar_url}" alt="${esc(evt.player)}" class="h-10 w-10 rounded-lg border border-zinc-800 bg-zinc-950 object-cover shrink-0" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/64'">
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-sm text-zinc-100">${esc(evt.player)}</span>
-                  ${renderSeverityBadge(evt)}
-                </div>
-                <p class="text-xs text-zinc-400 mt-0.5">🕒 ${esc(evt.timestamp)} · <span class="font-mono text-[11px] text-zinc-500">${esc(evt.file_source)}</span></p>
+        <article class="flex items-start gap-4 border-b border-zinc-800 py-4">
+          <img src="${esc(evt.avatar_url)}" alt="" class="h-10 w-10 shrink-0 rounded-lg bg-zinc-800 object-cover" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/64'">
+          <div class="min-w-0 flex-1">
+            <h3 class="font-semibold text-zinc-50">${esc(info.headline)}</h3>
+            <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-zinc-500">
+              <span class="${markClass(evt)} inline-flex items-center gap-2"><span class="state-mark" aria-hidden="true"></span>${esc(label)}</span>
+              <span aria-hidden="true">·</span>
+              <span>${esc(evt.timestamp)}</span>
+            </p>
+            <p class="mt-1.5 leading-relaxed text-zinc-400">${esc(info.advice)}</p>
+            <details class="mt-2 text-sm">
+              <summary class="cursor-pointer text-zinc-400 hover:text-zinc-200">Ver el detalle técnico</summary>
+              <div class="mt-3 rounded-lg bg-zinc-900 p-3">
+                <p class="break-words font-mono text-xs text-zinc-300">${esc(evt.summary)}</p>
+                ${suggestion}
+                ${suspectedMod}
+                <p class="mt-2 text-zinc-500">Archivo: <span class="font-mono">${esc(evt.file_source)}</span></p>
+                <button type="button" data-view-event="${esc(evt.id)}" class="link mt-2">Ver el registro completo</button>
               </div>
-            </div>
-
-            <button data-view-event="${esc(evt.id)}" class="rounded-lg bg-zinc-800 px-3.5 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-emerald-300 transition shrink-0 flex items-center gap-1">
-              <span>Ver Log y Traza</span> <span>➔</span>
-            </button>
-          </div>
-
-          <div class="rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-            <div class="flex items-center gap-2 overflow-hidden text-ellipsis">
-              <span class="text-zinc-500 font-semibold uppercase text-[10px] tracking-wider shrink-0">Motivo:</span>
-              ${isNormal ? `
-                <span class="text-zinc-300 font-medium flex items-center gap-1.5">
-                  <span class="text-emerald-400/80">✔</span> El jugador se desconectó voluntariamente del servidor.
-                  <span class="text-zinc-500 font-mono text-[11px]">(${esc(evt.summary)})</span>
-                </span>
-              ` : `
-                <span class="text-zinc-200 font-mono">${esc(evt.summary)}</span>
-              `}
-            </div>
-            ${evt.suspected_mod ? `
-              <div class="inline-flex items-center gap-1.5 rounded-md bg-rose-500/20 border border-rose-500/40 px-2.5 py-1 text-xs font-bold text-rose-200 shadow-sm shrink-0">
-                <span>📦 Mod sospechoso:</span>
-                <span class="font-mono underline decoration-rose-400/50">${esc(evt.suspected_mod)}</span>
-              </div>
-            ` : ''}
+            </details>
           </div>
         </article>
       `;
     }).join('');
   };
 
-  // Aplica filtro de sólo anomalías y renderiza la lista
+  // Applies the "hide normal exits" toggle and renders the list.
   const applyFiltersAndRender = () => {
     let filtered = allLoadedEvents;
     const errorsOnly = filterErrorsOnly && filterErrorsOnly.checked;
@@ -165,16 +172,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (filterCounter) {
       if (errorsOnly) {
         const hiddenCount = allLoadedEvents.length - filtered.length;
-        filterCounter.textContent = `Mostrando ${filtered.length} eventos anómalos (ocultas ${hiddenCount} salidas normales)`;
+        filterCounter.textContent = `Se ven ${filtered.length} · ocultaste ${hiddenCount} salidas normales`;
       } else {
-        filterCounter.textContent = `Mostrando ${filtered.length} eventos`;
+        filterCounter.textContent = `Se ven ${filtered.length}`;
       }
     }
 
     renderEvents(filtered);
   };
 
-  // Carga de eventos desde el endpoint
+  // Loads events from the API.
   const loadEvents = async () => {
     const p = playerSelect ? playerSelect.value : '';
     const c = categorySelect ? categorySelect.value : '';
@@ -191,14 +198,12 @@ document.addEventListener('DOMContentLoaded', () => {
       $('#stat-critical').textContent = data.critical_count;
       $('#stat-players').textContent = data.players_count;
 
-      // Calcular salidas normales registradas
       const normalCount = (data.events || []).filter((evt) => evt.category === 'NORMAL_DISCONNECT').length;
       const statNormal = $('#stat-normal');
       if (statNormal) {
         statNormal.textContent = normalCount;
       }
 
-      // Llenar selector de jugadores si está vacío
       if (playerSelect && playerSelect.options.length <= 1) {
         data.unique_players.forEach((name) => {
           const opt = document.createElement('option');
@@ -208,12 +213,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
 
-      // Llenar selector de categorías si está vacío
       if (categorySelect && categorySelect.options.length <= 1) {
         data.categories.forEach((cat) => {
           const opt = document.createElement('option');
           opt.value = cat.key;
-          opt.textContent = cat.label;
+          opt.textContent = getBadgeData({ category: cat.key, category_label: cat.label }).label;
           categorySelect.append(opt);
         });
       }
@@ -221,18 +225,17 @@ document.addEventListener('DOMContentLoaded', () => {
       allLoadedEvents = data.events || [];
       applyFiltersAndRender();
     } catch (e) {
-      crashesList.innerHTML = `<p class="text-sm text-rose-400">Error al cargar registros: ${esc(e.message)}</p>`;
+      crashesList.innerHTML = `<p class="py-12 text-center text-[#f3a79b]">No pudimos cargar la lista. ${esc(e.message)}</p>`;
     }
   };
 
-  // Listeners de filtros
   if (playerSelect) {
     playerSelect.onchange = loadEvents;
   }
 
   if (categorySelect) {
     categorySelect.onchange = () => {
-      // Si el usuario selecciona explícitamente "Desconexión Normal", desactivar el checkbox de solo errores
+      // Picking "normal exit" explicitly turns off the "hide normal exits" toggle.
       if (categorySelect.value === 'NORMAL_DISCONNECT' && filterErrorsOnly && filterErrorsOnly.checked) {
         filterErrorsOnly.checked = false;
       }
@@ -242,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (filterErrorsOnly) {
     filterErrorsOnly.onchange = () => {
-      // Si se activa solo errores y la categoría era "NORMAL_DISCONNECT", resetearla
+      // Hiding normal exits resets a "normal exit" category filter.
       if (filterErrorsOnly.checked && categorySelect && categorySelect.value === 'NORMAL_DISCONNECT') {
         categorySelect.value = '';
       }
@@ -258,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // Escanear logs ahora (incremental)
+  // Incremental scan of the server logs.
   const btnScanLogs = $('#btn-scan-logs');
   if (btnScanLogs) {
     btnScanLogs.onclick = async () => {
@@ -275,33 +278,33 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // Re-escanear historial limpio (limpiar + escanear)
+  // Clear the stored history, then scan every log again.
   const btnRescanClean = $('#btn-rescan-clean');
   if (btnRescanClean) {
     btnRescanClean.onclick = async () => {
-      if (!confirm('¿Deseás vaciar el historial actual y volver a escanear todos los logs desde cero?')) return;
+      if (!confirm('¿Borrar la lista de esta página y volver a revisar todos los registros desde cero?')) return;
       btnRescanClean.disabled = true;
       try {
         await Panel.api('/api/player-crashes', { method: 'DELETE' });
         const res = await Panel.api('/api/player-crashes/scan', { method: 'POST' });
-        Panel.toast(`Historial reiniciado. ${res.message || 'Escaneo completado.'}`, 'success');
+        Panel.toast(`Listo, revisamos todo de nuevo. ${res.message || ''}`.trim(), 'success');
         await loadEvents();
       } catch (err) {
-        Panel.toast(`Error en el re-escaneo: ${err.message}`, 'error');
+        Panel.toast(`No pudimos revisar todo de nuevo: ${err.message}`, 'error');
       } finally {
         btnRescanClean.disabled = false;
       }
     };
   }
 
-  // Limpiar historial
+  // Clear the stored history.
   const btnClearLogs = $('#btn-clear-logs');
   if (btnClearLogs) {
     btnClearLogs.onclick = async () => {
-      if (!confirm('¿Deseás vaciar el historial de desconexiones guardadas? Los logs de Minecraft seguirán en disco.')) return;
+      if (!confirm('¿Borrar el historial de esta página? Los registros del servidor quedan guardados.')) return;
       try {
         await Panel.api('/api/player-crashes', { method: 'DELETE' });
-        Panel.toast('Historial limpiado.', 'success');
+        Panel.toast('Historial borrado.', 'success');
         await loadEvents();
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -309,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // Modal Inspector de Log Completo
+  // Full log viewer.
   crashesList.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-view-event]');
     if (!btn) return;
@@ -320,68 +323,27 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedEvent = evt;
     $('#viewer-player-avatar').src = evt.avatar_url;
     $('#viewer-player-name').textContent = evt.player;
-    $('#viewer-timestamp').textContent = `${evt.timestamp} · Archivo: ${evt.file_source}`;
-    $('#viewer-source-file').textContent = `Origen: ${evt.file_source}`;
+    $('#viewer-timestamp').textContent = evt.timestamp;
+    $('#viewer-source-file').textContent = `Archivo: ${evt.file_source}`;
+    $('#viewer-category-badge').textContent = getBadgeData(evt).label;
 
-    // Actualizar badge visual en el modal
-    const badge = $('#viewer-category-badge');
-    const b = getBadgeData(evt);
-    badge.className = `inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${b.classes}`;
-    badge.innerHTML = `<span>${b.icon}</span><span>${esc(b.label)}</span>`;
+    const info = explain(evt);
+    $('#viewer-suggestion-title').textContent = info.headline;
+    $('#viewer-suggestion-text').textContent = info.advice;
+    $('#viewer-suggestion-box').classList.remove('hidden');
 
-    // Diagnóstico sugerido adaptado a si es salida voluntaria o error real
-    const sugBox = $('#viewer-suggestion-box');
-    const sugTitle = $('#viewer-suggestion-title') || sugBox.querySelector('p:first-child');
-    const sugText = $('#viewer-suggestion-text');
-
-    if (evt.category === 'NORMAL_DISCONNECT') {
-      sugBox.className = 'mt-4 rounded-lg border border-zinc-700/60 bg-zinc-900/60 p-4 text-xs leading-relaxed text-zinc-300';
-      sugTitle.className = 'font-bold text-zinc-400 uppercase tracking-wider text-[10px] flex items-center gap-1.5';
-      sugTitle.innerHTML = '<span>🚪</span> <span>Diagnóstico: Salida Voluntaria</span>';
-      sugText.innerHTML = 'El jugador cerró su sesión o salió del servidor de forma normal (desconexión voluntaria / quit). <strong>No representa un error ni incompatibilidad de mods.</strong>';
-      sugBox.classList.remove('hidden');
-    } else if (evt.category === 'MOD_ERROR' || evt.category === 'INVALID_DATA' || evt.severity === 'error') {
-      sugBox.className = 'mt-4 rounded-lg border border-rose-500/30 bg-rose-950/20 p-4 text-xs leading-relaxed text-rose-200';
-      sugTitle.className = 'font-bold text-rose-300 uppercase tracking-wider text-[10px] flex items-center gap-1.5';
-      sugTitle.innerHTML = '<span>💥</span> <span>Diagnóstico: Fallo Crítico / Incompatibilidad</span>';
-      let desc = evt.suggestion || 'Se produjo un error crítico o incompatibilidad de datos durante la sesión del jugador.';
-      if (evt.suspected_mod) {
-        desc += ` Actividad anómala asociada al mod <strong class="text-rose-100 underline decoration-rose-400/60">${esc(evt.suspected_mod)}</strong>.`;
-      }
-      sugText.innerHTML = desc;
-      sugBox.classList.remove('hidden');
-    } else if (evt.category === 'TIMEOUT') {
-      sugBox.className = 'mt-4 rounded-lg border border-violet-500/30 bg-violet-950/20 p-4 text-xs leading-relaxed text-violet-200';
-      sugTitle.className = 'font-bold text-violet-300 uppercase tracking-wider text-[10px] flex items-center gap-1.5';
-      sugTitle.innerHTML = '<span>⏳</span> <span>Diagnóstico: Tiempo de Espera Agotado</span>';
-      sugText.innerHTML = evt.suggestion || 'El jugador perdió conexión debido a saturación de paquetes, lag de red o cierre inesperado de la conexión keep-alive.';
-      sugBox.classList.remove('hidden');
-    } else if (evt.category === 'KICKED_BANNED') {
-      sugBox.className = 'mt-4 rounded-lg border border-sky-500/30 bg-sky-950/20 p-4 text-xs leading-relaxed text-sky-200';
-      sugTitle.className = 'font-bold text-sky-300 uppercase tracking-wider text-[10px] flex items-center gap-1.5';
-      sugTitle.innerHTML = '<span>🚫</span> <span>Diagnóstico: Expulsión / Baneo</span>';
-      sugText.innerHTML = evt.suggestion || 'El jugador fue expulsado por la lista blanca (whitelist), comando o sistema de moderación.';
-      sugBox.classList.remove('hidden');
-    } else {
-      sugBox.className = 'mt-4 rounded-lg border border-amber-500/30 bg-amber-950/20 p-4 text-xs leading-relaxed text-amber-200';
-      sugTitle.className = 'font-bold text-amber-300 uppercase tracking-wider text-[10px] flex items-center gap-1.5';
-      sugTitle.innerHTML = '<span>⚠️</span> <span>Diagnóstico Sugerido</span>';
-      sugText.innerHTML = evt.suggestion || 'Desconexión anómala detectada. Revise el extracto de log para obtener más información.';
-      sugBox.classList.remove('hidden');
-    }
-
-    // Renderizar líneas con coloreado de errores
+    // Colour error, warning and disconnect lines; everything is escaped first.
     const logContent = $('#viewer-log-content');
     logContent.innerHTML = evt.context_lines.map((line) => {
       const escapedLine = esc(line);
       if (line.includes('ERROR') || line.includes('FATAL') || line.includes('Exception')) {
-        return `<span class="text-rose-400 font-bold bg-rose-950/40">${escapedLine}</span>`;
+        return `<span class="text-[#f3a79b]">${escapedLine}</span>`;
       }
       if (line.includes('WARN')) {
-        return `<span class="text-amber-300">${escapedLine}</span>`;
+        return `<span class="text-[#e8b04b]">${escapedLine}</span>`;
       }
       if (line.includes('lost connection') || line.includes('left the game')) {
-        return `<span class="text-cyan-300 font-semibold">${escapedLine}</span>`;
+        return `<span class="text-zinc-100">${escapedLine}</span>`;
       }
       return escapedLine;
     }).join('\n');
@@ -389,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
     logModal.showModal();
   });
 
-  // Copiar log completo al portapapeles
+  // Copy the full report to the clipboard.
   const btnCopyLog = $('#btn-copy-log');
   if (btnCopyLog) {
     btnCopyLog.onclick = async () => {
@@ -409,9 +371,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       try {
         await navigator.clipboard.writeText(fullTrace);
-        Panel.toast('Log completo copiado al portapapeles.', 'success');
+        Panel.toast('Copiado. Ya lo podés pegar donde pidas ayuda.', 'success');
       } catch {
-        Panel.toast('No se pudo copiar el log.', 'error');
+        Panel.toast('No pudimos copiar. Probá de nuevo.', 'error');
       }
     };
   }
