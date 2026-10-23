@@ -15,7 +15,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from app.core.archive_safety import ArchiveLimits, ArchiveSafetyError, check_zip, extract_zip
 from app.core.config import Settings, settings
+from app.core.path_safety import is_safe_component
 from app.schemas.backup import BackupAuditItem, BackupAuditResponse, BackupItem, BackupSafetyItem, BackupSafetyOverview
 from app.services.discord_service import DiscordService, discord_service
 from app.services.server_process import MinecraftServerManager, ServerProcessError, server_manager
@@ -75,7 +77,9 @@ class BackupService:
         from app.services.server_properties_service import server_properties_service
         props = server_properties_service.read_properties()
         active_world = props.get("level-name", "world")
-        if self._settings.server_directory:
+        # level-name must name a folder directly inside server/; anything else
+        # ("../", absolute paths) would back up or replace unrelated folders.
+        if self._settings.server_directory and is_safe_component(active_world):
             target = self._settings.server_directory / active_world
             if target.is_dir():
                 return target
@@ -171,6 +175,8 @@ class BackupService:
         async with self._operation_lock:
             try:
                 await asyncio.to_thread(self._restore_archive_sync, backup_path)
+            except ArchiveSafetyError as error:
+                raise BackupServiceError(f"El backup no es seguro para restaurar: {error}") from error
             except (OSError, zipfile.BadZipFile) as error:
                 raise BackupServiceError(f"No se pudo restaurar el backup: {error}") from error
         return await asyncio.to_thread(self._backup_item_from_path, backup_path)
@@ -178,7 +184,8 @@ class BackupService:
     def _create_archive_sync(self, backup_path: Path) -> None:
         with zipfile.ZipFile(backup_path, mode="x", compression=zipfile.ZIP_DEFLATED) as archive:
             for path in self.world_directory.rglob("*"):
-                if not path.is_file():
+                # Never follow links out of the world into other files of the host.
+                if path.is_symlink() or not path.is_file():
                     continue
                 if path.name.lower() in _IGNORED_BACKUP_FILENAMES or path.suffix.lower() in _IGNORED_BACKUP_EXTENSIONS:
                     continue
@@ -223,23 +230,19 @@ class BackupService:
             if staging_root.exists():
                 shutil.rmtree(staging_root)
 
-    @staticmethod
-    def _extract_world_safely(archive: zipfile.ZipFile, target_directory: Path) -> None:
-        for member in archive.infolist():
-            member_path = Path(member.filename)
-            if member_path.is_absolute() or ".." in member_path.parts or not member_path.parts:
-                raise BackupServiceError("El backup contiene una ruta inválida.")
-            if member_path.parts[0] != "world":
+    def _extract_world_safely(self, archive: zipfile.ZipFile, target_directory: Path) -> None:
+        """Validate every entry (traversal, links, zip bombs) before extracting."""
+        assert self._settings.server_directory is not None
+        free_bytes = shutil.disk_usage(self._settings.server_directory).free
+        reserve = self._settings.backup_min_free_disk_gb * _GIBIBYTE
+        limits = ArchiveLimits(max_total_bytes=max(0, free_bytes - reserve))
+        for _, parts in check_zip(archive, limits):
+            if parts[0] != "world":
                 raise BackupServiceError("El backup contiene archivos fuera de world/.")
-            destination = (target_directory / member_path).resolve()
-            if not destination.is_relative_to(target_directory.resolve()):
-                raise BackupServiceError("El backup contiene una ruta inválida.")
-            if member.is_dir():
-                destination.mkdir(parents=True, exist_ok=True)
-                continue
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(member) as source, destination.open("wb") as target:
-                shutil.copyfileobj(source, target)
+        try:
+            extract_zip(archive, target_directory, limits)
+        except ArchiveSafetyError as error:
+            raise BackupServiceError(str(error)) from error
 
     def _list_backups_sync(self) -> list[BackupItem]:
         return sorted(

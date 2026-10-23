@@ -23,6 +23,7 @@ from typing import Any
 
 import tomlkit
 
+from app.core.archive_safety import read_member_capped
 from app.core.config import Settings, settings
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.services.server_properties_service import server_properties_service
@@ -508,7 +509,10 @@ class RestrictionService:
                     lang_files = [n for n in namelist if n.endswith("/lang/en_us.json") or n.endswith("/lang/es_es.json")]
                     for lf in lang_files:
                         try:
-                            data = json.loads(z.read(lf).decode("utf-8", errors="ignore"))
+                            raw = read_member_capped(z, lf, 4 * 1024 * 1024)
+                            if raw is None:
+                                continue
+                            data = json.loads(raw.decode("utf-8", errors="ignore"))
                             for k, v in data.items():
                                 val_str = str(v).strip()
                                 if not val_str or "%s" in val_str:
