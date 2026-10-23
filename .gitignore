@@ -1,4 +1,4 @@
-# Entorno virtual de Python y cachés
+# Python virtual environments and caches
 .venv/
 venv/
 __pycache__/
@@ -8,63 +8,42 @@ __pycache__/
 .pytest_cache/
 pytest_temp/
 .pytest-tmp/
-
-# Servidor de Minecraft (Mundos y datos pesados generados en runtime)
-server/world/
-server/Oficial/
-server/pruebamundo/
-server/logs/
-server/crash-reports/
-server/libraries/
-server/mods/
-server/client_only_mods/
-server/.mixin.out/
-server/dynamic-data-pack-cache/
-server/usercache.json
-server/usernamecache.json
-server/server-icon.old.png
 *.log
 
-# Caches de mods y sesiones temporales
-server/immersive_paintings_cache/
-server/sdlinkstorage/
-server/mods_client_backup/
-server/worldedit/
+# Every clone starts with an empty local server. Never version a real server,
+# players, worlds, mods or mod settings.
+server/*
+!server/.gitkeep
 **/.archive-unpack/
-server/pfm/
-server/config/chunky/tasks/
-server/config/spark/activity.json
-server/config/luckperms/libs/
 
-# Bases de datos y archivos de estado binario
+# Databases and binary state
 *.db
 *.db-shm
 *.db-wal
 *.mv.db
 
-# Copias de seguridad y paquetes comprimidos
-backups/*.zip
+# Backups and archives
+backups/
 client_pack/*.zip
-server/*.zip
-server/simplebackups/
+*.zip
 
-# Herramientas binarias pesadas
-tools/*.jar
-tools/*.exe
-tools/decompiled/
-tools/build_test/
-tools/EmbeddiumWorldRenderer.class
+# Heavy or host-specific tooling
+tools/*
+!tools/.gitkeep
+!tools/java/
+tools/java/*
+!tools/java/.gitkeep
 
-# Mod build artifacts y perfiles temporales
-pointblank_durability_mod/build/
+# Build artifacts and profiles
 build/
 *.sparkprofile
 *.bak
 
-# Archivos de entorno y secretos
+# Environment files and panel runtime state (secrets, per-host configuration)
 .env
 .env.local
 .env.*
+!.env.example
 web_panel/.totp_secret
 web_panel/.totp_secret.tmp
 web_panel/.playit_agent_secret
@@ -80,24 +59,5 @@ web_panel/.player_crashes.json
 web_panel/.server_connection.json
 web_panel/.waypoints.json
 web_panel/.worldedit_state.json
-
 web_panel/.launch_settings.json
-
-# Portable Java downloaded by each host
-tools/java/
-!tools/java/.gitkeep
-
-# Developed and released separately
-pointblank_durability_mod/
-fortune_anvil_fix/
-landing-mod/
-# Every clone starts with an empty local server. Never version a real server, players, worlds, or mod settings.
-server/*
-!server/.gitkeep
-
-# Host-specific leftovers and development inspection scripts kept locally only.
-tools/*.py
-!tools/.gitkeep
-tools/generate_hd_textures.py
 web_panel/config/presets/luckperms/current-server-ranks.json
-backups/*.bundle
