@@ -34,6 +34,8 @@ async def save_discord_config(config: DiscordConfig) -> DiscordActionResponse:
             success=True,
             message="Configuración de Discord guardada correctamente.",
         )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     except Exception as error:
         logger.error("Error guardando configuración de Discord: %s", error)
         raise HTTPException(

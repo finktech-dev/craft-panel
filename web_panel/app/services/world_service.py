@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import Settings, settings
+from app.core.path_safety import is_safe_component
 from app.schemas.worlds import WorldCreateRequest, WorldItem
 from app.services.server_properties_service import server_properties_service
 from app.services.runtime_guard import require_server_stopped
@@ -144,12 +145,18 @@ class WorldService:
             if world_name == active_world:
                 raise ValueError("No se puede eliminar el mundo que está actualmente activo. Cambiá a otro mundo primero.")
 
+            if not is_safe_component(world_name):
+                raise ValueError("Ruta de mundo inválida.")
             target_path = (self.server_dir / world_name).resolve()
-            if not target_path.is_relative_to(self.server_dir.resolve()):
+            # Only a direct child that really is a world may be deleted; never
+            # server/ itself (".") or folders such as mods/, config/ or libraries/.
+            if target_path.parent != self.server_dir.resolve() or (self.server_dir / world_name).is_symlink():
                 raise ValueError("Ruta de mundo inválida.")
 
             if not target_path.is_dir():
                 raise ValueError(f"El mundo '{world_name}' no existe.")
+            if not (target_path / "level.dat").is_file():
+                raise ValueError(f"'{world_name}' no es una carpeta de mundo; no se eliminó.")
 
             await asyncio.to_thread(shutil.rmtree, target_path)
             return {
