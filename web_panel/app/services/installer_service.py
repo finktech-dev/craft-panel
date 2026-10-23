@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import locale
 import os
 import uuid
 from datetime import UTC, datetime
@@ -22,6 +23,18 @@ from app.websocket.manager import ConnectionManager, connection_manager
 _DOWNLOAD_CHUNK_SIZE = 64 * 1024
 _MOJANG_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 _FABRIC_INSTALLERS = "https://meta.fabricmc.net/v2/versions/installer"
+
+
+def _decode_process_line(raw_line: bytes) -> str:
+    """Decode installer output that may not be UTF-8.
+
+    On Windows, Java writes redirected output in the ANSI code page (for
+    example cp1252), so paths such as a user folder with accents are not UTF-8.
+    """
+    try:
+        return raw_line.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw_line.decode(locale.getpreferredencoding(False) or "utf-8", errors="replace")
 
 
 class InstallerServiceError(RuntimeError):
@@ -178,7 +191,7 @@ class InstallerService:
             ) from error
         assert process.stdout is not None
         async for raw_line in process.stdout:
-            line = raw_line.decode("utf-8", errors="replace").rstrip()
+            line = _decode_process_line(raw_line).rstrip()
             if line:
                 await self._publish(line)
         if await process.wait() != 0:
@@ -222,9 +235,12 @@ class InstallerService:
         jar = "server.jar" if flavor == "vanilla" else "fabric-server-launch.jar"
         bat = f"@echo off\r\njava @user_jvm_args.txt -jar {jar} %*\r\n"
         shell = f"#!/usr/bin/env sh\nexec java @user_jvm_args.txt -jar {jar} \"$@\"\n"
-        (root / "run.bat").write_text(bat, encoding="utf-8")
+        # newline="" writes the line endings exactly as given. Text mode on
+        # Windows would otherwise turn run.bat into CR CR LF and run.sh into
+        # CRLF, which breaks the script when the server folder is moved to Linux.
+        (root / "run.bat").write_text(bat, encoding="utf-8", newline="")
         shell_path = root / "run.sh"
-        shell_path.write_text(shell, encoding="utf-8")
+        shell_path.write_text(shell, encoding="utf-8", newline="")
         with contextlib.suppress(OSError):
             os.chmod(shell_path, 0o700)
 
