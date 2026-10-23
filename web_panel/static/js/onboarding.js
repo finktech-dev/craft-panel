@@ -1,161 +1,242 @@
 (() => {
-  const showError = (message) => { const node = document.querySelector('#onboarding-error'); node.textContent = message; node.classList.remove('hidden'); };
+  const $ = (selector) => document.querySelector(selector);
+  const esc = (value) => Panel.escapeHtml(value);
+  const STEPS = ['java', 'server', 'connection', 'ready'];
+  // Lets someone continue without a friends list on purpose, without looping back to step 3.
+  const FRIENDS_SKIPPED_KEY = 'craft-onboarding-friends-skipped';
+
+  let state = null;
+  const chosenVersion = {};
+
+  const say = (selector, message) => { const node = $(selector); if (node) node.textContent = message; };
+  const showError = (message) => { const node = $('#onboarding-error'); node.textContent = message; node.classList.remove('hidden'); };
   const selectedFlavor = () => document.querySelector('input[name="flavor"]:checked')?.value || 'vanilla';
-  const setServerMode = () => {
-    const isImport = selectedFlavor() === 'import';
-    document.querySelector('#install-new-server')?.classList.toggle('hidden', isImport);
-    document.querySelector('#import-existing-server')?.classList.toggle('hidden', !isImport);
-  };
+  const friendsSkipped = () => { try { return sessionStorage.getItem(FRIENDS_SKIPPED_KEY) === '1'; } catch { return false; } };
+  const rememberFriendsSkipped = () => { try { sessionStorage.setItem(FRIENDS_SKIPPED_KEY, '1'); } catch { /* private mode */ } };
+  const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
   const showStep = (name) => {
-    document.querySelectorAll('.onboarding-step').forEach(node => node.classList.toggle('hidden', node.dataset.step !== name));
-    document.querySelectorAll('[data-step-indicator]').forEach(node => node.classList.toggle('border-emerald-400', node.dataset.stepIndicator === name));
+    document.querySelectorAll('.onboarding-step').forEach((node) => node.classList.toggle('hidden', node.dataset.step !== name));
+    const current = STEPS.indexOf(name);
+    document.querySelectorAll('[data-step-indicator]').forEach((node) => {
+      const index = STEPS.indexOf(node.dataset.stepIndicator);
+      node.dataset.state = index < current ? 'done' : index === current ? 'current' : 'pending';
+      node.querySelector('.step-mark').textContent = index < current ? '✓' : String(index + 1);
+      if (index === current) node.setAttribute('aria-current', 'step'); else node.removeAttribute('aria-current');
+    });
   };
-  const waitForPublicAddress = async (feedback) => {
-    feedback.textContent = 'El servidor está iniciando. Preparando tu dirección de Playit…';
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      await new Promise(resolve => window.setTimeout(resolve, 1000));
-      const tunnel = await Panel.api('/api/tunnel/status');
-      if (tunnel.public_address) {
-        feedback.textContent = `¡Listo! Compartí esta dirección con tus amigos: ${tunnel.public_address}`;
-        return;
-      }
-      if (tunnel.last_error) throw new Error(tunnel.last_error);
-    }
-    feedback.textContent = 'El servidor está iniciando. Playit todavía no informó una dirección; esperá un momento y actualizá esta página.';
+
+  const internetReady = () => !state?.playit_enabled || state?.playit_connected;
+  const effectiveStep = () => {
+    if (state.first_step === 'connection' && internetReady() && friendsSkipped()) return 'ready';
+    return state.first_step;
   };
+
+  const fillVersions = () => {
+    const flavor = selectedFlavor();
+    const select = $('#minecraft-version');
+    const versions = state?.recommended_versions?.[flavor] || [];
+    select.replaceChildren(...versions.map((value) => new Option(value, value, false, value === chosenVersion[flavor])));
+    $('#install-new-server')?.classList.toggle('hidden', flavor === 'import');
+    $('#import-existing-server')?.classList.toggle('hidden', flavor !== 'import');
+  };
+
+  const renderFriends = async () => {
+    let whitelist = { enabled: false, players: [] };
+    try { whitelist = await Panel.api('/api/whitelist'); } catch { /* the server folder may not exist yet */ }
+    $('#friends-list').innerHTML = whitelist.players.map((player) => `
+      <li class="friend-chip">${esc(player.name)}<button type="button" data-remove-friend="${esc(player.name)}" aria-label="Quitar a ${esc(player.name)}">×</button></li>
+    `).join('');
+    return whitelist;
+  };
+
+  const renderInternet = () => {
+    const done = internetReady();
+    $('#playit-done')?.classList.toggle('hidden', !done);
+    $('#playit-steps')?.classList.toggle('hidden', done);
+    if (state && !state.playit_enabled) say('#playit-done', 'Elegiste jugar solo en esta casa. Lo podés cambiar después en Ajustes.');
+  };
+
   const refresh = async () => {
     try {
-      const state = await Panel.api('/api/onboarding/status');
-      document.querySelector('#onboarding-loading').classList.add('hidden');
-      document.querySelector('#java-message').textContent = state.java_message;
-      const flavor = selectedFlavor();
-      const version = document.querySelector('#minecraft-version');
-      version.replaceChildren(...(state.recommended_versions[flavor] || []).map(value => new Option(value, value)));
-      setServerMode();
+      state = await Panel.api('/api/onboarding/status');
+      $('#onboarding-loading').classList.add('hidden');
+      say('#java-message', state.java_ready ? '' : state.java_message);
+      fillVersions();
+      renderInternet();
+      await renderFriends();
+
       const launch = await Panel.api('/api/runtime/launch-settings');
-      const ram = document.querySelector('#onboarding-ram');
-      ram.replaceChildren(...Array.from({ length: launch.maximum_recommended_ram_gb }, (_, index) => { const value = index + 1; return new Option(`${value} GB`, String(value), false, value === launch.allocated_ram_gb); }));
-      if (launch.allocated_ram_gb && launch.allocated_ram_gb <= launch.maximum_recommended_ram_gb) {
-        ram.value = String(launch.allocated_ram_gb);
-      }
-      document.querySelector('#onboarding-ram-hint').textContent = `${launch.available_ram_gb} GB libres ahora · ${launch.total_ram_gb} GB totales (máx. recomendado: ${launch.maximum_recommended_ram_gb} GB).`;
-      showStep(state.first_step);
-      if (state.public_address) document.querySelector('#ready-feedback').textContent = `Dirección para compartir: ${state.public_address}`;
+      const ram = $('#onboarding-ram');
+      ram.replaceChildren(...Array.from({ length: launch.maximum_recommended_ram_gb }, (_, index) => {
+        const value = index + 1;
+        return new Option(`${value} GB`, String(value), false, value === launch.allocated_ram_gb);
+      }));
+      say('#onboarding-ram-hint', `Tu computadora tiene ${launch.total_ram_gb} GB. Recomendamos hasta ${launch.maximum_recommended_ram_gb} GB para que el resto siga andando bien.`);
+      showStep(effectiveStep());
     } catch (error) { showError(error.message); }
   };
 
+  const waitForPublicAddress = async () => {
+    say('#ready-feedback', 'Encendiendo… preparando la dirección para tus amigos.');
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await sleep(1000);
+      const tunnel = await Panel.api('/api/tunnel/status');
+      if (tunnel.public_address) return tunnel.public_address;
+      if (tunnel.last_error) throw new Error(tunnel.last_error);
+    }
+    return null;
+  };
+
+  const withButton = async (button, pendingLabel, task) => {
+    const original = button.textContent;
+    button.disabled = true;
+    if (pendingLabel) button.textContent = pendingLabel;
+    try { await task(); } finally { button.disabled = false; button.textContent = original; }
+  };
+
   document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[data-refresh]').forEach(button => button.addEventListener('click', refresh));
-    document.querySelector('#download-java')?.addEventListener('click', async () => {
-      const feedback = document.querySelector('#java-feedback');
-      const button = document.querySelector('#download-java');
-      const version = document.querySelector('#minecraft-version')?.value || '1.21.1';
-      button.disabled = true;
-      feedback.textContent = `Descargando Java compatible con Minecraft ${version}…`;
+    document.querySelectorAll('[data-refresh]').forEach((button) => button.addEventListener('click', refresh));
+    document.querySelectorAll('input[name="flavor"]').forEach((input) => input.addEventListener('change', fillVersions));
+    $('#minecraft-version')?.addEventListener('change', (event) => { chosenVersion[selectedFlavor()] = event.target.value; });
+
+    $('#download-java')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, 'Descargando…', async () => {
+      const version = $('#minecraft-version')?.value || state?.recommended_versions?.vanilla?.[0];
+      say('#java-feedback', 'Descargando Java. Puede tardar unos minutos según tu conexión.');
       try {
-        const result = await Panel.api('/api/onboarding/java', { method: 'POST', body: { minecraft_version: version } });
-        feedback.textContent = result.message;
+        const body = version ? { minecraft_version: version } : {};
+        const result = await Panel.api('/api/onboarding/java', { method: 'POST', body });
+        say('#java-feedback', result.message);
         await refresh();
-      } catch (error) {
-        feedback.textContent = error.message;
-      } finally {
-        button.disabled = false;
+      } catch (error) { say('#java-feedback', error.message); }
+    }));
+
+    $('#check-imported-server')?.addEventListener('click', async () => {
+      say('#install-feedback', 'Revisando la carpeta…');
+      try {
+        const status = await Panel.api('/api/onboarding/status');
+        if (!status.server_ready) throw new Error('Todavía no encontramos el archivo de inicio (run.bat) dentro de la carpeta server.');
+        say('#install-feedback', 'Encontramos tu servidor. No tocamos nada.');
+        await refresh();
+      } catch (error) { say('#install-feedback', error.message); }
+    });
+
+    $('#install-server')?.addEventListener('click', ({ currentTarget }) => {
+      if (!$('#accept-eula').checked) { say('#install-feedback', 'Para seguir tenés que aceptar las reglas de uso de Minecraft.'); return; }
+      return withButton(currentTarget, 'Instalando…', async () => {
+        say('#install-feedback', 'Descargando e instalando. Con mods puede tardar varios minutos; no cierres esta ventana.');
+        try {
+          const result = await Panel.api('/api/onboarding/install', {
+            method: 'POST',
+            body: { flavor: selectedFlavor(), minecraft_version: $('#minecraft-version').value, accept_eula: true },
+          });
+          say('#install-feedback', result.message);
+          await refresh();
+        } catch (error) { say('#install-feedback', error.message); }
+      });
+    });
+
+    // Friends list: the first name added turns the list on, so only listed people can join.
+    $('#friends-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const input = $('#friend-name');
+      const username = input.value.trim();
+      if (!/^[A-Za-z0-9_]{3,16}$/.test(username)) {
+        say('#friends-feedback', 'Los nombres de Minecraft tienen entre 3 y 16 letras, números o guiones bajos.');
+        return;
       }
-    });
-    document.querySelectorAll('input[name="flavor"]').forEach(input => input.addEventListener('change', refresh));
-    document.querySelector('#check-imported-server')?.addEventListener('click', async () => {
-      const feedback = document.querySelector('#install-feedback');
-      feedback.textContent = 'Revisando tu carpeta…';
+      say('#friends-feedback', `Agregando a ${username}…`);
       try {
-        const state = await Panel.api('/api/onboarding/status');
-        if (!state.server_ready) throw new Error('Todavía no encontré un script de inicio en la carpeta server. Revisá que hayas copiado run.bat o run.sh junto con los archivos del servidor.');
-        feedback.textContent = 'Servidor existente detectado. Tus archivos no fueron modificados.';
-        await refresh();
-      } catch (error) { feedback.textContent = error.message; }
+        await Panel.api('/api/whitelist/add', { method: 'POST', body: { username } });
+        const whitelist = await renderFriends();
+        if (!whitelist.enabled) await Panel.api('/api/whitelist/toggle', { method: 'POST', body: { enabled: true } });
+        say('#friends-feedback', `${username} ya puede entrar.`);
+        input.value = '';
+        input.focus();
+        state = await Panel.api('/api/onboarding/status');
+      } catch (error) { say('#friends-feedback', error.message); }
     });
-    document.querySelector('#install-server')?.addEventListener('click', async () => {
-      const feedback = document.querySelector('#install-feedback');
-      const button = document.querySelector('#install-server');
-      button.disabled = true;
-      feedback.textContent = 'Descargando e instalando…';
+    $('#friends-list')?.addEventListener('click', async (event) => {
+      const button = event.target.closest('[data-remove-friend]');
+      if (!button) return;
       try {
-        const result = await Panel.api('/api/onboarding/install', { method: 'POST', body: { flavor: selectedFlavor(), minecraft_version: document.querySelector('#minecraft-version').value, accept_eula: document.querySelector('#accept-eula').checked } });
-        feedback.textContent = result.message;
-        await refresh();
-      } catch (error) { feedback.textContent = error.message; } finally { button.disabled = false; }
+        await Panel.api('/api/whitelist/remove', { method: 'POST', body: { username: button.dataset.removeFriend } });
+        await renderFriends();
+      } catch (error) { say('#friends-feedback', error.message); }
     });
+
     const showPlayitClaim = (claimUrl) => {
-      const container = document.querySelector('#playit-claim');
-      const link = document.querySelector('#playit-claim-link');
-      if (!claimUrl || !container || !link) return false;
+      const link = $('#playit-claim-link');
+      if (!claimUrl || !link) return false;
       link.href = claimUrl;
-      link.textContent = '2. Abrir Playit para aprobar esta computadora →';
-      container.classList.remove('hidden');
+      link.textContent = 'Abrir Playit para aprobar esta computadora';
+      $('#playit-claim').classList.remove('hidden');
       return true;
     };
-    document.querySelector('#begin-playit-onboarding')?.addEventListener('click', async () => {
-      const feedback = document.querySelector('#connection-feedback');
-      const button = document.querySelector('#begin-playit-onboarding');
-      button.disabled = true;
-      feedback.textContent = 'Preparando la vinculación segura…';
+    $('#begin-playit-onboarding')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, 'Preparando…', async () => {
       try {
         let tunnel = await Panel.api('/api/tunnel/begin-claim', { method: 'POST' });
         for (let attempt = 0; !tunnel.claim_url && attempt < 20; attempt += 1) {
-          await new Promise(resolve => window.setTimeout(resolve, 500));
+          await sleep(500);
           tunnel = await Panel.api('/api/tunnel/status');
         }
-        if (!showPlayitClaim(tunnel.claim_url)) throw new Error('Playit no mostró el enlace de vinculación. Revisá tu conexión e intentá de nuevo.');
-        feedback.textContent = 'Paso 2 de 3: aprobá esta computadora en Playit y después volvé acá.';
-      } catch (error) { feedback.textContent = error.message; } finally { button.disabled = false; }
-    });
-    document.querySelector('#complete-playit-claim')?.addEventListener('click', async () => {
-      const feedback = document.querySelector('#connection-feedback');
+        if (!showPlayitClaim(tunnel.claim_url)) throw new Error('Playit no respondió. Revisá tu conexión a Internet e intentá de nuevo.');
+        say('#connection-feedback', 'Aprobá esta computadora en Playit y después volvé acá.');
+      } catch (error) { say('#connection-feedback', error.message); }
+    }));
+    $('#complete-playit-claim')?.addEventListener('click', async () => {
       try {
         await Panel.api('/api/tunnel/complete-claim', { method: 'POST' });
-        feedback.textContent = 'Listo: Playit quedó vinculado. Seguimos con el inicio del servidor.';
+        say('#connection-feedback', '');
         await refresh();
-      } catch (error) { feedback.textContent = error.message; }
+      } catch (error) { say('#connection-feedback', error.message); }
     });
-
-    document.querySelector('#show-manual-playit')?.addEventListener('click', () => {
-      document.querySelector('#manual-playit-secret')?.classList.remove('hidden');
-      document.querySelector('#show-manual-playit')?.classList.add('hidden');
-      document.querySelector('#onboarding-playit-secret')?.focus();
+    $('#show-manual-playit')?.addEventListener('click', () => {
+      $('#manual-playit-secret')?.classList.remove('hidden');
+      $('#show-manual-playit')?.classList.add('hidden');
+      $('#onboarding-playit-secret')?.focus();
     });
-
-    document.querySelector('#connect-playit-onboarding')?.addEventListener('click', async () => {
-      const feedback = document.querySelector('#connection-feedback');
+    $('#connect-playit-onboarding')?.addEventListener('click', async () => {
       try {
-        await Panel.api('/api/tunnel/setup', { method: 'POST', body: { agent_secret: document.querySelector('#onboarding-playit-secret').value } });
-        feedback.textContent = 'Playit conectado.';
+        await Panel.api('/api/tunnel/setup', { method: 'POST', body: { agent_secret: $('#onboarding-playit-secret').value } });
         await refresh();
-      } catch (error) { feedback.textContent = error.message; }
+      } catch (error) { say('#connection-feedback', error.message); }
     });
-    document.querySelector('#local-only-onboarding')?.addEventListener('click', async () => {
-      const feedback = document.querySelector('#connection-feedback');
+    $('#local-only-onboarding')?.addEventListener('click', async () => {
       try {
         const current = await Panel.api('/api/runtime/launch-settings');
         await Panel.api('/api/runtime/launch-settings', { method: 'PUT', body: { allocated_ram_gb: current.allocated_ram_gb, playit_enabled: false } });
-        feedback.textContent = 'Elegiste red local solamente.';
         await refresh();
-      } catch (error) { feedback.textContent = error.message; }
+      } catch (error) { say('#connection-feedback', error.message); }
     });
-    document.querySelector('#start-from-onboarding')?.addEventListener('click', async () => {
-      const feedback = document.querySelector('#ready-feedback');
-      const button = document.querySelector('#start-from-onboarding');
-      button.disabled = true;
-      feedback.textContent = 'Iniciando tu servidor…';
+
+    $('#friends-continue')?.addEventListener('click', async () => {
+      state = await Panel.api('/api/onboarding/status');
+      if (!internetReady()) {
+        say('#connection-feedback', 'Conectá Playit o elegí "Jugar solo en esta casa" en Otras opciones.');
+        return;
+      }
+      if (!state.whitelist_enabled) {
+        const ok = window.confirm('¿Seguir sin lista de amigos? Cualquiera que consiga la dirección va a poder entrar.');
+        if (!ok) { $('#friend-name')?.focus(); return; }
+        rememberFriendsSkipped();
+      }
+      showStep('ready');
+    });
+
+    $('#start-from-onboarding')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, 'Encendiendo…', async () => {
       try {
         const current = await Panel.api('/api/runtime/launch-settings');
-        await Panel.api('/api/runtime/launch-settings', { method: 'PUT', body: { allocated_ram_gb: Number(document.querySelector('#onboarding-ram').value), playit_enabled: current.playit_enabled } });
-        const result = await Panel.api('/api/server/start', { method: 'POST' });
-        if (current.playit_enabled) {
-          await waitForPublicAddress(feedback);
-        } else {
-          feedback.textContent = `${result.message} La primera copia de seguridad se creará cuando el mundo esté listo.`;
-        }
-      } catch (error) { feedback.textContent = error.message; } finally { button.disabled = false; }
-    });
+        await Panel.api('/api/runtime/launch-settings', { method: 'PUT', body: { allocated_ram_gb: Number($('#onboarding-ram').value), playit_enabled: current.playit_enabled } });
+        await Panel.api('/api/server/start', { method: 'POST' });
+        const address = current.playit_enabled ? await waitForPublicAddress() : null;
+        say('#ready-feedback', address
+          ? `¡Listo! Pasales esta dirección a tus amigos: ${address}`
+          : 'Tu servidor se está encendiendo. En el inicio vas a ver cuándo está listo y la dirección para compartir.');
+        $('#onboarding-done')?.classList.remove('hidden');
+      } catch (error) { say('#ready-feedback', error.message); }
+    }));
+
     refresh();
   });
 })();

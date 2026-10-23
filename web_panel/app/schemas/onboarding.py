@@ -25,6 +25,9 @@ class OnboardingStatus(BaseModel):
     server_message: str
     server_flavor: str | None
     playit_connected: bool
+    playit_enabled: bool = True
+    whitelist_enabled: bool = False
+    whitelisted_players: int = 0
     public_address: str | None
     first_step: Literal["java", "server", "connection", "ready"]
     recommended_versions: dict[ServerFlavor, list[str]]
