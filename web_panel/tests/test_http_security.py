@@ -69,6 +69,13 @@ def test_cross_site_login_is_rejected() -> None:
     assert response.status_code == 403
 
 
+def test_same_origin_login_through_a_local_reverse_proxy_is_accepted() -> None:
+    headers = {"origin": "https://panel.example.org", "x-forwarded-host": "panel.example.org"}
+    assert _login(_client(), headers=headers).status_code == 200
+    # The same headers from a remote peer are not trusted.
+    assert _login(_client(peer="203.0.113.5"), headers=headers).status_code == 403
+
+
 def test_state_change_without_csrf_token_is_rejected() -> None:
     client = _client()
     assert _login(client).status_code == 200

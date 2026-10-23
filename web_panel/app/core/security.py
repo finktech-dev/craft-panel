@@ -280,6 +280,12 @@ def is_same_origin(connection: HTTPConnection) -> bool:
     forwarded_host = connection.headers.get("x-forwarded-host", "").split(",")[-1].strip().lower()
     if forwarded_host and _is_loopback(peer) and origin_netloc == forwarded_host:
         return True
+    # The Quick Tunnel this panel started itself (in case cloudflared rewrites Host).
+    from app.services.cloudflare_service import cloudflare_quick_tunnel_service
+
+    tunnel_url = cloudflare_quick_tunnel_service.status().public_url
+    if tunnel_url and _is_loopback(peer) and origin_netloc == urlsplit(tunnel_url).netloc.lower():
+        return True
     # Domains the owner listed explicitly (never IP literals or shared tunnel domains).
     origin_host = _host_without_port(origin_netloc)
     return any(
