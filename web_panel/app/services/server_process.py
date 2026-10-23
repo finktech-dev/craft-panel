@@ -9,7 +9,7 @@ import logging
 import os
 import re
 from collections import deque
-from collections.abc import Coroutine
+from collections.abc import AsyncIterator, Coroutine
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -55,6 +55,10 @@ class ServerProcessError(RuntimeError):
     """Error de operación del proceso Java."""
 
 
+class ServerBusyError(ServerProcessError):
+    """Another start/stop/restart operation is already in progress."""
+
+
 @dataclass(frozen=True, slots=True)
 class TerminalLine:
     timestamp: str
@@ -95,6 +99,10 @@ class MinecraftServerManager:
         self._online_players: dict[str, str] = {}
         self._log_buffer: deque[TerminalLine] = deque(maxlen=self._settings.log_buffer_size)
         self._lock = asyncio.Lock()
+        # Serializes whole lifecycle operations; _lock only guards process creation.
+        self._lifecycle_lock = asyncio.Lock()
+        self._lifecycle_operation: str | None = None
+        self._restart_cancelled = False
         self._reader_tasks: set[asyncio.Task[None]] = set()
         self._watcher_task: asyncio.Task[None] | None = None
         self._stop_requested = False
@@ -117,6 +125,25 @@ class MinecraftServerManager:
     @property
     def is_running(self) -> bool:
         return self._process is not None and self._process.returncode is None
+
+    @property
+    def lifecycle_operation(self) -> str | None:
+        """Name of the lifecycle operation in progress, if any."""
+        return self._lifecycle_operation
+
+    @contextlib.asynccontextmanager
+    async def _exclusive_lifecycle(self, operation: str) -> AsyncIterator[None]:
+        # Reject instead of queueing: a queued stop must never hit a freshly restarted server.
+        if self._lifecycle_lock.locked():
+            raise ServerBusyError(
+                f"Ya hay una operación en curso ({self._lifecycle_operation}). Esperá a que termine."
+            )
+        async with self._lifecycle_lock:
+            self._lifecycle_operation = operation
+            try:
+                yield
+            finally:
+                self._lifecycle_operation = None
 
     @property
     def process_pid(self) -> int | None:
@@ -142,6 +169,10 @@ class MinecraftServerManager:
 
     async def start(self, dev_mode: bool = False) -> bool:
         """Inicia el servidor y retorna ``False`` si ya había un proceso vivo."""
+        async with self._exclusive_lifecycle("inicio"):
+            return await self._start_process(dev_mode)
+
+    async def _start_process(self, dev_mode: bool) -> bool:
         async with self._lock:
             if self.is_running:
                 return False
@@ -194,19 +225,33 @@ class MinecraftServerManager:
 
     async def stop(self) -> bool:
         """Solicita una detención limpia mediante la consola de Minecraft."""
+        async with self._exclusive_lifecycle("detención"):
+            return await self._request_stop()
+
+    async def _request_stop(self) -> bool:
         if not self.is_running:
             return False
         self._stop_requested = True
         await self.send_command("/stop")
         return True
 
-    async def graceful_restart(self, countdown_seconds: int = 10, dev_mode: bool | None = None) -> None:
-        """Reinicia el servidor avisando a los jugadores en el chat y guardando el mundo."""
-        target_dev_mode = self._dev_mode if dev_mode is None else dev_mode
-        if not self.is_running:
-            await self.start(dev_mode=target_dev_mode)
-            return
+    async def restart(self, dev_mode: bool | None = None) -> bool:
+        """Stop (forcing it after the grace period) and start again as one atomic operation.
 
+        Returns ``False`` when a kill cancelled the restart before the new start.
+        """
+        async with self._exclusive_lifecycle("reinicio"):
+            return await self._restart_process(self._dev_mode if dev_mode is None else dev_mode)
+
+    async def graceful_restart(self, countdown_seconds: int = 10, dev_mode: bool | None = None) -> bool:
+        """Reinicia el servidor avisando a los jugadores en el chat y guardando el mundo."""
+        async with self._exclusive_lifecycle("reinicio suave"):
+            target_dev_mode = self._dev_mode if dev_mode is None else dev_mode
+            if self.is_running:
+                await self._announce_restart(countdown_seconds)
+            return await self._restart_process(target_dev_mode)
+
+    async def _announce_restart(self, countdown_seconds: int) -> None:
         try:
             await self.send_command(
                 f"/say §c[Servidor] El servidor se reiniciará en {countdown_seconds} segundos para aplicar cambios. ¡Guarden sus cosas!"
@@ -226,19 +271,35 @@ class MinecraftServerManager:
         except Exception:
             pass
 
-        await self.stop()
-        try:
-            await asyncio.wait_for(
-                self.wait_until_stopped(), timeout=self._settings.graceful_stop_timeout_seconds
-            )
-        except TimeoutError:
-            await self.kill()
-            await self.wait_until_stopped()
-
-        await self.start(dev_mode=target_dev_mode)
+    async def _restart_process(self, dev_mode: bool) -> bool:
+        self._restart_cancelled = False
+        if self.is_running:
+            await self._request_stop()
+            try:
+                await asyncio.wait_for(
+                    self.wait_until_stopped(), timeout=self._settings.graceful_stop_timeout_seconds
+                )
+            except TimeoutError:
+                await self._kill_process()
+                await self.wait_until_stopped()
+        if self._restart_cancelled:
+            await self._record_log("system", "Reinicio cancelado: se forzó la detención del servidor.")
+            return False
+        if not await self._start_process(dev_mode):
+            raise ServerProcessError("El servidor seguía en ejecución y no pudo reiniciarse.")
+        return True
 
     async def kill(self) -> bool:
-        """Finaliza el árbol de procesos cuando el cierre limpio no responde."""
+        """Finaliza el árbol de procesos cuando el cierre limpio no responde.
+
+        Deliberately bypasses the lifecycle lock so it always works as an emergency
+        stop; if a restart is in progress, its pending start is cancelled.
+        """
+        if self._lifecycle_lock.locked():
+            self._restart_cancelled = True
+        return await self._kill_process()
+
+    async def _kill_process(self) -> bool:
         process = self._process
         if process is None or process.returncode is not None:
             return False
@@ -308,17 +369,19 @@ class MinecraftServerManager:
 
     async def shutdown(self) -> None:
         """Cierra ordenadamente el proceso al apagar FastAPI."""
+        # The panel is going away: never let an in-flight restart start a new process.
+        self._restart_cancelled = True
         if not self.is_running:
             return
 
-        await self.stop()
         process = self._process
         assert process is not None
+        await self._request_stop()
         try:
             await asyncio.wait_for(process.wait(), timeout=self._settings.graceful_stop_timeout_seconds)
         except TimeoutError:
             logger.warning("El servidor no respondió a /stop; se forzará su cierre.")
-            await self.kill()
+            await self._kill_process()
             await process.wait()
 
     async def wait_until_ready(self, timeout_seconds: float = 120.0) -> None:

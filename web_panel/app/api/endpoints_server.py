@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ from app.services.backup_service import backup_service
 from app.services.metrics_service import metrics_service
 from app.services.player_crash_service import player_crash_service
 from app.services.playit_service import PlayitServiceError, playit_service
-from app.services.server_process import ServerProcessError, server_manager
+from app.services.server_process import ServerBusyError, ServerProcessError, server_manager
 from app.services.server_properties_service import server_properties_service
 from app.services.spark_service import spark_service
 
@@ -64,13 +65,18 @@ async def _create_first_backup_after_ready() -> None:
 async def start_server(dev_mode: bool = False) -> ServerActionResponse:
     if server_manager.is_running:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El servidor ya está en ejecución.")
+    _raise_if_busy()
     started_playit = await _start_playit_if_required()
     try:
-        await server_manager.start(dev_mode=dev_mode)
+        started = await server_manager.start(dev_mode=dev_mode)
     except ServerProcessError as error:
         if started_playit:
             await playit_service.stop()
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+        busy = isinstance(error, ServerBusyError)
+        code = status.HTTP_409_CONFLICT if busy else status.HTTP_503_SERVICE_UNAVAILABLE
+        raise HTTPException(status_code=code, detail=str(error)) from error
+    if not started:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El servidor ya está iniciándose o en ejecución.")
     if dev_mode:
         msg = "Servidor iniciado en Modo Dev (Silencioso)."
     elif settings.playit_enabled:
@@ -90,31 +96,52 @@ async def stop_server() -> ServerActionResponse:
     return _action_response("Se envió /stop al servidor.")
 
 
+def _raise_if_busy() -> None:
+    """Fail fast before side effects such as starting Playit."""
+    if operation := server_manager.lifecycle_operation:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ya hay una operación en curso ({operation}). Esperá a que termine.",
+        )
+
+
+async def _run_restart(restart: Callable[[], Awaitable[bool]], success_message: str) -> ServerActionResponse:
+    started_playit = await _start_playit_if_required()
+    try:
+        restarted = await restart()
+    except ServerBusyError as error:
+        if started_playit:
+            await playit_service.stop()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except ServerProcessError as error:
+        if started_playit:
+            await playit_service.stop()
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+    if not restarted:
+        if started_playit:
+            await playit_service.stop()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El reinicio se canceló porque se forzó la detención del servidor.",
+        )
+    return _action_response(success_message)
+
+
 @router.post("/restart", response_model=ServerActionResponse)
 async def restart_server() -> ServerActionResponse:
-    if server_manager.is_running:
-        await server_manager.stop()
-        try:
-            await asyncio.wait_for(
-                server_manager.wait_until_stopped(), timeout=settings.graceful_stop_timeout_seconds
-            )
-        except TimeoutError:
-            await server_manager.kill()
-            await server_manager.wait_until_stopped()
-
-    try:
-        await server_manager.start()
-    except ServerProcessError as error:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
-    return _action_response("Servidor reiniciado.")
+    _raise_if_busy()
+    return await _run_restart(server_manager.restart, "Servidor reiniciado.")
 
 
 @router.post("/graceful-restart", response_model=ServerActionResponse)
 async def graceful_restart_server(countdown: int = 10) -> ServerActionResponse:
     if countdown < 3 or countdown > 60:
         countdown = 10
-    asyncio.create_task(server_manager.graceful_restart(countdown_seconds=countdown), name="graceful-restart-task")
-    return _action_response(f"Iniciando reinicio suave con aviso de {countdown} segundos en el chat.")
+    _raise_if_busy()
+    return await _run_restart(
+        lambda: server_manager.graceful_restart(countdown_seconds=countdown),
+        f"Reinicio suave completado después del aviso de {countdown} segundos.",
+    )
 
 
 @router.post("/kill", response_model=ServerActionResponse)
