@@ -154,6 +154,20 @@
   window.Panel = { api, escapeHtml, formatDuration, readResponse, sendConsoleCommand, setStatus, toast, websocketUrl };
 })();
 
+// "Jugadores" and "Mundo" share /worlds; highlight the one matching the open tab.
+document.addEventListener('DOMContentLoaded', () => {
+  if (document.body.dataset.page !== 'worlds') return;
+  const sync = () => {
+    const players = window.location.hash === '#whitelist';
+    document.querySelectorAll('.topbar a[href="/worlds"], .topbar a[href="/worlds#whitelist"]').forEach((link) => {
+      const isPlayers = link.getAttribute('href') === '/worlds#whitelist';
+      if (isPlayers === players) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+    });
+  };
+  window.addEventListener('hashchange', sync);
+  sync();
+});
+
 // Header menus are <details> elements: close them on outside click or Escape.
 document.addEventListener('DOMContentLoaded', () => {
   const menus = [...document.querySelectorAll('details[data-menu]')];

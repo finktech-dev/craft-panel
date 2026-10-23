@@ -332,11 +332,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   // 3. WHITELIST Y WAYPOINTS
   // ==========================================
+  const setWhitelistLabel = (enabled) => {
+    const label = $('#whitelist-toggle-label');
+    if (label) label.textContent = enabled ? 'Activada' : 'Apagada';
+  };
+
   const loadWhitelist = async () => {
     const list = $('#whitelist-players-list');
     try {
       const s = await Panel.api('/api/whitelist');
       $('#whitelist-toggle').checked = s.enabled;
+      setWhitelistLabel(s.enabled);
       $('#whitelist-count').textContent = s.total;
 
       if (!s.players.length) {
@@ -365,6 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
         method: 'POST',
         body: { enabled: e.target.checked },
       });
+      setWhitelistLabel(e.target.checked);
       Panel.toast(res.message, 'success');
     } catch (err) {
       Panel.toast(err.message, 'error');
