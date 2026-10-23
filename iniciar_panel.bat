@@ -134,4 +134,5 @@ echo  No se encontro Python 3.11 o superior.
 echo  Instalandolo una sola vez con el Administrador de paquetes de Windows...
 echo  Puede tardar unos minutos. Si Windows pide permiso, acepta.
 winget install --id Python.Python.3.13 --exact --silent --accept-package-agreements --accept-source-agreements
+if not "%errorlevel%"=="0" exit /b 1
 exit /b 0
