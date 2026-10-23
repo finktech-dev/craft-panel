@@ -38,7 +38,7 @@ class SchedulerService:
         self._save_backup_interval(hours)
         return self.jobs()
     def _schedule_backup(self, hours: int) -> None:
-        self.scheduler.add_job(backup_service.create_backup, "interval", hours=hours, id="panel-backup", replace_existing=True, name=f"Backup cada {hours}h")
+        self.scheduler.add_job(backup_service.create_scheduled_backup, "interval", hours=hours, id="panel-backup", replace_existing=True, name=f"Backup cada {hours}h")
     def _load_backup_interval(self) -> int | None:
         try:
             value = json.loads(self.state_path.read_text(encoding="utf-8")).get("backup_interval_hours")

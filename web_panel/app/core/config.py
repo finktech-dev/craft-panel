@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     auto_backup_interval_hours: int = Field(default=6, ge=1, le=168)
     backup_retention_count: int = Field(default=4, ge=1, le=100)
     backup_max_disk_gb: int = Field(default=15, ge=1, le=10_000)
+    backup_min_free_disk_gb: int = Field(default=10, ge=0, le=10_000)
     backup_integrity_check_interval_hours: int = Field(default=168, ge=24, le=8760)
 
     _admin_pin_generated_this_start: bool = PrivateAttr(default=False)
