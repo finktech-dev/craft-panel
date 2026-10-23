@@ -29,6 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#tab-btn-whitelist').onclick = () => switchTab('whitelist');
   $('#tab-btn-advancements').onclick = () => switchTab('advancements');
   $('#tab-btn-luckperms').onclick = () => switchTab('luckperms');
+  // Deep links such as /worlds#whitelist (the sidebar "Jugadores" entry) open their tab directly.
+  const tabFromHash = () => { const key = window.location.hash.slice(1); if (key && Object.hasOwn(tabs, key)) switchTab(key); };
+  window.addEventListener('hashchange', tabFromHash);
+  tabFromHash();
 
   // Tooltip Modal
   const tooltipModal = $('#modal-tooltip-info');

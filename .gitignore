@@ -35,6 +35,7 @@ tools/java/*
 !tools/java/.gitkeep
 
 # Build artifacts and profiles
+node_modules/
 build/
 *.sparkprofile
 *.bak

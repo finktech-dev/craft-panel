@@ -1,44 +1,70 @@
 <!doctype html>
-<html lang="es" class="bg-zinc-950">
+<html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}">{% endif %}
-  <title>{% block title %}Servidor local{% endblock %}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>{% block title %}Craft Panel{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/tailwind.css">
   <link rel="stylesheet" href="/static/css/panel-v2.css">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          boxShadow: { glow: '0 0 0 1px rgba(16,185,129,.18), 0 12px 32px rgba(0,0,0,.28)' }
-        }
-      }
-    }
-  </script>
   <script defer src="/static/js/app.js"></script>
 </head>
-<body data-page="{{ current_page }}" class="panel-shell min-h-screen bg-zinc-950 font-sans text-zinc-100 antialiased">
+{%- set main_links = [
+  ('/', 'Inicio', 'dashboard'),
+  ('/worlds#whitelist', 'Jugadores', none),
+  ('/worlds', 'Mundo', 'worlds'),
+  ('/mods', 'Mods', 'mods'),
+  ('/backups', 'Copias', 'backups'),
+] -%}
+{%- set more_links = [
+  ('/console', 'Consola', 'Lo que pasa en el servidor, en vivo', 'console'),
+  ('/crashes', 'Problemas', 'Por qué se cerró el servidor', 'crashes'),
+  ('/administration', 'Ajustes', 'Acceso, Discord, rangos y más', 'administration'),
+  ('/schematics', 'Esquemáticos', 'Construcciones para importar', 'schematics'),
+] -%}
+<body data-page="{{ current_page }}" class="panel-shell min-h-screen font-sans antialiased">
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
-  <div id="toast-region" class="pointer-events-none fixed right-4 top-4 z-[70] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3" aria-live="polite"></div>
+  <div id="toast-region" class="pointer-events-none fixed bottom-4 right-4 z-[70] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3" aria-live="polite"></div>
   {% if is_admin %}
-    <header class="panel-topbar sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/90 px-4 backdrop-blur lg:px-8">
-      <div class="mx-auto flex min-h-16 max-w-7xl items-center gap-3">
-        <a href="/" class="flex min-h-11 items-center gap-2 rounded-lg px-2 text-zinc-100 hover:bg-zinc-900" aria-label="Ir al inicio"><span class="brand-mark grid h-8 w-8 place-items-center rounded-lg text-sm" aria-hidden="true">◆</span><span class="hidden font-semibold sm:inline">Servidor local</span></a>
-        <nav class="topnav-links hidden items-center gap-1 lg:flex" aria-label="Navegación principal"><a href="/" class="topnav-link {% if current_page == 'dashboard' %}topnav-link-active{% endif %}">Inicio</a><a href="/console" class="topnav-link {% if current_page == 'console' %}topnav-link-active{% endif %}">Actividad</a><a href="/worlds" class="topnav-link {% if current_page == 'worlds' %}topnav-link-active{% endif %}">Mundo</a><a href="/mods" class="topnav-link {% if current_page == 'mods' %}topnav-link-active{% endif %}">Mods</a><a href="/backups" class="topnav-link {% if current_page == 'backups' %}topnav-link-active{% endif %}">Copias</a><a href="/administration" class="topnav-link {% if current_page == 'administration' %}topnav-link-active{% endif %}">Configurar</a></nav>
-        <div class="ml-auto flex items-center gap-2"><span id="nav-dev-badge" class="hidden items-center gap-1.5 rounded-full border border-purple-500/50 bg-purple-950/70 px-2.5 py-1 text-xs font-bold text-purple-300"><span>🛠️</span><span class="hidden sm:inline">MODO DEV</span></span><div id="server-status" class="hidden items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-300 sm:flex" aria-live="polite"><span class="h-2.5 w-2.5 rounded-full bg-amber-400" aria-hidden="true"></span><span>Verificando estado…</span></div><button id="logout-button" type="button" class="min-h-11 rounded-lg px-3 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100">Salir</button><button id="topnav-toggle" type="button" class="grid h-11 w-11 place-items-center rounded-lg text-zinc-300 hover:bg-zinc-900 lg:hidden" aria-label="Abrir navegación" aria-expanded="false" aria-controls="mobile-nav">☰</button></div>
+  <header class="topbar sticky top-0 z-30">
+    <div class="mx-auto flex h-16 max-w-5xl items-center gap-2 px-4 sm:px-6">
+      <a href="/" class="mr-3 flex items-center gap-2.5 font-display text-[1.05rem] font-semibold text-zinc-50"><span class="brand-block" aria-hidden="true"></span>Craft Panel</a>
+      <nav class="hidden items-center gap-0.5 md:flex" aria-label="Navegación principal">
+        {% for href, label, page in main_links %}<a href="{{ href }}" class="nav-link"{% if page and current_page == page %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+        <details class="relative" data-menu>
+          <summary class="nav-link cursor-pointer list-none{% if current_page in ['console', 'crashes', 'administration', 'schematics'] %} text-zinc-50{% endif %}">Más<span aria-hidden="true" class="ml-1.5 text-xs">▾</span></summary>
+          <div class="menu-panel absolute left-0 top-12 w-72 p-1.5">
+            {% for href, label, hint, page in more_links %}<a href="{{ href }}" class="menu-item"{% if current_page == page %} aria-current="page"{% endif %}><span>{{ label }}</span><small>{{ hint }}</small></a>{% endfor %}
+          </div>
+        </details>
+      </nav>
+      <div class="ml-auto flex items-center gap-1">
+        <span id="nav-dev-badge" class="hidden text-sm text-zinc-400">Modo de prueba</span>
+        <p id="server-status" class="hidden items-center gap-2 px-2 text-sm text-zinc-300 sm:flex" role="status" aria-live="polite"><span class="state-mark" aria-hidden="true"></span><span>Revisando…</span></p>
+        <button id="logout-button" type="button" class="nav-link hidden md:inline-flex">Salir</button>
+        <details class="relative md:hidden" data-menu>
+          <summary class="nav-link cursor-pointer list-none" aria-label="Abrir menú">Menú</summary>
+          <div class="menu-panel absolute right-0 top-12 w-72 p-1.5">
+            {% for href, label, page in main_links %}<a href="{{ href }}" class="menu-item"{% if page and current_page == page %} aria-current="page"{% endif %}><span>{{ label }}</span></a>{% endfor %}
+            <hr class="my-1.5 border-zinc-800">
+            {% for href, label, hint, page in more_links %}<a href="{{ href }}" class="menu-item"><span>{{ label }}</span><small>{{ hint }}</small></a>{% endfor %}
+            <hr class="my-1.5 border-zinc-800">
+            <button type="button" class="menu-item w-full text-left" data-logout>Salir</button>
+          </div>
+        </details>
       </div>
-      <div id="mobile-nav" class="hidden border-t border-zinc-800 py-3 lg:hidden"><nav class="grid grid-cols-2 gap-1" aria-label="Navegación móvil"><a href="/" class="topnav-link">Inicio</a><a href="/console" class="topnav-link">Actividad</a><a href="/worlds" class="topnav-link">Mundo</a><a href="/mods" class="topnav-link">Mods</a><a href="/backups" class="topnav-link">Copias</a><a href="/administration" class="topnav-link">Configurar</a></nav></div>
-    </header>
-    <main id="main-content" class="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">  {% else %}
-    <main id="main-content" class="grid min-h-screen place-items-center p-4">
+    </div>
+  </header>
+  <main id="main-content" class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
+  {% else %}
+  <main id="main-content" class="grid min-h-screen place-items-center p-4"><div class="contents">
   {% endif %}
   {% block content %}{% endblock %}
   {% if is_admin %}
-    </main>
+  </main>
   {% else %}
-    </main>
+  </div></main>
   {% endif %}
   {% block scripts %}{% endblock %}
 </body>

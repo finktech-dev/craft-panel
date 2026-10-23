@@ -35,7 +35,7 @@ class SecurityHeadersAndCsrfMiddleware(BaseHTTPMiddleware):
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         response.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
             "connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
         )

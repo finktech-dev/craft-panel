@@ -33,15 +33,12 @@ class ExternalServer:
     @property
     def message(self) -> str:
         if self.reason == "previous_panel_session":
-            origin = "quedó abierto de una sesión anterior del panel"
+            origin = "Quedó abierto de una vez anterior que usaste el panel."
         elif self.reason == "server_directory":
-            origin = "se inició fuera del panel (por ejemplo con run.bat)"
+            origin = "Lo abrieron fuera del panel, por ejemplo con run.bat."
         else:
-            origin = f"otro programa está usando el puerto {self.port}"
-        return (
-            f"Ya hay un servidor en ejecución (PID {self.pid}): {origin}. "
-            "Cerralo desde su ventana o forzá su cierre desde el panel antes de iniciar otro."
-        )
+            origin = f"Otro programa está usando el puerto {self.port}, que el servidor necesita."
+        return f"{origin} Cerralo desde su ventana o desde acá para poder manejarlo con el panel."
 
 
 class ExternalServerDetector:

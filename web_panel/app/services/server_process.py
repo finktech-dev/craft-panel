@@ -323,16 +323,22 @@ class MinecraftServerManager:
 
         self._stop_requested = True
         if os.name == "nt":
-            taskkill = await asyncio.create_subprocess_exec(
-                "taskkill",
-                "/PID",
-                str(process.pid),
-                "/T",
-                "/F",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await taskkill.wait()
+            # Use the absolute path: a damaged PATH must not break the emergency stop.
+            system_root = os.environ.get("SystemRoot", r"C:\Windows")
+            try:
+                taskkill = await asyncio.create_subprocess_exec(
+                    os.path.join(system_root, "System32", "taskkill.exe"),
+                    "/PID",
+                    str(process.pid),
+                    "/T",
+                    "/F",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await taskkill.wait()
+            except OSError as error:
+                logger.warning("taskkill unavailable (%s); killing only the launcher process.", error)
+                process.kill()
         else:
             process.kill()
         return True

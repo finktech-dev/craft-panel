@@ -20,6 +20,7 @@ from app.services.metrics_service import metrics_service
 from app.services.player_crash_service import player_crash_service
 from app.services.playit_service import PlayitServiceError, playit_service
 from app.services.external_server_service import external_server_detector
+from app.services.safety_service import SafetySummary, safety_service
 from app.services.server_process import ServerProcessError, server_manager
 from app.services.server_properties_service import server_properties_service
 from app.services.spark_service import spark_service
@@ -160,6 +161,15 @@ class ExternalServerTerminateRequest(BaseModel):
     confirm: bool = False
 
 
+@router.get("/safety-summary", response_model=SafetySummary)
+async def safety_summary() -> SafetySummary:
+    """Access, disk, backups and diagnostics in one read-only call for the dashboard."""
+    properties = server_properties_service.read_properties()
+    return await asyncio.to_thread(
+        safety_service.summary, properties, settings.playit_enabled, server_manager.process_pid
+    )
+
+
 @router.get("/external", response_model=ExternalServerInfo)
 async def external_server() -> ExternalServerInfo:
     """Report a server running outside the panel (run.bat, previous panel session, port clash)."""
@@ -225,23 +235,23 @@ def _friend_connection_info(
     if tunnel.is_running and tunnel.public_address:
         address = tunnel.public_address
         source = "playit_detected"
-        message = "Playit está activo y el panel detectó esta dirección para compartir."
-        next_step = "Copiala y pedile a un amigo que la pruebe desde otra red."
+        message = "Pasales esta dirección. En Minecraft van a Multijugador → Agregar servidor y la pegan."
+        next_step = ""
     elif custom_address:
         address = custom_address
         source = "manual"
-        message = "Usando la dirección que configuraste manualmente. El panel no verifica su alcance desde Internet."
-        next_step = "Confirmala con un amigo desde otra red antes de compartirla con todos."
+        message = "Esta es la dirección que escribiste en Ajustes. No podemos comprobar si funciona desde otras casas."
+        next_step = "Probala primero con un amigo antes de pasársela a todos."
     elif configured_address:
         address = configured_address
         source = "configured"
-        message = "Usando la dirección guardada en la configuración del servidor. El panel no controla ese acceso."
-        next_step = "Probala desde otra red para confirmar que sigue funcionando."
+        message = "Esta es la dirección guardada para tu servidor. Pasásela a tus amigos."
+        next_step = "Si alguno no puede entrar, revisá que la dirección siga siendo la correcta."
     else:
         address = f"127.0.0.1:{port}"
         source = "local_only"
-        message = "Todavía no hay una dirección pública detectada; esta dirección sólo funciona en esta computadora."
-        next_step = "Configurá una forma de acceso externo, como Playit, y luego volvé a revisar esta pantalla."
+        message = "Por ahora solo se puede jugar desde esta computadora."
+        next_step = "Para que entren amigos desde sus casas, activá el acceso por Internet en Ajustes."
 
     return FriendConnectionInfo(
         public_address=address,

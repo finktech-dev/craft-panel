@@ -1,0 +1,12 @@
+{
+  "name": "craft-panel-frontend",
+  "private": true,
+  "description": "Builds the panel stylesheet. The compiled CSS is committed, so running the panel never needs Node.",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i tailwind.input.css -o ../static/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -c tailwind.config.js -i tailwind.input.css -o ../static/css/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

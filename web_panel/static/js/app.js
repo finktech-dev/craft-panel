@@ -72,9 +72,10 @@
     const target = document.querySelector('#server-status');
     if (!target) return;
     const normalized = String(state || 'STOPPED').toUpperCase();
-    const colors = { RUNNING: 'bg-emerald-400', STOPPED: 'bg-rose-400', CRASHED: 'bg-rose-400', STARTING: 'bg-amber-400' };
-    const labels = { RUNNING: 'ONLINE', STOPPED: 'STOPPED', CRASHED: 'CRASHED', STARTING: 'STARTING' };
-    target.querySelector('span').className = `h-2.5 w-2.5 rounded-full ${colors[normalized] || 'bg-zinc-500'}`;
+    const states = { RUNNING: 'state-on', STOPPED: '', CRASHED: 'state-error', STARTING: 'state-busy' };
+    const labels = { RUNNING: 'Encendido', STOPPED: 'Apagado', CRASHED: 'Se cerró solo', STARTING: 'Encendiendo…' };
+    target.classList.remove('state-on', 'state-busy', 'state-error');
+    if (states[normalized]) target.classList.add(states[normalized]);
     target.querySelector('span:last-child').textContent = labels[normalized] || normalized;
   };
 
@@ -107,7 +108,8 @@
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
   document.addEventListener('DOMContentLoaded', () => {
-    document.querySelector('#logout-button')?.addEventListener('click', async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { window.location.assign('/'); } });
+    const logout = async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { window.location.assign('/'); } };
+    document.querySelectorAll('#logout-button, [data-logout]').forEach((button) => button.addEventListener('click', logout));
     if (document.querySelector('#server-status')) {
       const refreshHeaderStatus = async () => {
         try {
@@ -117,10 +119,10 @@
           if (navDev) {
             if (metrics.dev_mode) {
               navDev.classList.remove('hidden');
-              navDev.classList.add('flex');
+              navDev.classList.add('inline-flex');
             } else {
               navDev.classList.add('hidden');
-              navDev.classList.remove('flex');
+              navDev.classList.remove('inline-flex');
             }
           }
         } catch { /* La página conserva su último estado visible. */ }
@@ -152,18 +154,14 @@
   window.Panel = { api, escapeHtml, formatDuration, readResponse, sendConsoleCommand, setStatus, toast, websocketUrl };
 })();
 
+// Header menus are <details> elements: close them on outside click or Escape.
 document.addEventListener('DOMContentLoaded', () => {
-  const toggle = document.querySelector('#topnav-toggle');
-  const menu = document.querySelector('#mobile-nav');
-  if (!toggle || !menu) return;
-  const close = () => { menu.classList.add('hidden'); toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-label', 'Abrir navegación'); };
-  toggle.addEventListener('click', () => {
-    const opening = menu.classList.contains('hidden');
-    menu.classList.toggle('hidden', !opening);
-    toggle.setAttribute('aria-expanded', String(opening));
-    toggle.setAttribute('aria-label', opening ? 'Cerrar navegación' : 'Abrir navegación');
-    if (opening) menu.querySelector('a')?.focus();
+  const menus = [...document.querySelectorAll('details[data-menu]')];
+  document.addEventListener('click', (event) => {
+    menus.forEach((menu) => { if (menu.open && !menu.contains(event.target)) menu.open = false; });
   });
-  menu.querySelectorAll('a').forEach((link) => link.addEventListener('click', close));
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !menu.classList.contains('hidden')) { close(); toggle.focus(); } });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    menus.forEach((menu) => { if (menu.open) { menu.open = false; menu.querySelector('summary')?.focus(); } });
+  });
 });

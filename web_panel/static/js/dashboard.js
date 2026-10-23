@@ -1,62 +1,193 @@
 (() => {
-  const text = (selector, value) => { const node = document.querySelector(selector); if (node) node.textContent = value; };
-  const duration = (seconds) => { const total = Math.max(0, Number(seconds) || 0); const hours = Math.floor(total / 3600); const minutes = Math.floor((total % 3600) / 60); return hours ? `${hours} h ${minutes} min` : `${minutes} min`; };
-  const formatDate = (value) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Fecha no disponible' : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
-  const setHealth = (health, metrics) => {
-    const running = Boolean(health?.is_running ?? metrics?.is_running); const title = health?.health_label || (running ? 'Servidor activo' : 'Servidor detenido'); const status = health?.health_status || (running ? 'ACTIVO' : 'DETENIDO');
-    const className = health?.health_color === 'emerald' ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : health?.health_color === 'rose' ? 'border-rose-400/30 bg-rose-400/10 text-rose-200' : 'border-amber-400/30 bg-amber-400/10 text-amber-200';
-    text('#health-title', title); text('#health-description', running ? 'El panel está observando el servidor. Las acciones de control están separadas de esta vista.' : 'El panel no controla automáticamente un servidor detenido. Revisá la preparación o la actividad si esperabas que estuviera activo.');
-    const badge = document.querySelector('#health-badge'); if (badge) { badge.textContent = status; badge.className = `rounded-full border px-3 py-1.5 text-xs font-bold ${className}`; }
-    text('#tps-value', running ? `${Number(health?.tps || 0).toFixed(1)} TPS` : 'Sin actividad'); text('#ram-value', metrics ? `${Math.round(metrics.ram_used_mb || 0)} MB` : '—'); text('#ram-caption', metrics ? `${Math.round(metrics.ram_percent || 0)}% de ${Math.round(metrics.ram_total_mb || 0)} MB` : 'Uso del proceso'); text('#uptime-value', running ? duration(metrics?.uptime_seconds) : '—'); text('#cpu-caption', metrics ? `CPU: ${Math.round(metrics.cpu_percent || 0)}%` : 'CPU: —'); text('#dashboard-summary', running ? 'Tu servidor está activo. Compartí la dirección sólo cuando la conexión indique que está lista.' : 'Esta vista te ayuda a revisar la salud y el acceso. No cambia nada por sí sola.');
+  const $ = (selector) => document.querySelector(selector);
+  const text = (selector, value) => { const node = $(selector); if (node) node.textContent = value; };
+  const esc = (value) => Panel.escapeHtml(value);
+
+  const since = (seconds) => {
+    const total = Math.max(0, Number(seconds) || 0);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (hours >= 1) return `${hours} h ${minutes} min`;
+    return `${Math.max(minutes, 1)} min`;
   };
-  const setConnection = (connection) => { const address = connection?.public_address || 'Dirección no disponible'; text('#connection-address', address); text('#connection-message', connection?.message || 'No se encontró una dirección de conexión.'); text('#connection-next-step', connection?.next_step || 'Configurá una forma de acceso externo antes de invitar amigos.'); const button = document.querySelector('#copy-connection'); if (button) button.disabled = !connection?.can_share_with_friends; };
-  const setBackup = (backups) => { const latest = Array.isArray(backups) && backups.length ? [...backups].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] : null; if (!latest) { text('#backup-status', 'Todavía no encontramos una copia en el panel. Revisá el historial antes de hacer cambios grandes.'); text('#backup-detail', ''); return; } text('#backup-status', `Guardada ${formatDate(latest.created_at)} · ${Number(latest.size_mb || 0).toFixed(1)} MB`); text('#backup-detail', latest.filename); };
+  const formatDate = (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'en una fecha desconocida';
+    const today = new Date();
+    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (date.toDateString() === today.toDateString()) return `hoy a las ${time}`;
+    return `el ${date.toLocaleDateString([], { day: 'numeric', month: 'long' })} a las ${time}`;
+  };
+
+  let serverRunning = false;
+  let externalPid = null;
+
+  // One sentence and one obvious action for each server state.
+  const HERO = {
+    RUNNING: { mark: 'state-on', kicker: 'Encendido', title: 'Tu servidor está encendido', summary: 'Tus amigos ya pueden entrar con la dirección de abajo.', action: 'Reiniciar' },
+    STARTING: { mark: 'state-busy', kicker: 'Encendiendo', title: 'Tu servidor se está encendiendo', summary: 'Con muchos mods puede tardar unos minutos. No hace falta que hagas nada.', action: null },
+    CRASHED: { mark: 'state-error', kicker: 'Se cerró solo', title: 'Tu servidor se cerró solo', summary: 'Mirá abajo qué pasó antes de volver a encenderlo.', action: 'Volver a encender' },
+    STOPPED: { mark: '', kicker: 'Apagado', title: 'Tu servidor está apagado', summary: 'Encendelo cuando quieras jugar.', action: 'Encender' },
+  };
+  const setHero = (metrics) => {
+    const state = String(metrics?.state || 'STOPPED').toUpperCase();
+    const hero = HERO[state] || HERO.STOPPED;
+    serverRunning = Boolean(metrics?.is_running);
+    const holder = $('#hero-state');
+    holder?.classList.remove('state-on', 'state-busy', 'state-error');
+    if (hero.mark) holder?.classList.add(hero.mark);
+    text('#hero-kicker', hero.kicker);
+    text('#dashboard-title', hero.title);
+    text('#dashboard-summary', externalPid ? 'Hay otra ventana con el servidor abierto. Cerrala para manejarlo desde acá.' : hero.summary);
+    text('#hero-meta', serverRunning
+      ? `Encendido hace ${since(metrics.uptime_seconds)} · usa ${(Number(metrics.ram_used_mb || 0) / 1024).toFixed(1).replace('.', ',')} GB de memoria`
+      : '');
+    const button = $('#hero-action');
+    if (!button) return;
+    button.hidden = !hero.action;
+    button.textContent = hero.action || '';
+    button.disabled = !hero.action || Boolean(externalPid);
+  };
+
+  const setConnection = (connection) => {
+    text('#connection-address', connection?.public_address || 'Todavía no hay dirección');
+    text('#connection-message', connection?.message || 'No encontramos una dirección para compartir.');
+    text('#connection-next-step', connection?.next_step || '');
+    const button = $('#copy-connection');
+    if (button) button.disabled = !connection?.can_share_with_friends;
+  };
+
+  const setBackup = (backups) => {
+    const latest = Array.isArray(backups) && backups.length
+      ? [...backups].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+      : null;
+    text('#backup-status', latest
+      ? `La última copia se hizo ${formatDate(latest.created_at)}. Si algo sale mal, podés volver a ese momento.`
+      : 'Todavía no hay copias. Hacé una antes de instalar mods o cambiar cosas grandes.');
+  };
+
+  // Only what needs attention is listed; when everything is fine, one calm sentence.
+  const setChecks = (summary) => {
+    const list = $('#safety-list');
+    if (!list) return;
+    if (!summary) {
+      text('#safety-headline', 'No pudimos revisar el estado ahora. Probá recargar la página.');
+      list.innerHTML = '';
+      return;
+    }
+    const pending = summary.items.filter((item) => item.level === 'warn' || item.level === 'danger');
+    // The section title already says "Cosas para revisar"; only speak up when there is nothing to show.
+    const headline = $('#safety-headline');
+    if (headline) {
+      headline.hidden = pending.length > 0;
+      headline.textContent = 'Todo en orden. No hay nada que revisar.';
+    }
+    list.innerHTML = pending.map((item) => `
+      <div class="check-row check-${esc(item.level)}">
+        <span class="check-icon" aria-hidden="true">!</span>
+        <div>
+          <h3 class="font-semibold text-zinc-50">${esc(item.title)}</h3>
+          <p class="mt-1 leading-relaxed text-zinc-400">${esc(item.detail)}</p>
+          ${item.action_href ? `<a href="${esc(item.action_href)}" class="link mt-2 inline-block text-sm">${esc(item.action_label || 'Revisar')}</a>` : ''}
+        </div>
+      </div>`).join('');
+  };
+
+  const setExternal = (external) => {
+    externalPid = external?.detected ? external.pid : null;
+    $('#external-server')?.classList.toggle('hidden', !externalPid);
+    if (externalPid) text('#external-message', external.message);
+  };
+
   const query = async (path) => { try { return await Panel.api(path); } catch { return null; } };
-  const refresh = async () => { const [metrics, health, connection, backups] = await Promise.all([query('/api/server/metrics'), query('/api/server/health-summary'), query('/api/server/connection-info'), query('/api/backups')]); setHealth(health, metrics); setConnection(connection); setBackup(backups); text('#dashboard-updated', `Actualizado ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`); };
+  const refresh = async () => {
+    const [metrics, connection, backups, safety, external] = await Promise.all([
+      query('/api/server/metrics'),
+      query('/api/server/connection-info'),
+      query('/api/backups'),
+      query('/api/server/safety-summary'),
+      query('/api/server/external'),
+    ]);
+    setExternal(external);
+    setHero(metrics);
+    setConnection(connection);
+    setBackup(backups);
+    setChecks(safety);
+    text('#dashboard-updated', `Actualizado a las ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+  };
+
   const setOperationFeedback = (value) => text('#operation-feedback', value);
-  const runServerAction = async (button) => {
-    const action = button.dataset.serverAction;
+  const withBusy = async (button, pendingLabel, task) => {
+    const original = button.textContent;
+    button.disabled = true;
+    if (pendingLabel) button.textContent = pendingLabel;
+    try { await task(); } finally { button.disabled = false; button.textContent = original; }
+  };
+  const reportResult = (result, fallback) => { Panel.toast(result?.message || fallback); setOperationFeedback(result?.message || fallback); };
+  const reportError = (error) => { Panel.toast(error.message, 'error'); setOperationFeedback(error.message); };
+
+  const runServerAction = async (button, action = button.dataset.serverAction) => {
     const prompts = {
-      stop: '¿Apagar el servidor normalmente? Las personas conectadas se desconectarán.',
-      kill: '¿Forzar el cierre? Podés perder progreso que todavía no se guardó. Usalo sólo si el apagado normal no responde.',
+      stop: '¿Apagar el servidor? Quienes estén jugando se van a desconectar.',
+      kill: '¿Forzar el cierre? Lo que no se haya guardado en los últimos minutos se pierde. Usalo solo si apagar no funciona.',
     };
     if (prompts[action] && !window.confirm(prompts[action])) return;
-    button.disabled = true;
-    setOperationFeedback('Enviando la solicitud…');
-    try {
-      const result = await Panel.api(`/api/server/${action}`, { method: 'POST' });
-      Panel.toast(result.message || 'Solicitud enviada.');
-      setOperationFeedback(result.message || 'Solicitud enviada.');
-      await refresh();
-    } catch (error) {
-      Panel.toast(error.message, 'error');
-      setOperationFeedback(error.message);
-    } finally { button.disabled = false; }
+    setOperationFeedback('');
+    await withBusy(button, action === 'start' ? 'Encendiendo…' : null, async () => {
+      try {
+        const result = await Panel.api(`/api/server/${action}`, { method: 'POST' });
+        reportResult(result, 'Listo.');
+      } catch (error) { reportError(error); }
+    });
+    await refresh();
   };
   const createBackup = async (button) => {
-    if (!window.confirm('¿Crear una copia de seguridad ahora? El servidor sigue funcionando mientras se prepara.')) return;
-    const original = button.textContent;
-    button.disabled = true; button.textContent = 'Creando copia…'; setOperationFeedback('Creando una copia de seguridad…');
-    try {
-      const result = await Panel.api('/api/backups', { method: 'POST' });
-      Panel.toast(result.message || 'Copia creada.'); setOperationFeedback(result.message || 'Copia creada.'); await refresh();
-    } catch (error) { Panel.toast(error.message, 'error'); setOperationFeedback(error.message); }
-    finally { button.disabled = false; button.textContent = original; }
+    if (!window.confirm('¿Hacer una copia de tu mundo ahora? Se puede seguir jugando mientras tanto.')) return;
+    await withBusy(button, 'Haciendo la copia…', async () => {
+      try {
+        const result = await Panel.api('/api/backups', { method: 'POST' });
+        reportResult(result, 'Copia lista.');
+      } catch (error) { reportError(error); }
+    });
+    await refresh();
   };
   const gracefulRestart = async (button) => {
-    if (!window.confirm('¿Avisar a quienes están jugando y reiniciar en 10 segundos?')) return;
-    button.disabled = true; setOperationFeedback('Avisando y preparando el reinicio…');
-    try {
-      const result = await Panel.api('/api/server/graceful-restart?countdown=10', { method: 'POST' });
-      Panel.toast(result.message || 'Reinicio programado.'); setOperationFeedback(result.message || 'Reinicio programado.');
-    } catch (error) { Panel.toast(error.message, 'error'); setOperationFeedback(error.message); }
-    finally { button.disabled = false; }
+    if (!window.confirm('¿Reiniciar? Se avisa en el chat y se reinicia en 10 segundos.')) return;
+    setOperationFeedback('Avisando a los jugadores y reiniciando…');
+    await withBusy(button, 'Reiniciando…', async () => {
+      try {
+        const result = await Panel.api('/api/server/graceful-restart?countdown=10', { method: 'POST' });
+        reportResult(result, 'Reinicio terminado.');
+      } catch (error) { reportError(error); }
+    });
+    await refresh();
   };
+  const terminateExternal = async (button) => {
+    if (!externalPid) return;
+    if (!window.confirm('¿Cerrar el servidor que está abierto en la otra ventana? Lo que no se haya guardado se pierde. Si podés, mejor cerralo desde esa ventana.')) return;
+    await withBusy(button, 'Cerrando…', async () => {
+      try {
+        const result = await Panel.api('/api/server/external/terminate', { method: 'POST', body: { pid: externalPid, confirm: true } });
+        reportResult(result, 'Listo, se cerró.');
+      } catch (error) { reportError(error); }
+    });
+    await refresh();
+  };
+
   document.addEventListener('DOMContentLoaded', () => {
-    document.querySelector('#copy-connection')?.addEventListener('click', async () => { const value = document.querySelector('#connection-address')?.textContent || ''; try { await navigator.clipboard.writeText(value); Panel.toast('Dirección copiada.'); } catch { Panel.toast('No se pudo copiar la dirección.', 'error'); } });
+    $('#copy-connection')?.addEventListener('click', async () => {
+      const value = $('#connection-address')?.textContent || '';
+      try { await navigator.clipboard.writeText(value); Panel.toast('Dirección copiada. Pegala en el chat con tus amigos.'); }
+      catch { Panel.toast('No se pudo copiar. Seleccioná la dirección y copiala a mano.', 'error'); }
+    });
+    $('#hero-action')?.addEventListener('click', ({ currentTarget }) => (
+      serverRunning ? gracefulRestart(currentTarget) : runServerAction(currentTarget, 'start')
+    ));
     document.querySelectorAll('[data-server-action]').forEach((button) => button.addEventListener('click', () => runServerAction(button)));
-    document.querySelector('#create-backup')?.addEventListener('click', ({ currentTarget }) => createBackup(currentTarget));
-    document.querySelector('#graceful-restart')?.addEventListener('click', ({ currentTarget }) => gracefulRestart(currentTarget));
-    refresh(); window.setInterval(refresh, 15_000);
+    $('#create-backup')?.addEventListener('click', ({ currentTarget }) => createBackup(currentTarget));
+    $('#graceful-restart')?.addEventListener('click', ({ currentTarget }) => gracefulRestart(currentTarget));
+    $('#external-terminate')?.addEventListener('click', ({ currentTarget }) => terminateExternal(currentTarget));
+    refresh();
+    window.setInterval(refresh, 15_000);
   });
 })();

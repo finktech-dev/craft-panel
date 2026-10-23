@@ -110,7 +110,7 @@ def test_mods_template_and_asset_integrity():
     assert 'id="modal-bulk-delete"' in template
     assert 'id="bulk-actions-bar"' in template
     assert 'id="btn-check-updates"' in template
-    assert 'kpi-total-mods' in template
+    assert 'kpi-active-mods' in template and 'tab-badge-installed' in template
 
     # Validar que mods.js consuma las APIs de mods
     assert '/api/mods' in script

@@ -6,15 +6,21 @@ from pathlib import Path
 _PANEL_ROOT = Path(__file__).parents[1]
 
 
-def test_dashboard_prioritizes_guided_operations_and_discloses_risk() -> None:
+def test_dashboard_has_one_main_action_and_hides_risky_ones() -> None:
     content = (_PANEL_ROOT / "templates" / "dashboard.html").read_text(encoding="utf-8")
 
-    assert "Operaciones guiadas" in content
-    assert 'data-server-action="start"' in content
+    assert 'id="hero-action"' in content
     assert 'id="create-backup"' in content
     assert 'id="graceful-restart"' in content
-    assert "Herramientas avanzadas: apagar, forzar cierre y consola" in content
-    assert content.index("Herramientas avanzadas: apagar, forzar cierre y consola") < content.index('data-server-action="kill"')
+    # Risky actions live inside "Más acciones", and the data-loss warning comes before the kill button.
+    assert content.index("Más acciones") < content.index('data-server-action="stop"')
+    assert content.index("se pierde") < content.index('data-server-action="kill"')
+
+
+def test_dashboard_speaks_plainly() -> None:
+    content = (_PANEL_ROOT / "templates" / "dashboard.html").read_text(encoding="utf-8")
+    for jargon in ("TPS", "CPU", "PID", "Diagnóstico", "proceso Java"):
+        assert jargon not in content
 
 
 def test_dashboard_script_uses_existing_endpoints_with_confirmations() -> None:
@@ -24,3 +30,4 @@ def test_dashboard_script_uses_existing_endpoints_with_confirmations() -> None:
     assert "/api/server/graceful-restart?countdown=10" in script
     assert "Panel.api('/api/backups', { method: 'POST' })" in script
     assert "`/api/server/${action}`" in script
+    assert "/api/server/safety-summary" in script
