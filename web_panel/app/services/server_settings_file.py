@@ -301,6 +301,11 @@ def parse_backup_location(value: str, context: ValidationContext) -> str:
         existing = existing.parent
     if not existing.is_dir():
         raise _Invalid("Esa ruta es un archivo, no una carpeta.")
+    if existing != path:
+        # Not created yet: never write test files into someone else's folder, just ask the OS.
+        if not os.access(existing, os.W_OK):
+            raise _Invalid("No se puede crear una carpeta ahí. Elegí otra.")
+        return value
     probe = existing / f".craftpanel-write-test-{uuid.uuid4().hex}"
     try:
         probe.write_bytes(b"")
