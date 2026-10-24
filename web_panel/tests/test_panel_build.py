@@ -40,7 +40,6 @@ def test_static_and_templates_configuration():
         "console.html",
         "mods.html",
         "backups.html",
-        "schematics.html",
         "worlds.html",
         "crashes.html",
         "login.html",
@@ -248,6 +247,20 @@ def test_mods_template_scrollbar_and_filter_pill_integrity():
     assert 'id="modrinth-version-input"' in template
     # mods.js debe consumir /api/mods/environment
     assert '/api/mods/environment' in script
+
+
+def test_removed_schematics_page_redirects_home():
+    """Old /schematics bookmarks land on the home page; the banner moved to Ajustes and still works."""
+    from starlette.testclient import TestClient
+
+    client = TestClient(app, base_url="http://127.0.0.1")
+    response = client.get("/schematics", follow_redirects=False)
+    assert response.status_code in (302, 303, 307)
+    assert response.headers["location"] == "/"
+    assert not any(getattr(route, "path", "").startswith("/api/schematics") for route in app.routes)
+    assert client.get("/api/server/banner.png").headers["content-type"] == "image/png"
+    template = (pathlib.Path(__file__).parent.parent / "templates" / "administration.html").read_text(encoding="utf-8")
+    assert 'id="copy-banner-markdown"' in template and "/api/server/banner.png" in template
 
 
 

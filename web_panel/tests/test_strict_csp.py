@@ -72,7 +72,7 @@ def test_rendered_templates_have_no_inline_scripts_or_handlers(name: str, two_fa
 
 def test_every_template_was_checked() -> None:
     # Guard against the glob silently finding nothing.
-    assert {"base.html", "login.html", "console.html", "schematics.html", "administration.html"} <= set(TEMPLATE_NAMES)
+    assert {"base.html", "login.html", "console.html", "worlds.html", "administration.html"} <= set(TEMPLATE_NAMES)
 
 
 @pytest.mark.parametrize("script", sorted((PANEL_ROOT / "static" / "js").glob("*.js")), ids=lambda path: path.name)

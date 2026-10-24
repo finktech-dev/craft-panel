@@ -22,7 +22,6 @@
 {%- set more_links = [
   ('/crashes', 'Problemas', 'Por qué se cerró el servidor', 'crashes', 'problems'),
   ('/administration', 'Ajustes', 'Acceso, Discord, rangos y más', 'administration', 'settings'),
-  ('/schematics', 'Esquemáticos', 'Construcciones para importar', 'schematics', 'schematics'),
 ] -%}
 <body data-page="{{ current_page }}" class="panel-shell min-h-screen font-sans antialiased">
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
@@ -34,7 +33,7 @@
       <nav class="hidden items-center gap-0.5 md:flex" aria-label="Navegación principal">
         {% for href, label, page, icon in main_links %}<a href="{{ href }}" class="nav-link gap-2"{% if page and current_page == page %} aria-current="page"{% endif %}>{{ pixel(icon) }}{{ label }}</a>{% endfor %}
         <details class="relative" data-menu>
-          <summary class="nav-link cursor-pointer list-none{% if current_page in ['crashes', 'administration', 'schematics'] %} text-zinc-50{% endif %}">Más<span aria-hidden="true" class="ml-1.5 text-xs">▾</span></summary>
+          <summary class="nav-link cursor-pointer list-none{% if current_page in ['crashes', 'administration'] %} text-zinc-50{% endif %}">Más<span aria-hidden="true" class="ml-1.5 text-xs">▾</span></summary>
           <div class="menu-panel absolute left-0 top-12 w-72 p-1.5">
             {% for href, label, hint, page, icon in more_links %}<a href="{{ href }}" class="menu-item"{% if current_page == page %} aria-current="page"{% endif %}><span class="flex items-center gap-2">{{ pixel(icon) }}{{ label }}</span><small class="pl-5">{{ hint }}</small></a>{% endfor %}
           </div>

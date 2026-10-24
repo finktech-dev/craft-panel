@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     crash_reports_directory: Path | None = None
     mods_directory: Path | None = None
     config_directory: Path | None = None
-    schematics_directory: Path | None = None
     defaultconfigs_directory: Path | None = None
     panel_directory: Path | None = None
     static_directory: Path | None = None
@@ -137,7 +136,6 @@ class Settings(BaseSettings):
         self.crash_reports_directory = self._server_path(self.crash_reports_directory, "crash-reports")
         self.mods_directory = self._server_path(self.mods_directory, "mods")
         self.config_directory = self._server_path(self.config_directory, "config")
-        self.schematics_directory = self._server_path(self.schematics_directory, "schematics")
         self.defaultconfigs_directory = self._server_path(self.defaultconfigs_directory, "defaultconfigs")
         self.panel_directory = self._project_path(self.panel_directory, "web_panel")
         self.static_directory = self._panel_path(self.static_directory, "static")
