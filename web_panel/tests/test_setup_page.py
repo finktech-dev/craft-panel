@@ -5,11 +5,13 @@ from pathlib import Path
 from starlette.testclient import TestClient
 from starlette.templating import Jinja2Templates
 
+from app.core.navigation import nav_layout
 from main import app
 
 
 def test_setup_template_uses_read_only_runtime_endpoint() -> None:
     local_templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+    local_templates.env.globals["nav_layout"] = nav_layout
     template = local_templates.get_template("setup.html")
     rendered = template.render(
         request={"type": "http", "method": "GET", "path": "/setup", "headers": []},

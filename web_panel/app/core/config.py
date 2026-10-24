@@ -1,4 +1,4 @@
-"""Configuración tipada y centralizada del panel web."""
+"""Typed, centralized configuration for the web panel."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Valores configurables mediante variables de entorno ``MINECRAFT_*``.
+    """Values configurable through ``MINECRAFT_*`` environment variables.
 
-    Las rutas derivadas se mantienen dentro de la raíz del proyecto para evitar
-    que una configuración accidental apunte a directorios ajenos al servidor.
+    Derived paths stay inside the project root so an accidental setting cannot
+    point at directories unrelated to the server.
     """
 
     model_config = SettingsConfigDict(
@@ -158,7 +158,7 @@ class Settings(BaseSettings):
         return self
 
     def _load_or_create_local_secrets(self) -> None:
-        """Mantiene secretos persistentes, fuera de Git, sin un PIN débil por defecto.
+        """Keep persistent secrets out of Git, with no weak default PIN.
 
         The administrator password is only ever stored as a scrypt hash
         (``admin_password_hash``). A password generated on first run is kept in

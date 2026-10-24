@@ -1,4 +1,4 @@
-"""Controles HTTP transversales para la sesión administrativa."""
+"""Cross-cutting HTTP controls for the admin session."""
 
 from __future__ import annotations
 
@@ -115,7 +115,7 @@ class RequestGuardMiddleware:
 
 
 class SecurityHeadersAndCsrfMiddleware(BaseHTTPMiddleware):
-    """Bloquea CSRF para sesiones y añade cabeceras defensivas al panel."""
+    """Block CSRF for sessions and add defensive headers to the panel."""
 
     async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
         if request.method in _UNSAFE_METHODS and request.url.path.startswith("/api/"):

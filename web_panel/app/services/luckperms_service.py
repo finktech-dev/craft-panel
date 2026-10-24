@@ -1,4 +1,4 @@
-"""Integración con LuckPerms para generación de enlaces del editor web y comandos rápidos."""
+"""LuckPerms integration for web editor links and quick commands."""
 
 from __future__ import annotations
 
@@ -202,13 +202,13 @@ class LuckPermsService:
                     message=f"No se pudo enviar el comando a la consola: {e}",
                 )
 
-            # Esperar hasta 8 segundos a que aparezca la URL en el buffer de logs
+            # Wait up to 8 seconds for the URL to show up in the log buffer
             url_pattern = re.compile(r"(https://luckperms\.net/editor/[a-zA-Z0-9]+)")
             deadline = asyncio.get_running_loop().time() + 8.0
 
             while asyncio.get_running_loop().time() < deadline:
                 history = server_manager.history
-                # Revisar las últimas 25 líneas
+                # Check the last 25 lines
                 for entry in reversed(history[-25:]):
                     msg = entry.get("message", "")
                     # Ignore older lines and player chat: anyone in game could
@@ -278,7 +278,7 @@ class LuckPermsService:
         )
 
     def get_worldedit_status(self) -> dict[str, Any]:
-        """Obtiene el estado del Hot-Toggle de WorldEdit."""
+        """Get the state of the WorldEdit hot toggle."""
         state_file = self._state_file
         installed = self._worldedit_is_installed()
         enabled = False
@@ -303,7 +303,7 @@ class LuckPermsService:
         }
 
     async def set_worldedit_status(self, enabled: bool) -> dict[str, Any]:
-        """Aplica la regla de permisos en caliente con LuckPerms sin reiniciar Java."""
+        """Apply the permission rule live through LuckPerms without restarting Java."""
         if not self._is_enabled():
             return {"success": False, "enabled": enabled, "message": "WorldEdit en vivo necesita habilitar LuckPerms para esta instalación.", "executed_live": False, "method": "LuckPerms desactivado"}
         if not self._worldedit_is_installed():
@@ -344,7 +344,7 @@ class LuckPermsService:
                 await server_manager.send_command("/lp group admin permission set worldedit.* true")
                 msg = "WorldEdit ACTIVADO en caliente: Permisos concedidos al grupo admin instantáneamente."
             else:
-                # WorldEdit OFF: Bloquear en default y en admin
+                # WorldEdit OFF: deny in default and in admin
                 await server_manager.send_command("/lp group default permission set worldedit.* false")
                 await server_manager.send_command("/lp group admin permission set worldedit.* false")
                 msg = "WorldEdit DESACTIVADO en caliente: Comandos // y varita bloqueados sin reiniciar el servidor."

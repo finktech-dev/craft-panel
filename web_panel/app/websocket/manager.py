@@ -1,4 +1,4 @@
-"""Registro y difusión segura de conexiones WebSocket activas."""
+"""Registry and safe broadcasting for active WebSocket connections."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
-    """Mantiene clientes conectados y aísla fallos de un cliente del resto."""
+    """Track connected clients and isolate one client's failures from the rest."""
 
     def __init__(self) -> None:
         self._connections: set[WebSocket] = set()
@@ -31,7 +31,7 @@ class ConnectionManager:
     async def send_json(self, websocket: WebSocket, payload: Mapping[str, Any]) -> None:
         try:
             await websocket.send_json(dict(payload))
-        except Exception:  # El socket puede cerrarse entre el receive y el send.
+        except Exception:  # The socket may close between the receive and the send.
             logger.debug("Cliente WebSocket desconectado durante un envío.", exc_info=True)
             self.disconnect(websocket)
 

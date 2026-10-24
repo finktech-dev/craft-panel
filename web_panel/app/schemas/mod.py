@@ -1,4 +1,4 @@
-"""Contratos para el gestor de mods y el catálogo Modrinth."""
+"""Contracts for the mod manager and the Modrinth catalog."""
 
 from __future__ import annotations
 
@@ -64,6 +64,8 @@ class ModUpdateItem(BaseModel):
     current_version: str | None = None
     latest_version: str | None = None
     project_id: str | None = None
+    # Exact Modrinth version to install when updating.
+    version_id: str | None = None
     has_update: bool = False
 
 

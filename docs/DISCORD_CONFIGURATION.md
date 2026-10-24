@@ -1,6 +1,6 @@
 # Configurable Discord alerts
 
-The panel does not include a specific server's world names, player names, or webhooks. **Administration > Discord** stores local preferences in `web_panel/.discord_config.json`, which is ignored by Git. You can also use the `MINECRAFT_DISCORD_*` variables in [`web_panel/.env.example`](../web_panel/.env.example) as initial values for an installation.
+The panel does not include a specific server's world names, player names, or webhooks. **"Ajustes" › "Avisos en Discord"** (Settings › Discord alerts) stores local preferences in `web_panel/.discord_config.json`, which is ignored by Git. You can also use the `MINECRAFT_DISCORD_*` variables in [`web_panel/.env.example`](../web_panel/.env.example) as initial values for an installation.
 
 Screen preferences take precedence over environment variables. If a presentation field is empty, the panel uses its matching variable. This lets you publish the code without copying host data or secrets.
 

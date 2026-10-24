@@ -1,4 +1,4 @@
-"""Contrato del diagnóstico del Crash Doctor."""
+"""Crash Doctor diagnosis contract."""
 
 from __future__ import annotations
 

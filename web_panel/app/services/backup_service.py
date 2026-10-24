@@ -1,4 +1,4 @@
-"""Creación, listado y restauración segura de copias del mundo."""
+"""Safe creation, listing and restoring of world backups."""
 
 from __future__ import annotations
 
@@ -146,7 +146,7 @@ class BackupService:
                     await self._manager.send_command_and_wait_for_log("save-all flush", "Saved the game")
                     await self._manager.send_command("save-off")
                     saves_paused = True
-                    # El comando anterior se procesa en el hilo principal del servidor.
+                    # The previous command is processed on the server's main thread.
                     await asyncio.sleep(0.2)
                 report(progress, "archive")
                 await asyncio.to_thread(self._create_archive_sync, temporary_path, progress)
@@ -182,11 +182,11 @@ class BackupService:
         return await asyncio.to_thread(self._list_backups_sync)
 
     async def safety_overview(self) -> BackupSafetyOverview:
-        """Inspecciona archivos existentes sin crear, borrar o restaurar nada."""
+        """Inspect existing files without creating, deleting or restoring anything."""
         return await asyncio.to_thread(self._safety_overview_sync)
 
     async def audit_and_purge_backups(self) -> BackupAuditResponse:
-        """Comprueba CRCs y purga sólo copias válidas que excedan la política."""
+        """Check CRCs and purge only valid backups that exceed the policy."""
         async with self._operation_lock:
             return await asyncio.to_thread(self._audit_and_purge_sync)
 
@@ -477,7 +477,7 @@ class BackupService:
         )
 
     def _backup_provenance(self, path: Path) -> Literal["panel", "simplebackups", "external"]:
-        """Clasifica sólo por ubicación conocida, sin asumir quién creó un ZIP externo."""
+        """Classify by known location only, without guessing who created an external ZIP."""
         for directory in (self.backups_directory, self._default_backups_directory):
             try:
                 path.resolve().relative_to(directory.resolve())

@@ -1,4 +1,4 @@
-"""Endpoints REST para configuración y pruebas de Webhooks de Discord."""
+"""REST endpoints to configure and test Discord webhooks."""
 
 from __future__ import annotations
 
@@ -21,13 +21,13 @@ router = APIRouter(
 
 @router.get("/config", response_model=DiscordConfig)
 async def get_discord_config() -> DiscordConfig:
-    """Retorna la configuración actual de webhooks y alertas de Discord."""
+    """Return the current Discord webhook and alert settings."""
     return discord_service.get_config()
 
 
 @router.post("/config", response_model=DiscordActionResponse)
 async def save_discord_config(config: DiscordConfig) -> DiscordActionResponse:
-    """Guarda la configuración persistente en .discord_config.json."""
+    """Save the persistent settings to .discord_config.json."""
     try:
         discord_service.save_config(config)
         return DiscordActionResponse(
@@ -46,7 +46,7 @@ async def save_discord_config(config: DiscordConfig) -> DiscordActionResponse:
 
 @router.post("/test", response_model=DiscordActionResponse, dependencies=[Depends(rate_limit("discord-test", 10, 60))])
 async def test_discord_webhook(req: DiscordTestRequest) -> DiscordActionResponse:
-    """Envía un mensaje de prueba al webhook especificado o al configurado."""
+    """Send a test message to the given webhook or the configured one."""
     target_url = req.webhook_url.strip() if req.webhook_url else None
     test_type = req.test_type.strip() if req.test_type else "status"
     mention_role = req.mention_role.strip() if req.mention_role else ""

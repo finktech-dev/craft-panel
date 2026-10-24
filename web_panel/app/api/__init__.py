@@ -1,1 +1,1 @@
-"""Capa HTTP/REST del panel."""
+"""HTTP/REST layer of the panel."""

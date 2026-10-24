@@ -1,4 +1,4 @@
-"""Tests para WaypointService y BookService agnósticos."""
+"""Tests for the host-agnostic WaypointService and BookService."""
 
 from __future__ import annotations
 

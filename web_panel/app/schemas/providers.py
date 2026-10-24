@@ -1,7 +1,7 @@
-"""Contratos neutrales para hosts y adaptadores del panel.
+"""Neutral contracts for panel hosts and adapters.
 
-Estos modelos describen una integración; no contienen rutas, comandos,
-credenciales ni una conexión al servidor actual.
+These models describe an integration; they hold no paths, commands,
+credentials or connection to the current server.
 """
 
 from typing import Literal
@@ -16,7 +16,7 @@ ProviderCapability = Literal[
 
 
 class ProviderDescriptor(BaseModel):
-    """Identidad y alcance declarativo de un adapter instalable."""
+    """Identity and declared scope of an installable adapter."""
 
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]*$")
     name: str = Field(min_length=1, max_length=80)
@@ -26,7 +26,7 @@ class ProviderDescriptor(BaseModel):
 
 
 class ProviderStatus(BaseModel):
-    """Estado observable; no revela configuraciones ni secretos del host."""
+    """Observable status; reveals no host settings or secrets."""
 
     provider_id: str = Field(pattern=r"^[a-z][a-z0-9_-]*$")
     state: Literal["ready", "unavailable", "not_configured"]

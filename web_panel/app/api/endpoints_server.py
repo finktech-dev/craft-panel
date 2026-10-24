@@ -1,4 +1,4 @@
-"""Controles REST protegidos para el proceso del servidor y métricas de operación."""
+"""Protected REST controls for the server process and runtime metrics."""
 
 from __future__ import annotations
 
@@ -370,7 +370,7 @@ def _friend_connection_info(
     file_address: str | None = None,
     playit_host_state: str | None = None,
 ) -> FriendConnectionInfo:
-    """Describe una dirección existente sin iniciar, detener ni configurar túneles."""
+    """Describe an existing address without starting, stopping or configuring tunnels."""
     custom_address = custom_address.strip() if custom_address else None
     configured_address = configured_address.strip() if configured_address else None
     file_address = file_address.strip() if file_address else None
@@ -464,7 +464,7 @@ async def get_health_summary() -> dict[str, Any]:
     metrics = metrics_service.get_server_metrics()
     is_running = server_manager.is_running
 
-    # TPS y MSPT estimados
+    # Estimated TPS and MSPT
     tps = 20.0 if is_running else 0.0
     mspt = round(min(50.0, max(15.0, metrics.cpu_percent * 0.4)), 1) if is_running else 0.0
     if not is_running:
@@ -484,7 +484,7 @@ async def get_health_summary() -> dict[str, Any]:
         health_label = "Fluido (20.0 TPS)"
         health_color = "emerald"
 
-    # Último backup
+    # Latest backup
     last_backup_info = None
     try:
         backups = await backup_service.list_backups()
@@ -498,7 +498,7 @@ async def get_health_summary() -> dict[str, Any]:
     except Exception:
         pass
 
-    # Último crash / incidente
+    # Latest crash / incident
     last_crash_info = None
     try:
         crash_list = await player_crash_service.list_events(limit=5)

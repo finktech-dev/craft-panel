@@ -1,4 +1,4 @@
-"""Entrypoint ASGI del panel de administración."""
+"""ASGI entry point of the admin panel."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from app.api import server_automation
 from app.api.router import router as api_router
 from app.core.config import settings
+from app.core.navigation import NAV_COOKIE, nav_layout, parse_nav_cookie
 from app.core.security import (
     TwoFactorError,
     get_csrf_token,
@@ -41,15 +42,15 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Conserva el proceso de Minecraft consistente al apagar el panel."""
+    """Keep the Minecraft process consistent when the panel shuts down."""
     server_automation.install()
     scheduler_service.start()
     asyncio.create_task(server_automation.start_with_panel(), name="start-with-panel")
     try:
         yield
     except asyncio.CancelledError:
-        # Uvicorn cancela el lifespan al recibir Ctrl+C en Windows. Consumir
-        # esta cancelación evita una traza falsa tras un apagado correcto.
+        # Uvicorn cancels the lifespan on Ctrl+C on Windows. Swallowing the
+        # cancellation avoids a bogus traceback after a clean shutdown.
         logging.getLogger("panel").info("Se recibió una interrupción; apagando el panel ordenadamente.")
     finally:
         # Record jobs that this shutdown interrupts before anything else stops.
@@ -80,8 +81,8 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
-# SessionMiddleware queda por fuera del control CSRF para que este último pueda
-# leer la sesión firmada antes de procesar una acción administrativa.
+# SessionMiddleware wraps the CSRF check so the latter can read the signed
+# session before handling an admin action.
 app.add_middleware(SecurityHeadersAndCsrfMiddleware)
 app.add_middleware(
     SessionMiddleware,
@@ -99,6 +100,7 @@ assert settings.static_directory is not None
 assert settings.panel_directory is not None
 app.mount("/static", StaticFiles(directory=str(settings.static_directory)), name="static")
 templates = Jinja2Templates(directory=str(settings.panel_directory / "templates"))
+templates.env.globals["nav_layout"] = nav_layout
 app.include_router(api_router)
 app.include_router(terminal_router)
 
@@ -111,7 +113,7 @@ async def protected_path_handler(_: Request, error: ProtectedPathError) -> JSONR
 
 @app.get("/health", tags=["system"])
 async def healthcheck() -> dict[str, str]:
-    """Sonda mínima que no intenta iniciar ni inspeccionar el servidor."""
+    """Minimal probe that never starts or inspects the server."""
     return {"status": "ok", "server_state": server_manager.state}
 
 
@@ -123,6 +125,7 @@ def _template_context(request: Request, current_page: str) -> dict[str, object]:
     return {
         "request": request,
         "current_page": current_page,
+        "nav_bar": parse_nav_cookie(request.cookies.get(NAV_COOKIE)),
         "is_admin": request_has_admin_session(request),
         "public_address": settings.effective_public_address,
         "brand_name": settings.effective_server_name or "Craft Panel",

@@ -125,7 +125,7 @@
               navDev.classList.remove('inline-flex');
             }
           }
-        } catch { /* La página conserva su último estado visible. */ }
+        } catch { /* The page keeps its last visible state. */ }
       };
       refreshHeaderStatus();
       window.setInterval(refreshHeaderStatus, 5000);
@@ -140,7 +140,7 @@
             publicAddress.textContent = tunnel.public_address;
             copyAddress?.classList.remove('hidden');
           }
-        } catch { /* Playit puede no estar configurado todavía. */ }
+        } catch { /* Playit may not be set up yet. */ }
       };
       refreshTunnel();
       window.setInterval(refreshTunnel, 10000);
@@ -212,4 +212,43 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.key !== 'Escape') return;
     menus.forEach((menu) => { if (menu.open) { menu.open = false; menu.querySelector('summary')?.focus(); } });
   });
+});
+
+// Side panels (<dialog class="drawer">): any [data-close-dialog] inside closes its dialog,
+// and a click on the dimmed backdrop closes it too.
+document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('click', (event) => {
+    const closer = event.target.closest('[data-close-dialog]');
+    if (closer) { closer.closest('dialog')?.close(); return; }
+    if (event.target instanceof HTMLDialogElement && event.target.classList.contains('drawer')) event.target.close();
+    // Safari does not focus buttons on tap, which the "?" help needs to show its text.
+    event.target.closest('.help-btn')?.focus();
+  });
+});
+
+// "Personalizar el menú": each link goes in the bar or under "Más". The choice is a cookie,
+// so the server draws the header that way from the first paint.
+document.addEventListener('DOMContentLoaded', () => {
+  const editor = document.querySelector('#nav-editor');
+  if (!editor) return;
+  const DEFAULT_BAR = ['inicio', 'jugadores', 'mundo', 'mods', 'copias', 'consola'];
+  const rows = () => [...editor.querySelectorAll('[data-nav-key]')];
+  const setPlace = (row, place) => row.querySelectorAll('[data-place]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.place === place)));
+  const save = (keys) => {
+    // "-" keeps an empty bar distinct from "never chosen".
+    document.cookie = `cp_nav=${keys.length ? keys.join('.') : '-'}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    window.location.reload();
+  };
+  document.querySelectorAll('[data-open-nav-editor]').forEach((button) => button.addEventListener('click', () => {
+    button.closest('details')?.removeAttribute('open');
+    editor.showModal();
+  }));
+  editor.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-place]');
+    if (button) setPlace(button.closest('[data-nav-key]'), button.dataset.place);
+  });
+  editor.querySelector('#nav-editor-save')?.addEventListener('click', () => save(
+    rows().filter((row) => row.querySelector('[data-place="bar"]').getAttribute('aria-pressed') === 'true').map((row) => row.dataset.navKey),
+  ));
+  editor.querySelector('#nav-editor-reset')?.addEventListener('click', () => save(DEFAULT_BAR));
 });

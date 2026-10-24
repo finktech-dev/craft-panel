@@ -14,7 +14,7 @@ class LuckPermsCommandRequest(BaseModel):
 
 
 class LuckPermsPanelConfig(BaseModel):
-    """Configuración local del conector opcional de LuckPerms."""
+    """Local settings of the optional LuckPerms connector."""
 
     enabled: bool = False
     preset: str = ""

@@ -11,18 +11,8 @@
   <script defer src="/static/js/app.js"></script>
 </head>
 {%- from "_icons.html" import pixel -%}
-{%- set main_links = [
-  ('/', 'Inicio', 'dashboard', 'home'),
-  ('/worlds#whitelist', 'Jugadores', none, 'players'),
-  ('/worlds', 'Mundo', 'worlds', 'world'),
-  ('/mods', 'Mods', 'mods', 'mods'),
-  ('/backups', 'Copias', 'backups', 'backups'),
-  ('/console', 'Consola', 'console', 'console'),
-] -%}
-{%- set more_links = [
-  ('/crashes', 'Problemas', 'Por qué se cerró el servidor', 'crashes', 'problems'),
-  ('/administration', 'Ajustes', 'Acceso, Discord, rangos y más', 'administration', 'settings'),
-] -%}
+{%- set nav = nav_layout(nav_bar) -%}
+{%- macro nav_current(item) -%}{% if item.page and current_page == item.page %} aria-current="page"{% endif %}{%- endmacro -%}
 <body data-page="{{ current_page }}" class="panel-shell min-h-screen font-sans antialiased">
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
   <div id="toast-region" class="pointer-events-none fixed bottom-4 right-4 z-[70] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3" aria-live="polite"></div>
@@ -31,11 +21,13 @@
     <div class="mx-auto flex h-16 max-w-5xl items-center gap-2 px-4 sm:px-6">
       <a href="/" class="mr-3 flex min-w-0 items-center gap-2.5 font-display text-[1.05rem] font-semibold text-zinc-50" title="{{ brand_name or 'Craft Panel' }}">{{ pixel('grass', 24) }}<span class="max-w-[11rem] truncate whitespace-nowrap">{{ brand_name or 'Craft Panel' }}</span></a>
       <nav class="hidden items-center gap-0.5 md:flex" aria-label="Navegación principal">
-        {% for href, label, page, icon in main_links %}<a href="{{ href }}" class="nav-link gap-2"{% if page and current_page == page %} aria-current="page"{% endif %}>{{ pixel(icon) }}{{ label }}</a>{% endfor %}
+        {% for item in nav.bar %}<a href="{{ item.href }}" class="nav-link gap-2"{{ nav_current(item) }}>{{ pixel(item.icon) }}{{ item.label }}</a>{% endfor %}
         <details class="relative" data-menu>
-          <summary class="nav-link cursor-pointer list-none{% if current_page in ['crashes', 'administration'] %} text-zinc-50{% endif %}">Más<span aria-hidden="true" class="ml-1.5 text-xs">▾</span></summary>
+          <summary class="nav-link cursor-pointer list-none{% if nav.more | selectattr('page', 'equalto', current_page) | list %} text-zinc-50{% endif %}">Más<span aria-hidden="true" class="ml-1.5 text-xs">▾</span></summary>
           <div class="menu-panel absolute left-0 top-12 w-72 p-1.5">
-            {% for href, label, hint, page, icon in more_links %}<a href="{{ href }}" class="menu-item"{% if current_page == page %} aria-current="page"{% endif %}><span class="flex items-center gap-2">{{ pixel(icon) }}{{ label }}</span><small class="pl-5">{{ hint }}</small></a>{% endfor %}
+            {% for item in nav.more %}<a href="{{ item.href }}" class="menu-item"{{ nav_current(item) }}><span class="flex items-center gap-2">{{ pixel(item.icon) }}{{ item.label }}</span><small class="pl-5">{{ item.hint }}</small></a>{% endfor %}
+            {% if nav.more %}<hr class="my-1.5 border-zinc-800">{% endif %}
+            <button type="button" class="menu-item w-full text-left" data-open-nav-editor><span>Personalizar el menú</span><small>Elegí qué va en la barra y qué va acá</small></button>
           </div>
         </details>
       </nav>
@@ -46,9 +38,7 @@
         <details class="relative md:hidden" data-menu>
           <summary class="nav-link cursor-pointer list-none" aria-label="Abrir menú">Menú</summary>
           <div class="menu-panel absolute right-0 top-12 w-72 p-1.5">
-            {% for href, label, page, icon in main_links %}<a href="{{ href }}" class="menu-item"{% if page and current_page == page %} aria-current="page"{% endif %}><span class="flex items-center gap-2">{{ pixel(icon) }}{{ label }}</span></a>{% endfor %}
-            <hr class="my-1.5 border-zinc-800">
-            {% for href, label, hint, page, icon in more_links %}<a href="{{ href }}" class="menu-item"{% if current_page == page %} aria-current="page"{% endif %}><span class="flex items-center gap-2">{{ pixel(icon) }}{{ label }}</span><small class="pl-5">{{ hint }}</small></a>{% endfor %}
+            {% for item in nav.all %}<a href="{{ item.href }}" class="menu-item"{{ nav_current(item) }}><span class="flex items-center gap-2">{{ pixel(item.icon) }}{{ item.label }}</span></a>{% endfor %}
             <hr class="my-1.5 border-zinc-800">
             <button type="button" class="menu-item w-full text-left" data-logout>Salir</button>
           </div>
@@ -56,6 +46,24 @@
       </div>
     </div>
   </header>
+  <dialog id="nav-editor" class="drawer" aria-labelledby="nav-editor-title">
+    <div class="drawer-head">
+      <div>
+        <h2 id="nav-editor-title" class="text-lg font-semibold text-zinc-50">Personalizar el menú</h2>
+        <p class="mt-1 text-sm leading-relaxed text-zinc-400">Lo que más usás, en la barra. El resto, en «Más». Se guarda en este navegador.</p>
+      </div>
+      <button type="button" class="nav-link shrink-0" data-close-dialog>Cerrar</button>
+    </div>
+    <div class="drawer-body">
+      <div id="nav-editor-list">
+        {% for item in nav.all %}<div class="nav-choice" data-nav-key="{{ item.key }}"><span>{{ pixel(item.icon) }}{{ item.label }}</span><span class="segmented" role="group" aria-label="Dónde va {{ item.label }}"><button type="button" data-place="bar" aria-pressed="{{ 'true' if item in nav.bar else 'false' }}">Barra</button><button type="button" data-place="more" aria-pressed="{{ 'false' if item in nav.bar else 'true' }}">Más</button></span></div>{% endfor %}
+      </div>
+      <div class="mt-6 flex flex-wrap items-center gap-3">
+        <button id="nav-editor-save" type="button" class="v2-button btn-primary">Guardar</button>
+        <button id="nav-editor-reset" type="button" class="link text-sm">Volver a como venía</button>
+      </div>
+    </div>
+  </dialog>
   <main id="main-content" class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
   {% else %}
   <main id="main-content" class="grid min-h-screen place-items-center p-4"><div class="contents">

@@ -1,4 +1,4 @@
-"""Endpoints para integración y control de LuckPerms."""
+"""Endpoints for LuckPerms integration and control."""
 
 from __future__ import annotations
 

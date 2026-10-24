@@ -1,4 +1,4 @@
-"""Pruebas unitarias para el motor de análisis y clasificación de crashes y desconexiones."""
+"""Unit tests for the player disconnect analyzer."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def test_normal_disconnect_voluntary_leave(service: PlayerCrashService):
     evt = events[0]
     assert evt.player == "SamplePlayer"
     assert evt.category == "NORMAL_DISCONNECT"
-    assert evt.category_label == "Desconexión Normal"
+    assert evt.category_label == "Salió del juego"
     assert evt.severity == "info"
     assert evt.suspected_mod is None
     assert evt.suggestion is None
@@ -167,9 +167,7 @@ def test_timeout_reasons(service: PlayerCrashService):
     test_cases = [
         "Timed out",
         "Read timed out",
-        "Connection reset",
         "Internal Exception: java.net.SocketTimeoutException: Read timed out",
-        "Internal Exception: java.io.IOException: Connection reset by peer",
     ]
     for reason in test_cases:
         lines = [f"[22Sep2026 20:00:00.000] [Server thread/INFO] [minecraft/ServerGamePacketListenerImpl]: SamplePlayer lost connection: {reason}"]
@@ -180,18 +178,131 @@ def test_timeout_reasons(service: PlayerCrashService):
         assert events[0].suspected_mod is None
 
 
-def test_kicked_and_banned_reasons(service: PlayerCrashService):
-    test_cases = [
-        "Kicked by an operator",
-        "Kicked: Flying is not enabled on this server",
-        "You are not whitelisted on this server!",
-        "You have been banned from this server",
-        "/kick SamplePlayer Por spam",
-    ]
-    for reason in test_cases:
+def test_kicked_banned_and_whitelist_reasons(service: PlayerCrashService):
+    test_cases = {
+        "Kicked by an operator": "KICKED",
+        "Kicked: Flying is not enabled on this server": "KICKED",
+        "Flying is not enabled on this server": "KICKED",
+        "/kick SamplePlayer Por spam": "KICKED",
+        "You have been banned from this server": "BANNED",
+        "You are not whitelisted on this server!": "NOT_WHITELISTED",
+        "You are not white-listed on this server!": "NOT_WHITELISTED",
+    }
+    for reason, expected in test_cases.items():
         lines = [f"[22Sep2026 20:00:00.000] [Server thread/INFO] [minecraft/ServerGamePacketListenerImpl]: SamplePlayer lost connection: {reason}"]
         events = service._parse_lines(lines, "latest.log")
         assert len(events) == 1, f"Failed for reason: {reason}"
-        assert events[0].category == "KICKED_BANNED", f"Failed for reason: {reason}"
+        assert events[0].category == expected, f"Failed for reason: {reason}"
         assert events[0].severity == "warning"
         assert events[0].suspected_mod is None
+
+
+def test_custom_kick_message_is_attributed_to_who_kicked(service: PlayerCrashService):
+    lines = [
+        "[22Sep2026 20:00:00.000] [Server thread/INFO] [minecraft/MinecraftServer]: [Admin: Kicked SamplePlayer: andá a dormir]",
+        "[22Sep2026 20:00:00.100] [Server thread/INFO] [minecraft/ServerGamePacketListenerImpl]: SamplePlayer lost connection: andá a dormir",
+    ]
+    evt = service._parse_lines(lines, "latest.log")[0]
+    assert evt.category == "KICKED"
+    assert evt.kicked_by == "Admin"
+    assert "Admin" in evt.headline
+
+
+def test_ban_from_console(service: PlayerCrashService):
+    lines = [
+        "[22Sep2026 20:00:00.000] [Server thread/INFO] [minecraft/MinecraftServer]: Banned SamplePlayer: Griefing",
+        "[22Sep2026 20:00:00.100] [Server thread/INFO] [minecraft/ServerGamePacketListenerImpl]: SamplePlayer lost connection: Griefing",
+    ]
+    evt = service._parse_lines(lines, "latest.log")[0]
+    assert evt.category == "BANNED"
+    assert evt.kicked_by == "la consola"
+
+
+def test_someone_else_being_kicked_does_not_blame_the_player(service: PlayerCrashService):
+    lines = [
+        "[22Sep2026 20:00:00.000] [Server thread/INFO] [minecraft/MinecraftServer]: [Admin: Kicked OtherPlayer: spam]",
+        "[22Sep2026 20:00:05.000] [Server thread/INFO] [minecraft/ServerGamePacketListenerImpl]: SamplePlayer lost connection: Disconnected",
+    ]
+    assert service._parse_lines(lines, "latest.log")[0].category == "NORMAL_DISCONNECT"
+
+
+def test_game_closed_abruptly(service: PlayerCrashService):
+    for reason in (
+        "Connection reset",
+        "Internal Exception: java.io.IOException: Connection reset by peer",
+        "Internal Exception: java.io.IOException: An existing connection was forcibly closed by the remote host",
+    ):
+        lines = [f"[22Sep2026 20:00:00.000] [Server thread/INFO] [minecraft/ServerGamePacketListenerImpl]: SamplePlayer lost connection: {reason}"]
+        evt = service._parse_lines(lines, "latest.log")[0]
+        assert evt.category == "CLIENT_CLOSED", reason
+        assert "crash" in evt.advice
+
+
+def test_packet_error_points_at_the_mod_channel(service: PlayerCrashService):
+    lines = [
+        "[22Sep2026 20:00:00.000] [Netty Server IO #3/ERROR] [minecraft/Connection]: Failed to decode packet 'serverbound/minecraft:custom_payload' for waystones:sync_config",
+        "[22Sep2026 20:00:00.100] [Server thread/INFO] [minecraft/ServerGamePacketListenerImpl]: SamplePlayer lost connection: Network Protocol Error",
+    ]
+    evt = service._parse_lines(lines, "latest.log")[0]
+    assert evt.category == "MOD_ERROR"
+    assert evt.suspected_mod == "waystones"
+
+
+def test_session_timeline_tells_what_was_happening(service: PlayerCrashService):
+    lines = [
+        "[22Sep2026 19:30:00.000] [Server thread/INFO] [minecraft/PlayerList]: SamplePlayer[/203.0.113.7:51234] logged in with entity id 42 at (12.5, 64.0, -30.2)",
+        "[22Sep2026 19:30:00.100] [Server thread/INFO] [minecraft/MinecraftServer]: SamplePlayer joined the game",
+        "[22Sep2026 19:40:00.000] [Server thread/INFO] [minecraft/MinecraftServer]: <SamplePlayer> voy a la base",
+        "[22Sep2026 19:45:00.000] [Server thread/INFO] [minecraft/MinecraftServer]: SamplePlayer was slain by Zombie",
+        "[22Sep2026 19:59:30.000] [Server thread/WARN] [minecraft/MinecraftServer]: Can't keep up! Is the server overloaded? Running 5000ms or 100 ticks behind",
+        "[22Sep2026 20:00:00.000] [Server thread/INFO] [minecraft/ServerGamePacketListenerImpl]: SamplePlayer lost connection: Timed out",
+    ]
+    evt = service._parse_lines(lines, "latest.log")[0]
+    assert evt.category == "TIMEOUT"
+    assert evt.session_seconds == 30 * 60
+    assert evt.joined_at == "12, 64, -30"
+    assert evt.lag_warnings == 1
+    assert "lag" in evt.advice
+    kinds = [entry.kind for entry in evt.timeline]
+    assert kinds == ["join", "chat", "death", "lag", "leave"]
+    assert evt.occurred_at == "2026-09-22T20:00:00"
+
+
+def test_player_addresses_never_reach_the_panel(service: PlayerCrashService):
+    lines = [
+        "[22Sep2026 19:30:00.000] [Server thread/INFO] [minecraft/PlayerList]: SamplePlayer[/203.0.113.7:51234] logged in with entity id 42 at (1.0, 64.0, 1.0)",
+        "[22Sep2026 20:00:00.000] [Server thread/INFO] [minecraft/ServerLoginPacketListenerImpl]: SamplePlayer (/203.0.113.7:51234) lost connection: You are not white-listed on this server!",
+    ]
+    evt = service._parse_lines(lines, "latest.log")[0]
+    assert evt.category == "NOT_WHITELISTED"
+    dumped = evt.model_dump_json()
+    assert "203.0.113.7" not in dumped
+
+
+def test_refused_login_does_not_borrow_other_players_events(service: PlayerCrashService):
+    lines = [
+        "[22Sep2026 19:00:00.000] [Netty Server IO #3/ERROR] [minecraft/Connection]: Failed to decode packet for waystones:sync",
+        "[22Sep2026 19:00:01.000] [Server thread/INFO] [minecraft/MinecraftServer]: <OtherPlayer> hola",
+        *[f"[22Sep2026 19:0{n}:00.000] [Server thread/INFO] [minecraft/MinecraftServer]: tick {n}" for n in range(2, 9)],
+        "[22Sep2026 19:09:00.000] [Server thread/INFO] [minecraft/ServerLoginPacketListenerImpl]: Stranger (/192.0.2.50:4444) lost connection: You are not white-listed on this server!",
+    ]
+    evt = service._parse_lines(lines, "latest.log")[0]
+    assert evt.category == "NOT_WHITELISTED"
+    assert [entry.kind for entry in evt.timeline] == ["leave"]
+
+
+def test_vanilla_time_only_logs_get_the_file_date(service: PlayerCrashService):
+    lines = [
+        "[23:59:50] [Server thread/INFO]: SamplePlayer[/198.51.100.2:5000] logged in with entity id 1 at (0.0, 70.0, 0.0)",
+        "[00:00:10] [Server thread/INFO]: SamplePlayer lost connection: Disconnected",
+    ]
+    evt = service._parse_lines(lines, "2026-10-20-1.log.gz")[0]
+    assert evt.occurred_at == "2026-10-20T00:00:10"
+    assert evt.session_seconds == 20
+
+
+def test_event_id_survives_log_rotation(service: PlayerCrashService):
+    lines = [
+        "[22Sep2026 20:00:00.000] [Server thread/INFO] [minecraft/ServerGamePacketListenerImpl]: SamplePlayer lost connection: Disconnected",
+    ]
+    assert service._parse_lines(lines, "latest.log")[0].id == service._parse_lines(lines, "2026-09-22-1.log.gz")[0].id

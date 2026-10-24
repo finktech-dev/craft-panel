@@ -1,1 +1,1 @@
-"""Contratos y fixtures de adapters; no activa providers automáticamente."""
+"""Adapter contracts and fixtures; never activates providers automatically."""

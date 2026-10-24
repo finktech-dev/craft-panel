@@ -1,4 +1,4 @@
-"""Ciclo de vida del agente Playit y extracción de su dirección pública."""
+"""Playit agent lifecycle and extraction of its public address."""
 
 from __future__ import annotations
 
@@ -104,7 +104,7 @@ class PlayitService:
 
     @property
     def history(self) -> tuple[TunnelLogLine, ...]:
-        """Historial acotado para abrir la consola sin perder el contexto."""
+        """Bounded history so the console opens without losing context."""
         return tuple(self._history)
 
     @property
@@ -260,7 +260,7 @@ class PlayitService:
             await self._record("Playit quedó vinculado. La clave se guardó solo en esta computadora.", level="success")
             return self.status()
     async def configure_secret(self, agent_secret: str) -> TunnelStatus:
-        """Guarda la clave localmente y de forma atómica; nunca se registra en logs."""
+        """Save the key locally and atomically; it is never written to logs."""
         secret = agent_secret.strip()
         if len(secret) < 16 or "\n" in secret or "\r" in secret:
             raise PlayitServiceError("La clave de agente de Playit no tiene un formato válido.")
@@ -284,7 +284,7 @@ class PlayitService:
         return True
 
     async def shutdown(self) -> None:
-        """Cierra el agente al apagar el panel, sin dejar procesos huérfanos."""
+        """Close the agent when the panel shuts down, leaving no orphan processes."""
         await self.stop()
         for task in (self._reader_task, self._watcher_task):
             if task is not None and not task.done():

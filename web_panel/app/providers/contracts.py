@@ -1,4 +1,4 @@
-"""Interfaces mínimas para desacoplar la UI de un host concreto."""
+"""Minimal interfaces that decouple the UI from a specific host."""
 
 from __future__ import annotations
 
@@ -9,22 +9,22 @@ from app.schemas.providers import ProviderDescriptor, ProviderStatus
 
 @runtime_checkable
 class PanelProvider(Protocol):
-    """Adapter observable registrado explícitamente por una futura composición.
+    """Observable adapter, explicitly registered by a future composition root.
 
-    El contrato no autoriza procesos, archivos o red por sí mismo. Cada
-    provider concreto debe declarar sus capacidades antes de recibir una acción
-    desde UI/API.
+    The contract does not grant process, file or network access on its own.
+    Each concrete provider must declare its capabilities before it receives an
+    action from the UI/API.
     """
 
     @property
     def descriptor(self) -> ProviderDescriptor: ...
 
     def status(self) -> ProviderStatus:
-        """Lee disponibilidad sin iniciar servicios ni mutar el host."""
+        """Read availability without starting services or changing the host."""
 
 
 @runtime_checkable
 class ProviderCatalog(Protocol):
-    """Catálogo de adapters disponibles, independiente del sistema operativo."""
+    """Catalog of available adapters, independent of the operating system."""
 
     def list_providers(self) -> tuple[PanelProvider, ...]: ...

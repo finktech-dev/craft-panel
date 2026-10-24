@@ -1,4 +1,4 @@
-"""Contratos de la API para estado, métricas y acciones del servidor."""
+"""API contracts for server status, metrics and actions."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class ServerActionResponse(BaseModel):
 
 
 class PublicServerStatus(BaseModel):
-    """Estado mínimo y seguro para una web pública."""
+    """Minimal, safe status for a public website."""
 
     online: bool
     state: str

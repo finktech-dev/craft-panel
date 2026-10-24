@@ -1,4 +1,4 @@
-"""Lanzador limpio y elegante del panel web sin trazas de error al cerrar."""
+"""Starts the web panel and exits quietly, without error traces, when it is closed."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def main() -> None:
         print("[Panel Web] Abrí el panel en esta PC para verla una sola vez y guardala en un lugar seguro.")
 
     try:
-        # En Windows, server.run() envuelve el bucle de asyncio
+        # On Windows, server.run() wraps the asyncio loop
         server.run()
     except (KeyboardInterrupt, SystemExit, asyncio.CancelledError):
         pass

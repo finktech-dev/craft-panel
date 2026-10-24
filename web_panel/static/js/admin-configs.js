@@ -1,6 +1,6 @@
 /**
- * Editor de Configuraciones TOML/JSON, Reglas del Mundo, Moderación de Jugadores,
- * Auditoría Spark y Programador de Backups para el Panel de Administración.
+ * Settings pages for mods and world: mod config files, game rules, players,
+ * the Spark check and automatic backups.
  */
 (() => {
   const initAdminConfigs = () => {
@@ -37,7 +37,10 @@
 
     // Configs tree renderer: node(n) handling 'section', 'boolean', 'number', 'list', etc.
     const node = (n) =>
-      n.type === 'section'
+      // The file itself is the top section: show its settings without a "Root" heading.
+      n.type === 'section' && n.path === ''
+        ? n.children.map(node).join('')
+        : n.type === 'section'
         ? `<details class="${ROW}" open><summary class="cursor-pointer font-semibold text-zinc-100">${esc(label(n.key))}</summary><div class="mt-2 border-l border-zinc-800 pl-4">${n.children.map(node).join('')}</div></details>`
         : n.type === 'boolean'
         ? `<label class="flex cursor-pointer items-center justify-between gap-4 ${ROW}"><span class="min-w-0"><span class="block font-medium text-zinc-100">${esc(label(n.key))}</span>${n.comment ? `<span class="mt-0.5 block text-sm leading-relaxed text-zinc-500">${esc(n.comment)}</span>` : ''}</span>${switchControl(`data-path="${esc(n.path)}"`, n.value)}</label>`
@@ -45,37 +48,97 @@
         ? `<label class="flex flex-wrap items-center justify-between gap-4 ${ROW}"><span class="min-w-0 flex-1"><span class="block font-medium text-zinc-100">${esc(label(n.key))}</span>${n.comment ? `<span class="mt-0.5 block text-sm leading-relaxed text-zinc-500">${esc(n.comment)}</span>` : ''}</span><input data-path="${esc(n.path)}" type="number" value="${esc(n.value)}" ${n.minimum !== null ? `min="${esc(n.minimum)}"` : ''} ${n.maximum !== null ? `max="${esc(n.maximum)}"` : ''} class="${NUMBER_INPUT}"></label>`
         : `<div class="${ROW}"><span class="block font-medium text-zinc-100">${esc(label(n.key))}</span><span class="mt-0.5 block text-sm leading-relaxed text-zinc-500">${n.type === 'list' ? 'Esto se cambia editando el archivo como texto, en Opciones avanzadas.' : esc(n.comment || '')}</span></div>`;
 
-    // showFiles(): search filter on #config-search and rendering into #config-picker
+    // "Abrir": on the computer that runs the panel, the file opens in its own text editor
+    // (Notepad on Windows). From another device, or with "Ver acá", it opens in a side panel.
+    let editor = { can_open_locally: false, editor_name: null };
+    let shownCount = 18;
+    const editorLabel = () => (editor.editor_name || 'tu editor de texto').replace(/^el /, '');
+
+    async function loadEditorInfo() {
+      try { editor = await Panel.api('/api/config-editor'); } catch { editor = { can_open_locally: false, editor_name: null }; }
+      const note = $('#config-editor-note');
+      if (note && editor.can_open_locally) {
+        note.textContent = `«Abrir» usa ${editor.editor_name}: guardá ahí con Ctrl+S y después reiniciá el servidor. Si preferís, «Ver acá» lo muestra en el panel.`;
+        note.classList.remove('hidden');
+      }
+    }
+
     function showFiles() {
       const picker = $('#config-picker');
       if (!picker) return;
       const searchInput = $('#config-search');
       const q = searchInput ? searchInput.value.toLowerCase() : '';
-      const xs = files.filter((x) => `${x.title} ${x.category} ${x.path}`.toLowerCase().includes(q)).slice(0, 18);
+      const matching = files.filter((x) => `${x.title} ${x.category} ${x.path}`.toLowerCase().includes(q));
+      const xs = matching.slice(0, shownCount);
+      const primary = editor.can_open_locally ? `Abrir en ${editorLabel()}` : 'Abrir';
       picker.innerHTML =
         xs
           .map(
             (x) =>
-              `<button type="button" data-file="${esc(x.path)}" class="choice group flex w-full items-center gap-4 border-b border-zinc-800 py-4 text-left"><span class="min-w-0 flex-1"><span class="block truncate font-semibold text-zinc-50">${esc(x.title)}</span><span class="mt-0.5 block truncate text-sm text-zinc-500">${esc(x.category)} · ${esc(String(x.format).toUpperCase())} · ${esc(x.size_kb)} KB</span></span><span class="link shrink-0 text-sm group-hover:underline">Abrir</span></button>`
+              `<div class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-zinc-800 py-4" data-row="${esc(x.path)}"><div class="min-w-0 flex-1"><p class="truncate font-semibold text-zinc-50">${esc(x.title)}</p><p class="mt-0.5 truncate text-sm text-zinc-500">${esc(x.category)} · ${esc(String(x.format).toUpperCase())} · ${esc(x.size_kb)} KB</p><p class="config-row-status mt-1 hidden text-sm text-emerald-300" aria-live="polite"></p></div><div class="flex shrink-0 items-center gap-4">${editor.can_open_locally ? `<button type="button" data-view="${esc(x.path)}" class="text-sm text-zinc-400 hover:text-zinc-100">Ver acá</button>` : ''}<button type="button" data-file="${esc(x.path)}" class="link text-sm">${esc(primary)}</button></div></div>`
           )
           .join('') || '<p class="py-6 text-zinc-500">No encontramos ningún archivo con ese nombre.</p>';
+      const more = $('#config-picker-more');
+      if (more) {
+        more.classList.toggle('hidden', matching.length <= xs.length);
+        const count = $('#config-picker-count');
+        if (count) count.textContent = `Se ven ${xs.length} de ${matching.length}. Buscá por nombre o`;
+      }
     }
 
-    // load(path): fetching /api/configs/... and setting up tree or raw view in #config-workspace
+    const rowStatus = (path, message, isError = false) => {
+      const row = [...document.querySelectorAll('#config-picker [data-row]')].find((node) => node.dataset.row === path);
+      const status = row?.querySelector('.config-row-status');
+      if (!status) return;
+      status.textContent = message;
+      status.classList.toggle('text-emerald-300', !isError);
+      status.classList.toggle('text-[#f3a79b]', isError);
+      status.classList.remove('hidden');
+    };
+
+    async function openLocally(path, button) {
+      const original = button?.textContent;
+      if (button) { button.disabled = true; button.textContent = 'Abriendo…'; }
+      try {
+        const result = await Panel.api('/api/config-editor/open/' + encodeURIComponent(path).replaceAll('%2F', '/'), { method: 'POST' });
+        rowStatus(path, result.message);
+        Panel.toast(result.message);
+      } catch (e) {
+        rowStatus(path, e.message, true);
+        Panel.toast(e.message, 'error');
+        // Not possible here (another device, no editor): show it in the panel instead.
+        if (e.status === 409) await load(path);
+      } finally {
+        if (button) { button.disabled = false; button.textContent = original; }
+      }
+    }
+
+    // load(path): opens the side panel at once with a loading line, then fills the form.
     async function load(path) {
+      const workspaceEl = $('#config-workspace');
+      const nameEl = $('#selected-config-name');
+      const helpEl = $('#selected-config-help');
+      const formEl = $('#config-form');
+      const codeEl = $('#config-code');
+      const loadingEl = $('#config-loading');
+      const localButton = $('#config-open-local');
+      if (nameEl) nameEl.textContent = path;
+      if (helpEl) helpEl.textContent = '';
+      if (formEl) formEl.innerHTML = '';
+      if (codeEl) codeEl.value = '';
+      loadingEl?.classList.remove('hidden');
+      if (localButton) {
+        localButton.classList.toggle('hidden', !editor.can_open_locally);
+        localButton.textContent = `Abrir en ${editorLabel()}`;
+        localButton.onclick = () => openLocally(path, localButton);
+      }
+      if (workspaceEl && !workspaceEl.open) workspaceEl.showModal();
       try {
         current = await Panel.api('/api/configs/' + encodeURIComponent(path).replaceAll('%2F', '/'));
-        const nameEl = $('#selected-config-name');
-        const helpEl = $('#selected-config-help');
-        const formEl = $('#config-form');
-        const codeEl = $('#config-code');
-        const workspaceEl = $('#config-workspace');
-
-        if (nameEl) nameEl.textContent = current.path;
         if (helpEl) {
           helpEl.textContent =
             current.format === 'toml'
-              ? 'Cada cambio se guarda al momento y respeta los comentarios del archivo.'
+              ? 'Cada cambio se guarda al momento y respeta los comentarios del archivo. Con el servidor encendido no se puede guardar.'
               : 'Este tipo de archivo se cambia editándolo como texto, en Opciones avanzadas.';
         }
         if (formEl) {
@@ -85,32 +148,33 @@
               : '<p class="py-4 text-zinc-400">Abrí «Opciones avanzadas» más abajo para editar este archivo como texto.</p>';
         }
         if (codeEl) codeEl.value = current.raw_content;
-        if (workspaceEl) workspaceEl.classList.remove('hidden');
       } catch (e) {
+        if (formEl) formEl.innerHTML = `<p class="py-6 text-[#f3a79b]">${esc(e.message)}</p>`;
         Panel.toast(e.message, 'error');
+      } finally {
+        loadingEl?.classList.add('hidden');
       }
     }
 
     // Config search input & picker click delegation
     const configSearch = $('#config-search');
     if (configSearch) {
-      configSearch.oninput = showFiles;
+      configSearch.oninput = () => { shownCount = 18; showFiles(); };
+    }
+    const showMore = $('#config-show-more');
+    if (showMore) {
+      showMore.onclick = () => { shownCount += 30; showFiles(); };
     }
 
     const configPicker = $('#config-picker');
     if (configPicker) {
       configPicker.onclick = (e) => {
-        const b = e.target.closest('.choice');
-        if (b && b.dataset.file) load(b.dataset.file);
-      };
-    }
-
-    // Close workspace on #close-config
-    const closeConfigBtn = $('#close-config');
-    if (closeConfigBtn) {
-      closeConfigBtn.onclick = () => {
-        const workspaceEl = $('#config-workspace');
-        if (workspaceEl) workspaceEl.classList.add('hidden');
+        const view = e.target.closest('[data-view]');
+        if (view) { load(view.dataset.view); return; }
+        const open = e.target.closest('[data-file]');
+        if (!open) return;
+        if (editor.can_open_locally) openLocally(open.dataset.file, open);
+        else load(open.dataset.file);
       };
     }
 
@@ -266,6 +330,7 @@
     (async () => {
       try {
         if ($('#config-picker')) {
+          await loadEditorInfo();
           await window.loadConfigsFiles();
         }
         if ($('#gamerules-list') || $('#players-list')) {

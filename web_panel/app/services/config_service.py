@@ -1,6 +1,6 @@
-"""Editor de configuración limitado a server/config y sin rutas arbitrarias."""
+"""Config editor limited to server/config, with no arbitrary paths."""
 from __future__ import annotations
-import asyncio, json, os, re, uuid
+import asyncio, json, os, re, shutil, subprocess, sys, uuid
 from pathlib import Path
 import json5, tomlkit
 from app.core.config import Settings, settings
@@ -85,6 +85,31 @@ class ConfigService:
   async with self.lock:
    await asyncio.to_thread(self._atomic,p,content)
   return await self.read(rel)
+ def system_editor(self) -> str | None:
+  """Plain name of the text editor this computer would use, or None when there is none."""
+  return _system_editor()[0]
+ async def open_in_system_editor(self, rel: str) -> str:
+  """Open one config file in the computer's own text editor and return the editor's name."""
+  p=self.path(rel)
+  if not p.is_file(): raise ConfigServiceError('No existe el archivo solicitado.')
+  try: require_not_protected(p, configured=self.s)
+  except ProtectedPathError as e: raise ConfigConflictError(str(e)) from e
+  name, command = _system_editor()
+  if command is None: raise ConfigConflictError('No encontramos un editor de texto en esta computadora. Editalo acá en el panel.')
+  try:
+   # The editor gets the path as one argument; nothing goes through a shell.
+   subprocess.Popen([*command, str(p)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+  except OSError as e: raise ConfigServiceError(f'No se pudo abrir {name}.') from e
+  return name
  def _atomic(self,p,content):
   tmp=p.with_name(f'.{p.name}.{uuid.uuid4().hex}.tmp'); tmp.write_text(content,encoding='utf-8'); os.replace(tmp,p)
+def _system_editor() -> tuple[str | None, list[str] | None]:
+ """The plain-text editor for this OS. Notepad is used explicitly so a file is never executed."""
+ if sys.platform == 'win32':
+  root=os.environ.get('SystemRoot', r'C:\Windows')
+  notepad=Path(root)/'System32'/'notepad.exe'
+  return 'el Bloc de notas', [str(notepad) if notepad.is_file() else 'notepad.exe']
+ if sys.platform == 'darwin': return 'TextEdit', ['open', '-t']
+ opener=shutil.which('xdg-open')
+ return ('tu editor de texto', [opener]) if opener else (None, None)
 config_service=ConfigService()

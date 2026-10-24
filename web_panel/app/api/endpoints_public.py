@@ -1,4 +1,4 @@
-"""Información pública deliberadamente limitada para la landing."""
+"""Deliberately limited public information for the landing page."""
 
 from fastapi import APIRouter
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/public", tags=["public"])
 
 @router.get("/status", response_model=PublicServerStatus)
 async def public_server_status() -> PublicServerStatus:
-    """No expone consola, jugadores, IPs, métricas ni controles administrativos."""
+    """Exposes no console, players, IPs, metrics or admin controls."""
     tunnel = playit_service.status()
     return PublicServerStatus(
         online=server_manager.is_running,

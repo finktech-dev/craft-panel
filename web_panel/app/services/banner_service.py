@@ -1,4 +1,4 @@
-"""Banner PNG público con una fotografía instantánea del estado del servidor."""
+"""Public PNG banner with a snapshot of the server status."""
 
 from __future__ import annotations
 
@@ -60,10 +60,10 @@ class BannerService:
 
 
 def _font(size: int) -> ImageFont.ImageFont:
-    """La fuente incluida por Pillow evita depender de fuentes del sistema Windows."""
+    """Pillow's bundled font avoids depending on Windows system fonts."""
     try:
         return ImageFont.load_default(size=size)
-    except TypeError:  # Compatibilidad con versiones Pillow más antiguas.
+    except TypeError:  # Compatibility with older Pillow versions.
         return ImageFont.load_default()
 
 

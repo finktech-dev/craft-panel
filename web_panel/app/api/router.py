@@ -1,4 +1,4 @@
-"""Agregador de rutas REST; se ampliará con los módulos de fases posteriores."""
+"""REST route aggregator; later modules plug in here."""
 
 from fastapi import APIRouter
 

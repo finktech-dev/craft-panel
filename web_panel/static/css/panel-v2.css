@@ -92,3 +92,39 @@
 
 .skeleton { border-radius:.4rem; background:var(--surface-raised); }
 @media (prefers-reduced-motion: reduce) { .v2-button, .nav-link, .settings-row, .subtab { transition:none; } }
+
+/* Side panel: a <dialog> that slides in from the right (Escape, focus and backdrop come from the browser). */
+dialog.drawer { margin:0 0 0 auto; width:min(28rem, 100vw); height:100dvh; max-height:none; max-width:100vw; border:0; border-left:1px solid var(--line); border-radius:0; background:var(--surface); color:var(--text); padding:0; }
+dialog.drawer.drawer-wide { width:min(52rem, 100vw); }
+dialog.drawer[open] { animation:drawer-in 180ms ease-out; }
+dialog.drawer::backdrop { background:rgba(10,9,8,.6); }
+.drawer-head { position:sticky; top:0; z-index:1; display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; border-bottom:1px solid var(--line); background:var(--surface); padding:1.1rem 1.25rem; }
+.drawer-body { padding:1.25rem; }
+.drawer-action { display:flex; align-items:flex-start; gap:.75rem; border-top:1px solid var(--line); padding:1rem 0; }
+.drawer-action:first-child { border-top:0; padding-top:0; }
+.drawer-action > div { flex:1; min-width:0; }
+@keyframes drawer-in { from { transform:translateX(2rem); opacity:0; } to { transform:none; opacity:1; } }
+@media (prefers-reduced-motion: reduce) { dialog.drawer[open] { animation:none; } }
+
+/* "?" help: the explanation appears on hover, keyboard focus or tap. */
+.help { position:relative; display:inline-flex; vertical-align:middle; }
+.help-btn { display:grid; place-items:center; width:1.35rem; height:1.35rem; border-radius:999px; border:1px solid var(--line); color:var(--text-muted); font-size:.75rem; font-weight:700; line-height:1; }
+.help-btn:hover, .help-btn:focus-visible { color:var(--text); border-color:var(--text-muted); }
+.help-text { position:absolute; z-index:40; right:0; top:calc(100% + .45rem); width:min(17rem, 70vw); border:1px solid var(--line); border-radius:.6rem; background:var(--surface-raised); padding:.6rem .75rem; color:var(--text-soft); font-size:.85rem; font-weight:400; line-height:1.45; text-align:left; box-shadow:0 12px 30px rgba(10,9,8,.45); visibility:hidden; opacity:0; transition:opacity 120ms ease; pointer-events:none; }
+.help:hover .help-text, .help:focus-within .help-text { visibility:visible; opacity:1; }
+
+/* Page controls for long lists. */
+.pager { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; padding-top:1rem; font-size:.875rem; color:var(--text-muted); }
+.pager-pages { display:flex; flex-wrap:wrap; gap:.25rem; }
+.pager-pages button { min-width:2.25rem; min-height:2.25rem; border-radius:.5rem; padding:0 .5rem; color:var(--text-muted); font-weight:600; }
+.pager-pages button:hover:not(:disabled) { background:var(--surface-raised); color:var(--text); }
+.pager-pages button[aria-current="page"] { background:var(--surface-raised); color:var(--text); }
+.pager-pages button:disabled { opacity:.4; cursor:not-allowed; }
+
+/* Header layout editor: each row says whether the link sits in the bar or under "Más". */
+.nav-choice { display:flex; align-items:center; gap:.75rem; border-top:1px solid var(--line); padding:.75rem 0; }
+.nav-choice:first-child { border-top:0; }
+.nav-choice > span { flex:1; min-width:0; display:flex; align-items:center; gap:.5rem; }
+.segmented { display:inline-flex; border:1px solid var(--line); border-radius:.6rem; padding:.15rem; }
+.segmented button { border-radius:.45rem; padding:.3rem .65rem; font-size:.85rem; font-weight:600; color:var(--text-muted); }
+.segmented button[aria-pressed="true"] { background:var(--surface-raised); color:var(--text); }

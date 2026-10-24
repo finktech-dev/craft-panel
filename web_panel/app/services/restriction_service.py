@@ -1,13 +1,13 @@
-"""Servicio agnóstico de restricciones para Minecraft.
+"""Loader-agnostic restriction service for Minecraft.
 
-Maneja:
-1. Bloqueo de ítems y armas (compatible con Item Obliterator y comodines como !mod:.*).
-2. Supresión de spawns de mobs mediante datapacks nativos (remove_spawns)
-   en las carpetas de datapacks del servidor y moonlight-global-datapacks contra Overworld, Nether y End.
-3. Desactivación de profesiones de aldeanos y mesas de trabajo vía datapack tag removal
-   y sincronización de configs de mods personalizados (.custom_villagers.json).
-4. Descubrimiento dinámico 100% tipográfico (sin descargar texturas/PNGs).
-5. Recarga en caliente automática mediante /reload cuando el servidor está encendido.
+Handles:
+1. Blocking items and weapons (compatible with Item Obliterator and wildcards such as !mod:.*).
+2. Suppressing mob spawns through native datapacks (remove_spawns)
+   in the server datapack folders and moonlight-global-datapacks, for the Overworld, Nether and End.
+3. Disabling villager professions and workstations through datapack tag removal
+   and syncing configs of custom mods (.custom_villagers.json).
+4. Fully text-based dynamic discovery (no texture/PNG downloads).
+5. Automatic hot reload through /reload when the server is running.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from app.services.server_version_service import ServerVersionService, data_pack_
 
 logger = logging.getLogger(__name__)
 
-# Catálogo predeterminado de profesiones y mesas de trabajo de Minecraft Vanilla
+# Default catalog of vanilla Minecraft professions and workstations
 VANILLA_VILLAGERS = [
     {
         "id": "minecraft:weaponsmith",
@@ -127,7 +127,7 @@ VANILLA_VILLAGERS = [
 ]
 KNOWN_VILLAGERS = VANILLA_VILLAGERS
 
-# Vanilla mobs principales para selección inmediata
+# Main vanilla mobs, ready to pick right away
 VANILLA_MOBS = [
     {"id": "minecraft:creeper", "name": "Creeper", "mod": "minecraft"},
     {"id": "minecraft:zombie", "name": "Zombi", "mod": "minecraft"},
@@ -207,7 +207,7 @@ class RestrictionService:
         return self._settings.panel_directory / ".custom_villagers.json"
 
     def get_known_villagers(self) -> list[dict[str, Any]]:
-        """Devuelve el catálogo de aldeanos (Vanilla + entradas locales opcionales de .custom_villagers.json)."""
+        """Return the villager catalog (vanilla + optional local entries from .custom_villagers.json)."""
         villagers = [dict(v) for v in VANILLA_VILLAGERS]
         custom_file = self.custom_villagers_file
         if custom_file.is_file():
@@ -223,22 +223,22 @@ class RestrictionService:
         return villagers
 
     def _get_datapack_targets(self) -> list[Path]:
-        """Devuelve las carpetas del datapack panel_restrictions en el servidor y moonlight."""
+        """Return the panel_restrictions datapack folders in the server and in moonlight."""
         targets: list[Path] = []
-        # Obtener nombre del mundo activo
+        # Get the active world name
         props = server_properties_service.read_properties()
         level_name = props.get("level-name", "world")
         world_datapacks = self.server_dir / level_name / "datapacks" / "panel_restrictions"
         targets.append(world_datapacks)
 
-        # Datapack global de Moonlight
+        # Moonlight global datapack
         global_datapacks = self.server_dir / "moonlight-global-datapacks" / "panel_restrictions"
         targets.append(global_datapacks)
 
         return targets
 
     # ==========================================
-    # 1. ÍTEMS Y ARMAS
+    # 1. ITEMS AND WEAPONS
     # ==========================================
     def get_restricted_items(self) -> list[str]:
         if self.item_blacklist_file.is_file():
@@ -310,7 +310,7 @@ class RestrictionService:
         self._atomic_json_write(self.item_obliterator_file, oblit_data)
 
     # ==========================================
-    # 2. SPAWNS DE MOBS (BIOME MODIFIERS)
+    # 2. MOB SPAWNS (BIOME MODIFIERS)
     # ==========================================
     def get_restricted_mobs(self) -> list[str]:
         if self.mob_blacklist_file.is_file():
@@ -351,7 +351,7 @@ class RestrictionService:
         self._atomic_json_write(self.mob_blacklist_file, data)
 
     # ==========================================
-    # 3. ALDEANOS Y PROFESIONES (POI REMOVAL)
+    # 3. VILLAGERS AND PROFESSIONS (POI REMOVAL)
     # ==========================================
     def get_restricted_villagers(self) -> list[str]:
         if self.villager_blacklist_file.is_file():
@@ -387,7 +387,7 @@ class RestrictionService:
         self._atomic_json_write(self.villager_blacklist_file, data)
 
     def _sync_custom_configs(self, disabled_professions: set[str]) -> None:
-        """Sincroniza opciones en archivos TOML/JSON definidas en sync_config para aldeanos personalizados."""
+        """Sync options in the TOML/JSON files listed in sync_config for custom villagers."""
         for v in self.get_known_villagers():
             sync_rule = v.get("sync_config")
             if not isinstance(sync_rule, dict):
@@ -418,10 +418,10 @@ class RestrictionService:
                 logger.warning("No se pudo actualizar configuración externa %s: %s", cfg_file_name, err)
 
     # ==========================================
-    # 4. GENERADOR DE DATAPACK NATIVO NEOFORGE
+    # 4. NATIVE NEOFORGE DATAPACK GENERATOR
     # ==========================================
     def _sync_datapacks(self, mobs: list[str], villagers: list[str]) -> None:
-        """Escribe la estructura del datapack panel_restrictions en ambos directorios objetivo."""
+        """Write the panel_restrictions datapack structure into both target directories."""
         for root in self._get_datapack_targets():
             try:
                 root.mkdir(parents=True, exist_ok=True)
@@ -435,7 +435,7 @@ class RestrictionService:
                 }
                 (root / "pack.mcmeta").write_text(json.dumps(mcmeta, indent=2), encoding="utf-8")
 
-                # Directorio de Biome Modifiers (Mob Spawns)
+                # Biome Modifiers directory (mob spawns)
                 biome_mod_dir = root / "data" / "panel_restrictions" / "neoforge" / "biome_modifier"
                 biome_mod_dir.mkdir(parents=True, exist_ok=True)
 
@@ -455,13 +455,13 @@ class RestrictionService:
                         }
                         mod_file.write_text(json.dumps(mod_content, indent=2), encoding="utf-8")
                 else:
-                    # Si no hay mobs restringidos, remover modificadores
+                    # No restricted mobs: remove the modifiers
                     for dim_name, _ in dimensions:
                         mod_file = biome_mod_dir / f"remove_spawns_{dim_name}.json"
                         if mod_file.is_file():
                             mod_file.unlink(missing_ok=True)
 
-                # Directorio de Tags para Villagers (Workstations / POI removal)
+                # Villager tags directory (workstations / POI removal)
                 poi_dir = root / "data" / "minecraft" / "tags" / "point_of_interest_type"
                 poi_dir.mkdir(parents=True, exist_ok=True)
                 job_site_file = poi_dir / "acquirable_job_site.json"
@@ -477,10 +477,10 @@ class RestrictionService:
                 logger.error("Error al sincronizar datapack en %s: %s", root, err)
 
     # ==========================================
-    # 5. CATÁLOGO DINÁMICO Y DISCOVERY
+    # 5. DYNAMIC CATALOG AND DISCOVERY
     # ==========================================
     async def discover_catalog(self) -> dict[str, Any]:
-        """Escanea JARs y registries de manera no bloqueante con caché en memoria."""
+        """Scan JARs and registries without blocking, with an in-memory cache."""
         return await asyncio.to_thread(self._scan_catalog_sync)
 
     def _scan_catalog_sync(self) -> dict[str, Any]:
@@ -507,7 +507,7 @@ class RestrictionService:
             try:
                 with zipfile.ZipFile(jar) as z:
                     namelist = z.namelist()
-                    # Buscar archivos de traducción en_us o es_es
+                    # Look for en_us or es_es translation files
                     lang_files = [n for n in namelist if n.endswith("/lang/en_us.json") or n.endswith("/lang/es_es.json")]
                     for lf in lang_files:
                         try:
@@ -534,7 +534,7 @@ class RestrictionService:
                                                     {"id": full_id, "name": val_str, "mod": mod_id}
                                                 )
 
-                                # Ítems y Bloques
+                                # Items and blocks
                                 elif k.startswith("item.") or k.startswith("block."):
                                     parts = k.split(".")
                                     if len(parts) >= 3:
@@ -549,7 +549,7 @@ class RestrictionService:
                         except Exception:
                             pass
 
-                    # Fallback de modelos / items para mods sin lang o con ítems directos
+                    # Model / item fallback for mods without lang files or with direct items
                     for n in namelist:
                         if n.endswith(".json") and ("assets/" in n or "data/" in n):
                             parts = n.split("/")
@@ -593,10 +593,10 @@ class RestrictionService:
         return result
 
     # ==========================================
-    # 6. RESUMEN COMPLETO Y RECARGA
+    # 6. FULL SUMMARY AND RELOAD
     # ==========================================
     def get_summary(self) -> dict[str, Any]:
-        """Retorna el estado actual de todas las restricciones aplicadas."""
+        """Return the current state of all applied restrictions."""
         items = self.get_restricted_items()
         mobs = self.get_restricted_mobs()
         villagers = self.get_restricted_villagers()
@@ -624,7 +624,7 @@ class RestrictionService:
         }
 
     async def _hot_reload(self) -> None:
-        """Si el servidor está encendido, ejecuta /reload automáticamente."""
+        """If the server is running, run /reload automatically."""
         if self._manager.is_running:
             try:
                 await self._manager.send_command("/reload")

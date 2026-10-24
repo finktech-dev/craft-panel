@@ -1,1 +1,1 @@
-"""Panel web administrativo del servidor de Minecraft."""
+"""Admin web panel for the Minecraft server."""

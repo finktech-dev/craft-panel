@@ -1,4 +1,4 @@
-"""Restablece localmente la contraseña administrativa.
+"""Reset the panel's admin password from this computer.
 
 Only a scrypt hash is written to ``.panel_secrets.json``. When the owner lets
 the tool generate the password, it is printed once in this window and never

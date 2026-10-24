@@ -1,4 +1,4 @@
-"""Pruebas de integridad y purga conservadora de backups."""
+"""Tests for backup integrity and conservative purging."""
 
 from __future__ import annotations
 

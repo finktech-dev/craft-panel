@@ -1,6 +1,6 @@
 /**
- * Centro de Restricciones & WorldEdit Hot-Toggle
- * Modulo de administración para gestión agnóstica de ítems, mobs, aldeanos y WorldEdit live toggle.
+ * Restrictions center & WorldEdit hot toggle
+ * Admin module for loader-agnostic management of items, mobs, villagers and the live WorldEdit toggle.
  */
 
 (() => {
@@ -39,7 +39,7 @@
   const FILTER_ON = FILTER_ON_CLASSES.join(' ');
   const FILTER_OFF = FILTER_OFF_CLASSES.join(' ');
 
-  // 1. Pestañas (Tabs)
+  // 1. Tabs
   function switchTab(tabName) {
     if (tabName === 'worldedit') document.querySelector('#worldedit-optional-tab')?.setAttribute('open', '');
     // Underline sub-tabs: only the border colour and text colour change.
@@ -127,7 +127,7 @@
     }
   }
 
-  // 3. Resumen de Restricciones y Renderizado
+  // 3. Restrictions summary and rendering
   async function loadRestrictionsSummary() {
     try {
       restrictionsSummary = await Panel.api('/api/restrictions/summary');
@@ -219,7 +219,7 @@
     }).join('');
   }
 
-  // 4. Catálogo Dinámico (100% NO PNGs)
+  // 4. Dynamic catalog (no PNGs at all)
   async function loadCatalog() {
     try {
       const itContainer = $('#items-catalog-container');
@@ -347,7 +347,7 @@
     `;
   }
 
-  // 5. Navegación por Hash
+  // 5. Hash navigation
   // admin-tabs.js owns the URL hash and opens the right rules tab; this only covers pages without it.
   function handleHashNavigation() {
     if (window.AdminTabs) return;
@@ -356,7 +356,7 @@
     if (legacy[hash]) switchTab(legacy[hash]);
   }
 
-  // 6. Registro de Listeners de Eventos
+  // 6. Event listener registration
   function initEventListeners() {
     // Tabs
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -392,7 +392,7 @@
       }
     });
 
-    // Filtros y búsqueda de ítems
+    // Item filters and search
     $('#items-catalog-search')?.addEventListener('input', (e) => {
       clearTimeout(searchDebounceItems);
       itemsSearchTerm = e.target.value;
@@ -456,7 +456,7 @@
       }
     });
 
-    // Filtros y búsqueda de mobs
+    // Mob filters and search
     $('#mobs-catalog-search')?.addEventListener('input', (e) => {
       clearTimeout(searchDebounceMobs);
       mobsSearchTerm = e.target.value;
@@ -538,7 +538,7 @@
       }
     });
 
-    // Botón de recarga (/reload)
+    // Reload button (/reload)
     $('#btn-restrictions-reload')?.addEventListener('click', async () => {
       const btn = $('#btn-restrictions-reload');
       if (!btn) return;
@@ -560,13 +560,13 @@
     });
   }
 
-  // 7. Inicialización automática
+  // 7. Automatic initialization
   function initRestrictions() {
     const hub = document.getElementById('restrictions-hub');
     const weBtn = document.getElementById('btn-toggle-worldedit');
     const quickWe = document.getElementById('quick-we-badge');
 
-    // Solo inicializa si los componentes de restricciones o WorldEdit están en el DOM
+    // Only initialize if the restrictions or WorldEdit components are in the DOM
     if (!hub && !weBtn && !quickWe) return;
 
     initEventListeners();
@@ -582,7 +582,7 @@
     initRestrictions();
   }
 
-  // Exportar funciones y métodos en window para interoperabilidad y pruebas
+  // Export functions and methods on window for interop and tests
   window.switchTab = switchTab;
   window.loadWorldEditStatus = loadWorldEditStatus;
   window.loadRestrictionsSummary = loadRestrictionsSummary;

@@ -1,4 +1,4 @@
-"""Catálogo local de capacidades para interfaces y adaptadores del panel."""
+"""Local capability catalog for panel interfaces and adapters."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from app.schemas.access import PanelAccessProfile, PanelCapability
 
 
 class AccessService:
-    """Expone el perfil del dueño sin inspeccionar ni modificar el host."""
+    """Expose the owner profile without inspecting or modifying the host."""
 
     _OWNER_CAPABILITIES: tuple[PanelCapability, ...] = (
         PanelCapability(
@@ -60,7 +60,7 @@ class AccessService:
     )
 
     def owner_profile(self) -> PanelAccessProfile:
-        """Devuelve datos estáticos; no lee cuentas, sesiones ni secretos."""
+        """Return static data; never reads accounts, sessions or secrets."""
         return PanelAccessProfile(capabilities=self._OWNER_CAPABILITIES)
 
 

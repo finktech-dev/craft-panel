@@ -1,4 +1,4 @@
-"""Endpoints para el analizador y registro de desconexiones y crashes por jugador."""
+"""Endpoints for the analyzer and the per-player log of disconnects and crashes."""
 
 from __future__ import annotations
 

@@ -1,1 +1,1 @@
-"""Servicios de dominio e integración con procesos del host."""
+"""Domain services and integration with host processes."""

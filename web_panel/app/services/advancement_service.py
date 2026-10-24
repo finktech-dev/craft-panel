@@ -1,4 +1,4 @@
-"""Servicio para inspección, reinicio y gestión de logros (advancements) de jugadores en cualquier mundo."""
+"""Service to inspect, reset and manage player advancements in any world."""
 
 from __future__ import annotations
 
@@ -16,14 +16,14 @@ from app.services.server_properties_service import server_properties_service
 
 
 def _friendly_name(adv_id: str) -> str:
-    """Genera un nombre legible a partir del ID de un logro."""
+    """Build a readable name from an advancement ID."""
     clean = adv_id.split(":")[-1]
     last_part = clean.split("/")[-1]
     return " ".join(word.capitalize() for word in last_part.replace("_", " ").split())
 
 
 def _categorize(adv_id: str) -> str:
-    """Clasifica el logro según el mod o la rama de Minecraft."""
+    """Classify the advancement by mod or Minecraft branch."""
     if adv_id.startswith("minecraft:recipes/"):
         return "Recetas de crafteo"
     if adv_id.startswith("minecraft:story/"):
@@ -99,7 +99,7 @@ class AdvancementService:
         return result
 
     def _get_uuid_map(self) -> dict[str, str]:
-        """Obtiene el mapa de username -> uuid a partir de usercache.json y ops.json."""
+        """Build the username -> uuid map from usercache.json and ops.json."""
         user_to_uuid: dict[str, str] = {}
         cache_file = self.server_dir / "usercache.json"
         if cache_file.is_file():
@@ -240,7 +240,7 @@ class AdvancementService:
         clean_id = adv_id.strip()
         world_dir, is_active = self._resolve_world_dir(world_name)
 
-        # Si es el mundo activo Y el servidor está encendido, enviamos comando en vivo
+        # Active world AND server running: send a live command
         if is_active and server_manager.is_running:
             if clean_id.lower() == "everything":
                 cmd = f"/advancement revoke {clean_user} everything"
@@ -255,7 +255,7 @@ class AdvancementService:
                 "message": f"Se envió el comando '{cmd}' a la consola del servidor.",
             }
 
-        # Si es un mundo inactivo O el servidor está apagado, modificamos directamente el archivo JSON
+        # Inactive world OR server stopped: edit the JSON file directly
         async with self._lock:
             uuid_map = await asyncio.to_thread(self._get_uuid_map)
             player_uuid = uuid_map.get(clean_user.lower())
@@ -272,7 +272,7 @@ class AdvancementService:
                     data = {"DataVersion": data.get("DataVersion", 3955)}
                     msg = f"Se reiniciaron todos los logros de {clean_user} en el mundo '{world_dir.name}'."
                 elif clean_id == "minecraft:recipes/root" or clean_id.startswith("recipes:"):
-                    # Eliminar solo recetas
+                    # Remove recipes only
                     keys_to_remove = [k for k in data if k.startswith("minecraft:recipes/")]
                     for k in keys_to_remove:
                         del data[k]
@@ -306,7 +306,7 @@ class AdvancementService:
                 "message": f"Comando '{cmd}' ejecutado en el servidor.",
             }
 
-        # Si el mundo no está activo o el server está apagado, agregamos el logro en el archivo JSON
+        # World not active or server stopped: add the advancement to the JSON file
         async with self._lock:
             uuid_map = await asyncio.to_thread(self._get_uuid_map)
             player_uuid = uuid_map.get(clean_user.lower())

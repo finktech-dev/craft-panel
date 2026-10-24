@@ -1,4 +1,4 @@
-"""Esquemas Pydantic para la configuración y alertas de Discord."""
+"""Pydantic schemas for Discord settings and alerts."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class DiscordConfig(BaseModel):
-    """Configuración persistente para las alertas y webhooks de Discord."""
+    """Persistent settings for Discord alerts and webhooks."""
 
     webhook_url: str = Field(default="", description="URL del webhook principal de Discord")
     events_webhook_url: str = Field(
@@ -48,7 +48,7 @@ class DiscordConfig(BaseModel):
         max_length=500,
         description="URL de avatar con {player_name}; vacío desactiva avatares o usa la configuración del panel",
     )
-    # Plantillas de mensajes y textos configurables
+    # Message templates and configurable texts
     msg_server_starting_title: str = Field(
         default="🟡 Iniciando Servidor de Minecraft...",
         max_length=256,
@@ -122,7 +122,7 @@ class DiscordConfig(BaseModel):
 
 
 class DiscordTestRequest(BaseModel):
-    """Solicitud para enviar un mensaje de prueba al webhook."""
+    """Request to send a test message to the webhook."""
 
     webhook_url: str = Field(default="", description="URL de webhook a probar (opcional, si vacía usa la guardada)")
     test_type: str = Field(default="status", description="Tipo de prueba: 'status', 'events' o 'mention'")
@@ -130,7 +130,7 @@ class DiscordTestRequest(BaseModel):
 
 
 class DiscordActionResponse(BaseModel):
-    """Respuesta a acciones de Discord."""
+    """Response to Discord actions."""
 
     success: bool
     message: str
