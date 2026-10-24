@@ -26,15 +26,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  $('#tab-btn-worlds').onclick = () => switchTab('worlds');
-  $('#tab-btn-props').onclick = () => switchTab('props');
-  $('#tab-btn-whitelist').onclick = () => switchTab('whitelist');
-  $('#tab-btn-advancements').onclick = () => switchTab('advancements');
-  $('#tab-btn-luckperms').onclick = () => switchTab('luckperms');
-  // Deep links such as /worlds#whitelist (the sidebar "Jugadores" entry) open their tab directly.
-  const tabFromHash = () => { const key = window.location.hash.slice(1); if (key && Object.hasOwn(tabs, key)) switchTab(key); };
-  window.addEventListener('hashchange', tabFromHash);
-  tabFromHash();
+  // The open tab is kept in the hash so a reload lands in the same place.
+  const rememberTab = (key) => {
+    const hash = key === 'worlds' ? window.location.pathname : `#${key}`;
+    if (window.location.hash === hash) return;
+    try { history.replaceState(null, '', hash); } catch { /* the tab still switches */ }
+  };
+  Object.keys(tabs).forEach((key) => {
+    tabs[key].btn.onclick = () => {
+      switchTab(key);
+      if (key === 'props') showPropsOverview(false);
+      rememberTab(key);
+    };
+  });
+  // Deep links such as /worlds#whitelist (the "Jugadores" entry) or /worlds#props/rendimiento open directly.
+  const tabFromHash = () => {
+    const [key, sub] = window.location.hash.slice(1).split('/');
+    if (!key || !Object.hasOwn(tabs, key)) return;
+    switchTab(key);
+    if (key === 'props') {
+      const category = categoryFromSlug(sub);
+      if (category) openCategory(category, false);
+      else showPropsOverview(false);
+    }
+  };
 
   // Tooltip Modal
   const tooltipModal = $('#modal-tooltip-info');
@@ -261,37 +276,88 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('');
   };
 
+  // Plain names for the server.properties groups the API returns, with a short slug for the URL.
+  const CATEGORY_INFO = {
+    'Jugabilidad y Dificultad': { slug: 'jugabilidad', title: 'Cómo se juega', lead: 'La dificultad, el modo de juego, las criaturas y otras reglas del mundo.' },
+    'Rendimiento y Chunks': { slug: 'rendimiento', title: 'Velocidad del servidor', lead: 'Hasta dónde se ve el mundo y cuánto trabaja la computadora.' },
+    'Seguridad y Red': { slug: 'seguridad', title: 'Entrada y conexión', lead: 'Cuántos pueden jugar a la vez y cómo se conectan.' },
+    'Mensaje y Apariencia': { slug: 'apariencia', title: 'Cómo se ve en la lista', lead: 'El mensaje que aparece en la lista de servidores de Minecraft.' },
+    'Otras opciones avanzadas': { slug: 'avanzadas', title: 'Opciones avanzadas', lead: 'Ajustes poco comunes. Si no sabés qué hacen, dejalos como vienen.' },
+  };
+  const infoFor = (category) => CATEGORY_INFO[category] || {
+    slug: String(category).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    title: category,
+    lead: '',
+  };
+  const knownCategories = () => (propertiesData ? propertiesData.categories : Object.keys(CATEGORY_INFO));
+  const categoryFromSlug = (slug) => (slug ? knownCategories().find((cat) => infoFor(cat).slug === slug) || null : null);
+  // True when the open group was reached from the list on this page, so "Volver" can go back one step.
+  let categoryOpenedHere = false;
+
+  const showPropsOverview = (focus = true) => {
+    categoryOpenedHere = false;
+    $('#props-screen').hidden = true;
+    $('#props-overview').hidden = false;
+    if (focus) $('#props-title').focus({ preventScroll: true });
+  };
+
+  const openCategory = (category, push) => {
+    currentCategory = category;
+    const info = infoFor(category);
+    $('#props-category-title').textContent = info.title;
+    $('#props-category-lead').textContent = info.lead;
+    $('#props-category-lead').hidden = !info.lead;
+    $('#motd-preview-box').hidden = category !== 'Mensaje y Apariencia';
+    $('#props-overview').hidden = true;
+    $('#props-screen').hidden = false;
+    if (push) {
+      categoryOpenedHere = true;
+      try { history.pushState(null, '', `#props/${info.slug}`); } catch { /* the screen still opens */ }
+    }
+    renderProperties();
+    window.scrollTo(0, 0);
+    $('#props-category-title').focus({ preventScroll: true });
+  };
+
+  const renderCategoryList = () => {
+    $('#props-categories-nav').innerHTML = propertiesData.categories.map((cat) => {
+      const info = infoFor(cat);
+      const count = propertiesData.properties.filter((p) => p.category === cat).length;
+      const detail = [info.lead, `${count} ${count === 1 ? 'ajuste' : 'ajustes'}`].filter(Boolean).join(' · ');
+      return `<button type="button" data-cat="${esc(cat)}" class="settings-row"><span><strong>${esc(info.title)}</strong><small>${esc(detail)}</small></span></button>`;
+    }).join('');
+  };
+
   const loadProperties = async () => {
     try {
       propertiesData = await Panel.api('/api/server-properties');
       $('#motd-preview').innerHTML = propertiesData.motd_preview_html;
-
-      // Renderizar nav de categorías
-      const nav = $('#props-categories-nav');
-      nav.innerHTML = propertiesData.categories.map((cat) => `
-        <button type="button" data-cat="${esc(cat)}" class="${cat === currentCategory ? CAT_ACTIVE : CAT_IDLE}">${esc(cat)}</button>
-      `).join('');
-
+      renderCategoryList();
       renderProperties();
     } catch (e) {
+      $('#props-categories-nav').innerHTML = `<p class="px-5 py-6 text-[#f3a79b]">No pudimos leer los ajustes. ${esc(e.message)}</p>`;
       $('#props-container').innerHTML = `<p class="py-6 text-[#f3a79b]">No pudimos leer los ajustes. ${esc(e.message)}</p>`;
       Panel.toast(e.message, 'error');
     }
   };
 
-  const CAT_ACTIVE = 'cat-btn rounded-full bg-zinc-800 px-3 py-1.5 font-medium text-zinc-50';
-  const CAT_IDLE = 'cat-btn rounded-full px-3 py-1.5 font-medium text-zinc-400 hover:text-zinc-200';
-
   $('#props-categories-nav').onclick = (e) => {
     const btn = e.target.closest('[data-cat]');
-    if (btn) {
-      currentCategory = btn.dataset.cat;
-      $$('.cat-btn').forEach((b) => {
-        b.className = b.dataset.cat === currentCategory ? CAT_ACTIVE : CAT_IDLE;
-      });
-      renderProperties();
-    }
+    if (btn) openCategory(btn.dataset.cat, true);
   };
+
+  $('[data-props-back]').onclick = (e) => {
+    e.preventDefault();
+    if (categoryOpenedHere) {
+      history.back();
+      return;
+    }
+    try { history.replaceState(null, '', '#props'); } catch { /* ignore */ }
+    showPropsOverview();
+  };
+
+  window.addEventListener('hashchange', tabFromHash);
+  tabFromHash();
 
   $('#props-container').onchange = (e) => {
     const input = e.target;

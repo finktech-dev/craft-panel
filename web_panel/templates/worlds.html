@@ -76,26 +76,33 @@
   </div>
 
   <!-- Game settings (server.properties) -->
+  {#- Overview of the setting groups first, then one group per screen (worlds.js; hash #props/<group>). -#}
   <div id="tab-content-props" class="hidden">
-    <section class="py-9" aria-labelledby="props-title">
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 id="props-title" class="text-lg font-semibold text-zinc-50">Ajustes del mundo</h2>
-          <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Cambiá cómo se juega en tu servidor. Los cambios se aplican la próxima vez que lo reinicies.</p>
-          <p class="mt-1 text-sm text-zinc-500">Se guardan en el archivo server.properties.</p>
-        </div>
-        <button id="save-properties-btn" type="button" class="v2-button btn-primary shrink-0">Guardar cambios</button>
-      </div>
+    <section id="props-overview" class="py-9" aria-labelledby="props-title">
+      <h2 id="props-title" class="text-lg font-semibold text-zinc-50" tabindex="-1">Ajustes del mundo</h2>
+      <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Cambiá cómo se juega en tu servidor. Elegí una parte. Los cambios se notan la próxima vez que lo reinicies.</p>
+      <nav id="props-categories-nav" class="settings-list mt-6" aria-label="Partes de los ajustes del mundo">
+        <p class="px-5 py-6 text-zinc-500">Cargando ajustes…</p>
+      </nav>
+      <p class="mt-3 font-mono text-xs text-zinc-500">server.properties</p>
+    </section>
 
-      <div class="mt-6">
+    <section id="props-screen" class="pt-6" aria-labelledby="props-category-title" hidden>
+      <a href="/worlds#props" class="back-link" data-props-back>← Volver</a>
+      <h2 id="props-category-title" class="screen-title mt-4" tabindex="-1">Ajustes del mundo</h2>
+      <p id="props-category-lead" class="screen-lead"></p>
+
+      <div id="motd-preview-box" class="mt-6" hidden>
         <p class="text-sm font-medium text-zinc-300">Así se ve tu servidor en la lista de Minecraft</p>
         <div id="motd-preview" class="mt-2 rounded-lg bg-zinc-950 px-4 py-3 font-mono text-sm leading-relaxed"></div>
       </div>
 
-      <div id="props-categories-nav" class="mt-8 flex flex-wrap items-center gap-1 text-sm" role="toolbar" aria-label="Tipo de ajuste"></div>
-
-      <div id="props-container" class="mt-4 border-t border-zinc-800" aria-live="polite">
+      <div id="props-container" class="mt-6 border-t border-zinc-800" aria-live="polite">
         <p class="py-6 text-zinc-500">Cargando ajustes…</p>
+      </div>
+      <div class="mt-6 pb-9">
+        <button id="save-properties-btn" type="button" class="v2-button btn-primary">Guardar cambios</button>
+        <p class="mt-2 text-sm text-zinc-500">Se guardan también los cambios que hiciste en las otras partes.</p>
       </div>
     </section>
   </div>
