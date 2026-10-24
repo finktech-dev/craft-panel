@@ -97,6 +97,7 @@ class InstallerService:
         self._catalog = catalog
         self._discovery = discovery or RuntimeDiscoveryService(configured_settings)
         self._lock = asyncio.Lock()
+        self._java_executable: str | None = None
         self._progress: ProgressCallback | None = None
         self._current_step = "prepare"
 
@@ -213,6 +214,8 @@ class InstallerService:
         status = await asyncio.to_thread(self._discovery.java_status, minecraft_version)
         if status.state != "available":
             raise InstallerValidationError(status.message)
+        # Run the loader installer with the Java that was found, even when it is not on PATH.
+        self._java_executable = getattr(status, "executable", None)
 
     async def _install_vanilla(self, minecraft_version: str) -> None:
         self._step("download")
@@ -303,6 +306,8 @@ class InstallerService:
     async def _run_java(self, *args: str) -> None:
         java = self._settings.server_java_executable or self._settings.local_java_executable_path
         command = str(java) if java.is_file() else "java"
+        if self._java_executable:
+            command = self._java_executable
         try:
             process = await asyncio.create_subprocess_exec(
                 command, *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT

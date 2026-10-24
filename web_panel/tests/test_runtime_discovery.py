@@ -96,7 +96,7 @@ def test_java_17_is_detected_for_a_compatible_minecraft_version(tmp_path: Path) 
 
     assert result.java.state == "available"
     assert result.java.major_version == 17
-    assert "compatible" in result.java.message
+    assert result.java.message == "Encontramos Java 17 en tu computadora. Sirve para Minecraft 1.20.4."
 
 def test_discovery_requires_a_native_import_script(tmp_path: Path) -> None:
     configured = _settings(tmp_path)
