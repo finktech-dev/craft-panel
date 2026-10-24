@@ -56,7 +56,9 @@
       </form>
 
       <p class="mt-6 text-sm text-zinc-500"><span id="whitelist-count">0</span> en la lista · también se la conoce como whitelist</p>
-      <div id="whitelist-players-list" class="mt-2 border-t border-zinc-800" aria-live="polite">
+      <label for="whitelist-search" class="sr-only">Buscar en la lista</label>
+      <input id="whitelist-search" type="search" data-list-filter="#whitelist-players-list" placeholder="Buscar en la lista" class="mt-3 {{ field }}">
+      <div id="whitelist-players-list" class="mt-3 border-t border-zinc-800" aria-live="polite">
         <p class="py-6 text-zinc-500">Buscando la lista…</p>
       </div>
     </section>

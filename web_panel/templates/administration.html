@@ -217,7 +217,7 @@
         <p id="server-file-running-note" class="mt-1 hidden text-sm text-zinc-500">El archivo para encender y Java se cambian con el servidor apagado.</p>
         <div class="mt-2 border-t border-zinc-800">
           {{ file_field('start_script', 'Archivo para encender', 'El archivo que enciende el servidor, dentro de su carpeta. Vacío = run.bat.', 'run.bat', mono=true) }}
-          {{ file_field('java', 'Java (opcional)', 'La ruta completa a java.exe. Dejalo vacío para que el panel elija.', 'C:\\Program Files\\Java\\bin\\java.exe', mono=true) }}
+          {{ file_field('java', 'Java (opcional)', 'Dónde está java.exe en tu computadora. Dejalo vacío y el panel lo busca solo.', 'C:\\Program Files\\Java\\bin\\java.exe', mono=true) }}
           {{ file_field('memory', 'Memoria', 'Cuánta memoria usa el servidor, por ejemplo 6G. Vacío = la que elegiste al prepararlo.', '6G', mono=true) }}
           {{ file_switch('start_with_panel', 'Encenderlo al abrir el panel', 'Cuando abrís el panel, el servidor se enciende solo.') }}
           {{ file_field('startup_timeout', 'Cuánto esperar a que cargue', 'Después de este tiempo te avisamos que sigue cargando. Por ejemplo 5m o 10m.', '5m', mono=true) }}
