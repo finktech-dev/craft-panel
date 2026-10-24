@@ -26,14 +26,21 @@ def _configure_windows_event_loop() -> None:
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 
+def _browser_host(host: str) -> str:
+    """A wildcard bind address (0.0.0.0, ::) cannot be opened in a browser; use this PC."""
+    if host in {"0.0.0.0", "::", ""}:
+        return "127.0.0.1"
+    return f"[{host}]" if ":" in host else host
+
+
 def _open_browser_when_ready() -> None:
     """Avoid opening localhost before Uvicorn is actually listening."""
-    health_url = f"http://{settings.panel_host}:{settings.panel_port}/health"
+    base_url = f"http://{_browser_host(settings.panel_host)}:{settings.panel_port}"
     for _ in range(60):
         try:
-            with urllib.request.urlopen(health_url, timeout=0.5) as response:
+            with urllib.request.urlopen(f"{base_url}/health", timeout=0.5) as response:
                 if response.status == 200:
-                    webbrowser.open(f"http://{settings.panel_host}:{settings.panel_port}")
+                    webbrowser.open(base_url)
                     return
         except OSError:
             time.sleep(0.25)
