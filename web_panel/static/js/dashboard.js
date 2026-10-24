@@ -68,12 +68,16 @@
     }).join(' '));
   };
 
-  const setConnection = (connection) => {
+  const setConnection = (connection, tunnel) => {
     text('#connection-address', connection?.public_address || 'Todavía no hay dirección');
     text('#connection-message', connection?.message || 'No encontramos una dirección para compartir.');
     text('#connection-next-step', connection?.next_step || '');
     const button = $('#copy-connection');
     if (button) button.disabled = !connection?.can_share_with_friends;
+    // No address yet: offer to read it from the official Playit app, or to paste it.
+    const official = Boolean(tunnel?.external_agent && tunnel.external_agent !== 'not_installed');
+    $('#connection-fix')?.classList.toggle('hidden', connection?.source !== 'local_only');
+    $('#use-playit-address')?.classList.toggle('hidden', !official);
   };
 
   const setBackup = (backups) => {
@@ -136,16 +140,17 @@
 
   const query = async (path) => { try { return await Panel.api(path); } catch { return null; } };
   const refresh = async () => {
-    const [metrics, connection, backups, safety, external] = await Promise.all([
+    const [metrics, connection, backups, safety, external, tunnel] = await Promise.all([
       query('/api/server/metrics'),
       query('/api/server/connection-info'),
       query('/api/backups'),
       query('/api/server/safety-summary'),
       query('/api/server/external'),
+      query('/api/tunnel/status'),
     ]);
     setExternal(external);
     setHero(metrics);
-    setConnection(connection);
+    setConnection(connection, tunnel);
     setBackup(backups);
     setChecks(safety);
     text('#dashboard-updated', `Actualizado a las ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
@@ -223,6 +228,20 @@
       const value = $('#connection-address')?.textContent || '';
       try { await navigator.clipboard.writeText(value); Panel.toast('Dirección copiada. Pegala en el chat con tus amigos.'); }
       catch { Panel.toast('No se pudo copiar. Seleccioná la dirección y copiala a mano.', 'error'); }
+    });
+    $('#use-playit-address')?.addEventListener('click', ({ currentTarget }) => withBusy(currentTarget, 'Buscando…', async () => {
+      try { reportResult(await Panel.api('/api/tunnel/external/address', { method: 'POST' }), 'Listo.'); } catch (error) { reportError(error); }
+      await refresh();
+    }));
+    $('#connection-address-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const input = $('#connection-address-input');
+      if (!input?.value.trim()) { setOperationFeedback('Pegá la dirección que te muestra Playit.'); return; }
+      try {
+        reportResult(await Panel.api('/api/tunnel/address', { method: 'POST', body: { public_address: input.value } }), 'Listo.');
+        input.value = '';
+      } catch (error) { reportError(error); }
+      await refresh();
     });
     $('#hero-action')?.addEventListener('click', ({ currentTarget }) => (
       serverRunning ? gracefulRestart(currentTarget) : runServerAction(currentTarget, 'start')

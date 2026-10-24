@@ -20,7 +20,9 @@
   };
   const setPlayitConnectVisibility = (status) => {
     const box = document.querySelector('#playit-connect');
-    if (box) box.classList.toggle('hidden', Boolean(status && !status.needs_setup));
+    // The official Playit app (running or just turned off) needs no key: the panel uses it as is.
+    const official = status && status.external_agent && status.external_agent !== 'not_installed';
+    if (box) box.classList.toggle('hidden', Boolean(status && (!status.needs_setup || official)));
   };
   const currentPreferences = () => ({
     allocated_ram_gb: Number(document.querySelector('#launch-ram')?.value),
@@ -33,9 +35,10 @@
       if (!response.ok) throw new Error('runtime discovery failed');
       const runtime = await response.json();
       fill('system', runtime.operating_system, 'Las indicaciones del panel se adaptan a tu sistema.');
-      const javaDetail = runtime.java.version ? `Java ${runtime.java.version}${runtime.java.executable ? ` · ${runtime.java.executable}` : ''}` : '';
+      // Describe what was found; the panel never shows folders of this computer.
+      const javaDetail = runtime.java.version ? `Java ${runtime.java.version}${runtime.java.vendor ? ` · ${runtime.java.vendor}` : ''}` : '';
       fill('java', runtime.java.state, runtime.java.message, javaDetail);
-      const minecraftDetail = runtime.minecraft.loader ? `${runtime.minecraft.loader}${runtime.minecraft.start_script ? ` · ${runtime.minecraft.start_script}` : ''}` : '';
+      const minecraftDetail = runtime.minecraft.loader ? `${runtime.minecraft.loader}${runtime.minecraft.start_script_name ? ` · ${runtime.minecraft.start_script_name}` : ''}` : '';
       fill('minecraft', runtime.minecraft.state, runtime.minecraft.message, minecraftDetail);
       fill('accounts', runtime.accounts.state, runtime.accounts.message);
       const launch = await fetch('/api/runtime/launch-settings', { credentials: 'same-origin' }).then(response => response.ok ? response.json() : null);
@@ -47,7 +50,7 @@
         for (let value = 1; value <= launch.maximum_recommended_ram_gb; value += 1) select.add(new Option(`${value} GB`, String(value), value === launch.allocated_ram_gb, value === launch.allocated_ram_gb));
         document.querySelector('#launch-ram-hint').textContent = `Tu computadora tiene ${launch.total_ram_gb} GB (${launch.available_ram_gb} GB libres ahora). Te recomendamos no pasar de ${launch.maximum_recommended_ram_gb} GB.`;
         document.querySelector('#local-only').checked = !launch.playit_enabled;
-        document.querySelector('#launch-feedback').textContent = launch.server_running ? 'El servidor ya está encendido. Apagalo antes de cambiar la memoria.' : launch.playit_enabled && tunnel?.needs_setup ? 'Conectá Playit para que tus amigos puedan entrar desde sus casas.' : 'Todo listo para encender.';
+        document.querySelector('#launch-feedback').textContent = launch.server_running ? 'El servidor ya está encendido. Apagalo antes de cambiar la memoria.' : launch.playit_enabled && tunnel?.needs_setup && tunnel?.external_agent === 'not_installed' ? 'Instalá Playit para que tus amigos puedan entrar desde sus casas.' : 'Todo listo para encender.';
       }
       setPlayitConnectVisibility(tunnel);
       document.querySelector('#setup-loading')?.classList.add('hidden');
