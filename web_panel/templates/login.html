@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import pixel %}
-{% block title %}Entrar · Craft Panel{% endblock %}
+{% block title %}Entrar · {{ brand_name or 'Craft Panel' }}{% endblock %}
 {% block content %}
 <section class="w-full max-w-sm py-10" aria-labelledby="login-title">
   <div class="text-center">

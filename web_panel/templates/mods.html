@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Mods · Craft Panel{% endblock %}
+{% block title %}Mods · {{ brand_name or 'Craft Panel' }}{% endblock %}
 
 {% block content %}
 {%- from "_icons.html" import pixel -%}

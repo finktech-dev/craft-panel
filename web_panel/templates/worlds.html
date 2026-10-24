@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Mundo · Craft Panel{% endblock %}
+{% block title %}Mundo · {{ brand_name or 'Craft Panel' }}{% endblock %}
 {% block content %}
 {%- set field = 'min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400' -%}
 {%- set label = 'block text-sm font-medium text-zinc-300' -%}

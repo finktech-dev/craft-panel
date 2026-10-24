@@ -346,16 +346,28 @@ def _friend_connection_info(
     custom_address: str | None,
     configured_address: str | None,
     tunnel: TunnelStatus,
+    file_address: str | None = None,
 ) -> FriendConnectionInfo:
     """Describe una dirección existente sin iniciar, detener ni configurar túneles."""
     custom_address = custom_address.strip() if custom_address else None
     configured_address = configured_address.strip() if configured_address else None
+    file_address = file_address.strip() if file_address else None
+    # Playit running as a Windows service may report no address of its own (it then echoes the
+    # configured one); public_address from craftpanel.txt fills that gap.
+    detected = tunnel.public_address
+    if file_address and detected in {file_address, configured_address}:
+        detected = None
 
-    if tunnel.is_running and tunnel.public_address:
+    if tunnel.is_running and detected:
         address = tunnel.public_address
         source = "playit_detected"
         message = "Pasales esta dirección. En Minecraft van a Multijugador → Agregar servidor y la pegan."
         next_step = ""
+    elif file_address:
+        address = file_address
+        source = "configured"
+        message = "Esta es la dirección escrita en craftpanel.txt. Pasásela a tus amigos."
+        next_step = "Si alguno no puede entrar, revisá que la dirección siga siendo la correcta."
     elif custom_address:
         address = custom_address
         source = "manual"
@@ -403,6 +415,7 @@ async def get_connection_info() -> FriendConnectionInfo:
         port=port,
         custom_address=custom_addr,
         configured_address=settings.server_public_address,
+        file_address=read_server_settings(settings).value("public_address"),
         tunnel=tunnel_stat,
     )
 

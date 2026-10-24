@@ -101,7 +101,7 @@ class PlayitService:
     def status(self) -> TunnelStatus:
         return TunnelStatus(
             is_running=self.is_running or self.uses_external_agent,
-            public_address=self._public_address or self._settings.server_public_address,
+            public_address=self._public_address or self._settings.effective_public_address,
             message=self._status_message(),
             started_at=self._started_at,
             last_exit_code=self._last_exit_code,

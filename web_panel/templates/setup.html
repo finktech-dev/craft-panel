@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Preparar el servidor · Craft Panel{% endblock %}
+{% block title %}Preparar el servidor · {{ brand_name or 'Craft Panel' }}{% endblock %}
 {% block content %}
 {%- set check_rows = [
   ('system', 'Computadora', false),

@@ -374,6 +374,11 @@ class Settings(BaseSettings):
         return self._server_file_settings().value("server_name") or None
 
     @property
+    def effective_public_address(self) -> str | None:
+        """``public_address`` from craftpanel.txt, else the configured address."""
+        return self._server_file_settings().value("public_address") or self.server_public_address
+
+    @property
     def local_java_executable_path(self) -> Path:
         """Optional portable Java unpacked at tools/java/bin inside this clone."""
         assert self.tools_directory is not None
