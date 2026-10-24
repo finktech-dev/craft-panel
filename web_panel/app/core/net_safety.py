@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import os
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -89,10 +89,12 @@ async def download_to_file(
     *,
     max_bytes: int,
     expected_hash: tuple[str, str] | None = None,
+    on_progress: Callable[[int, int | None], None] | None = None,
 ) -> None:
     """Stream ``url`` to a temporary file, verify it and atomically move it.
 
     ``expected_hash`` is ``(algorithm, hexdigest)``, e.g. ``("sha512", "...")``.
+    ``on_progress`` receives ``(bytes written, declared size or None)`` after each chunk.
     """
     digest = hashlib.new(expected_hash[0]) if expected_hash else None
     temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.download")
@@ -103,6 +105,7 @@ async def download_to_file(
             declared = response.headers.get("content-length")
             if declared and declared.isdigit() and int(declared) > max_bytes:
                 raise UnsafeDownloadError("La descarga supera el tamaño permitido.")
+            total = int(declared) if declared and declared.isdigit() else None
             async with aiofiles.open(temporary, "wb") as file:
                 async for chunk in response.aiter_bytes(_CHUNK):
                     written += len(chunk)
@@ -111,6 +114,8 @@ async def download_to_file(
                     if digest is not None:
                         digest.update(chunk)
                     await file.write(chunk)
+                    if on_progress is not None:
+                        on_progress(written, total)
         if expected_hash and digest is not None and digest.hexdigest().casefold() != expected_hash[1].casefold():
             raise UnsafeDownloadError("La suma de verificación de la descarga no coincide; se descartó.")
         os.replace(temporary, destination)

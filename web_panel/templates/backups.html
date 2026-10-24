@@ -9,11 +9,13 @@
     <div class="mt-7">
       <button id="create-backup" type="button" class="v2-button btn-primary px-6 text-base">Hacer una copia ahora</button>
     </div>
+    <div id="backup-progress" class="mt-6 hidden max-w-xl"></div>
   </header>
 
   <section class="border-t border-zinc-800 py-9" aria-labelledby="backups-title">
     <h2 id="backups-title" class="text-lg font-semibold text-zinc-50">Tus copias</h2>
     <p class="mt-1 leading-relaxed text-zinc-400">Volver a una copia reemplaza el mundo actual por el de esa fecha.</p>
+    <div id="restore-progress" class="mt-5 hidden max-w-xl"></div>
     <div id="backups-list" class="mt-5 border-t border-zinc-800" aria-live="polite">
       <p class="py-6 text-zinc-500">Buscando copias…</p>
     </div>
@@ -62,4 +64,4 @@
   </form>
 </dialog>
 {% endblock %}
-{% block scripts %}<script defer src="/static/js/backups.js"></script>{% endblock %}
+{% block scripts %}<script defer src="/static/js/jobs.js"></script><script defer src="/static/js/backups.js"></script>{% endblock %}

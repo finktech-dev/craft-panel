@@ -5,12 +5,25 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
+from app.api.endpoints_jobs import accepted, start_job
 from app.core.security import get_current_admin
 from app.core.rate_limit import rate_limit
-from app.schemas.backup import BackupAuditResponse, BackupCreateResponse, BackupItem, BackupSafetyOverview
+from app.schemas.backup import BackupAuditResponse, BackupItem, BackupSafetyOverview
 from app.schemas.crash import CrashReportSummary
-from app.services.backup_service import BackupServiceError, backup_service
+from app.schemas.job import JobAccepted
+from app.services.backup_service import (
+    BACKUP_STEPS,
+    RESTORE_STEPS,
+    BackupConflictError,
+    BackupServiceError,
+    backup_service,
+)
 from app.services.crash_analyzer import crash_analyzer
+from app.services.job_service import JobReporter
+from app.services.runtime_guard import ServerActiveError, require_server_stopped
+from app.services.server_process import server_manager
+
+_BUSY_MESSAGE = "Ya hay una operación de backups en curso. Esperá a que termine."
 
 router = APIRouter(prefix="/backups", tags=["backups"], dependencies=[Depends(get_current_admin)])
 crash_router = APIRouter(prefix="/server", tags=["crash"], dependencies=[Depends(get_current_admin)])
@@ -29,17 +42,26 @@ async def backup_safety_overview() -> BackupSafetyOverview:
 
 @router.post(
     "",
-    response_model=BackupCreateResponse,
-    status_code=status.HTTP_201_CREATED,
+    response_model=JobAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(rate_limit("backups-create", 6, 600))],
 )
-async def create_backup() -> BackupCreateResponse:
+async def create_backup() -> JobAccepted:
+    """Start a backup job; follow it with ``GET /api/jobs/{job_id}`` or the WebSocket."""
     _raise_if_busy()
-    try:
-        backup = await backup_service.create_backup()
-    except BackupServiceError as error:
-        _raise_backup_error(error)
-    return BackupCreateResponse(success=True, backup=backup, message="Backup creado correctamente.")
+    if not backup_service.world_directory.is_dir():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe el mundo para respaldar.")
+    job = start_job("backup", "Copia del mundo", BACKUP_STEPS, backup_job_work, success_message="Copia lista.")
+    return accepted(job, "Empezamos la copia. Se puede seguir jugando mientras tanto.")
+
+
+async def backup_job_work(reporter: JobReporter) -> dict:
+    # The request checked this already; a scheduled copy may have started since.
+    if backup_service.is_busy:
+        raise BackupConflictError(_BUSY_MESSAGE)
+    backup = await backup_service.create_backup(progress=reporter)
+    reporter.done_message = f"Copia lista: {backup.size_mb:.1f} MB.".replace(".", ",", 1)
+    return {"backup": backup.model_dump(mode="json")}
 
 
 @router.post("/audit", response_model=BackupAuditResponse, dependencies=[Depends(rate_limit("backups-audit", 4, 300))])
@@ -51,17 +73,35 @@ async def audit_backups() -> BackupAuditResponse:
         _raise_backup_error(error if isinstance(error, BackupServiceError) else BackupServiceError(str(error)))
 
 
-@router.post("/{filename}/restore", response_model=BackupCreateResponse)
-async def restore_backup(filename: str) -> BackupCreateResponse:
+@router.post("/{filename}/restore", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
+async def restore_backup(filename: str) -> JobAccepted:
+    """Validate the request right away, then replace the world in a job."""
     try:
-        backup = await backup_service.restore_backup(filename)
+        require_server_stopped(server_manager, "volver a una copia")
+    except ServerActiveError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    try:
+        backup_path = backup_service.get_backup_path(filename)
     except BackupServiceError as error:
         _raise_backup_error(error)
-    return BackupCreateResponse(
-        success=True,
-        backup=backup,
-        message="Mundo restaurado. El servidor quedó detenido y listo para iniciar.",
+    if not backup_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe el backup indicado.")
+    _raise_if_busy()
+
+    async def work(reporter: JobReporter) -> dict:
+        if backup_service.is_busy:
+            raise BackupConflictError(_BUSY_MESSAGE)
+        backup = await backup_service.restore_backup(filename, progress=reporter)
+        return {"backup": backup.model_dump(mode="json")}
+
+    job = start_job(
+        "restore",
+        "Volver a una copia",
+        RESTORE_STEPS,
+        work,
+        success_message="Listo, el mundo volvió a esa copia. El servidor quedó apagado; encendelo cuando quieras.",
     )
+    return accepted(job, "Empezamos a volver a esa copia.")
 
 
 @router.delete("/{filename}", status_code=status.HTTP_204_NO_CONTENT)
@@ -94,10 +134,7 @@ async def get_crash_report() -> CrashReportSummary:
 def _raise_if_busy() -> None:
     """Queueing more copies behind a running one only wastes disk and CPU."""
     if backup_service.is_busy:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ya hay una operación de backups en curso. Esperá a que termine.",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_BUSY_MESSAGE)
 
 
 def _raise_backup_error(error: BackupServiceError) -> None:

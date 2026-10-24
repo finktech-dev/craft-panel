@@ -23,6 +23,7 @@ from app.core.security import (
     totp_manager,
 )
 from app.core.security_middleware import RequestGuardMiddleware, SecurityHeadersAndCsrfMiddleware
+from app.services.job_service import job_service
 from app.services.server_process import server_manager
 from app.services.cloudflare_service import cloudflare_quick_tunnel_service
 from app.services.playit_service import playit_service
@@ -47,6 +48,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # esta cancelación evita una traza falsa tras un apagado correcto.
         logging.getLogger("panel").info("Se recibió una interrupción; apagando el panel ordenadamente.")
     finally:
+        # Record jobs that this shutdown interrupts before anything else stops.
+        job_service.shutdown()
         scheduler_service.shutdown()
         try:
             await server_manager.shutdown()

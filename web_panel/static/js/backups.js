@@ -92,17 +92,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Copies and restores run as jobs: their progress stays visible where they started,
+  // also after a reload, and a failure keeps its message and what to do next.
+  const finishJob = async (job, mount) => {
+    if (!job) return;
+    if (job.status === 'succeeded') {
+      Panel.toast(job.message, 'success');
+      window.setTimeout(() => {
+        const node = document.querySelector(mount);
+        if (node?.dataset.jobId === job.id) node.classList.add('hidden');
+      }, 8000);
+    } else {
+      Panel.toast(job.error || job.message, 'error');
+    }
+    await loadBackups();
+  };
+
   document.querySelector('#create-backup').addEventListener('click', async (event) => {
     const button = event.currentTarget;
-    button.disabled = true;
     try {
-      const response = await Panel.api('/api/backups', { method: 'POST' });
-      Panel.toast(response.message, 'success');
-      await loadBackups();
+      await finishJob(await PanelJobs.start('/api/backups', { mount: '#backup-progress', button }), '#backup-progress');
     } catch (issue) {
       Panel.toast(issue.message, 'error');
-    } finally {
-      button.disabled = false;
     }
   });
 
@@ -133,10 +144,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const button = event.currentTarget;
     button.disabled = true;
     try {
-      const response = await Panel.api(`/api/backups/${encodeURIComponent(selectedBackup)}/restore`, { method: 'POST' });
-      dialog.close();
-      Panel.toast(response.message, 'success');
-      await loadBackups();
+      // The dialog closes as soon as the job exists; progress continues on the page.
+      const job = await PanelJobs.start(`/api/backups/${encodeURIComponent(selectedBackup)}/restore`, {
+        mount: '#restore-progress',
+        onAccepted: () => dialog.close(),
+      });
+      await finishJob(job, '#restore-progress');
     } catch (issue) {
       Panel.toast(issue.message, 'error');
     } finally {
@@ -145,6 +158,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.querySelector('#refresh-crash').addEventListener('click', loadCrash);
+  PanelJobs.resume({ kinds: ['backup'], mount: '#backup-progress', button: '#create-backup' }).then((job) => finishJob(job, '#backup-progress'));
+  PanelJobs.resume({ kinds: ['restore'], mount: '#restore-progress' }).then((job) => finishJob(job, '#restore-progress'));
   loadBackups();
   loadCrash();
 });
