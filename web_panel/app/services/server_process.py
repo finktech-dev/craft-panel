@@ -251,6 +251,8 @@ class MinecraftServerManager:
                     f"No encontramos el Java elegido para este servidor ({file_settings.java}). "
                     "Corregilo en Ajustes › Tu servidor o dejalo vacío."
                 )
+            if (memory := file_settings.value("memory")) is not None:
+                await asyncio.to_thread(self._apply_memory, memory)
             if not self._settings.server_start_script.is_file():
                 raise ServerProcessError(
                     f"No encontramos {self._settings.server_start_script.name} en la carpeta del servidor. "
@@ -292,6 +294,20 @@ class MinecraftServerManager:
             if not self._dev_mode:
                 asyncio.create_task(discord_service.send_server_starting(), name="discord-server-starting")
             return True
+
+    def _apply_memory(self, memory_gb: int) -> None:
+        """craftpanel.txt's memory is the source of truth: write it into user_jvm_args.txt before starting."""
+        from app.services.jvm_args import JvmArgsMissingError, apply_ram
+        from app.services.protected_paths import ProtectedPathError
+
+        try:
+            apply_ram(self._settings, memory_gb)
+        except JvmArgsMissingError:
+            logger.info("No user_jvm_args.txt; the start script decides the server's memory.")
+        except ProtectedPathError:
+            logger.info("user_jvm_args.txt is protected in craftpanel.txt; its memory is left as it is.")
+        except OSError as error:
+            raise ServerProcessError(f"No se pudo poner la memoria en user_jvm_args.txt: {error}") from error
 
     async def stop(self) -> bool:
         """Solicita una detención limpia mediante la consola de Minecraft."""

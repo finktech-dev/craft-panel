@@ -13,7 +13,9 @@ from app.core.config import settings
 from app.core.security import get_current_admin
 from app.schemas.runtime import HostRuntimeDiscovery
 from app.services.runtime_discovery import runtime_discovery_service
+from app.services.jvm_args import JvmArgsMissingError, apply_ram
 from app.services.server_process import server_manager
+from app.services.server_settings_file import SettingsFileError, server_settings_file
 
 router = APIRouter(prefix="/runtime", tags=["runtime"], dependencies=[Depends(get_current_admin)])
 
@@ -41,31 +43,10 @@ def _host_memory() -> tuple[int, int, int]:
 
 
 def _apply_ram_to_jvm_args(allocated_ram_gb: int) -> None:
-    assert settings.server_directory is not None
-    target = settings.server_directory / "user_jvm_args.txt"
-    if not target.is_file():
-        raise HTTPException(status_code=409, detail="No encontramos user_jvm_args.txt para aplicar la RAM al servidor.")
-    lines = target.read_text(encoding="utf-8").splitlines()
-    maximum_line = f"-Xmx{allocated_ram_gb}G"
-    initial_line = f"-Xms{min(2, allocated_ram_gb)}G"
-    found_maximum = found_initial = False
-    updated: list[str] = []
-    for line in lines:
-        if line.strip().lower().startswith("-xmx"):
-            updated.append(maximum_line)
-            found_maximum = True
-        elif line.strip().lower().startswith("-xms"):
-            updated.append(initial_line)
-            found_initial = True
-        else:
-            updated.append(line)
-    if not found_initial:
-        updated.append(initial_line)
-    if not found_maximum:
-        updated.append(maximum_line)
-    temporary = target.with_suffix(".tmp")
-    temporary.write_text("\n".join(updated) + "\n", encoding="utf-8")
-    os.replace(temporary, target)
+    try:
+        apply_ram(settings, allocated_ram_gb)
+    except JvmArgsMissingError as error:
+        raise HTTPException(status_code=409, detail="No encontramos user_jvm_args.txt para aplicar la RAM al servidor.") from error
 
 
 def _settings_file():
@@ -82,7 +63,7 @@ async def discover_host_runtime() -> HostRuntimeDiscovery:
 async def get_launch_settings() -> LaunchSettings:
     total_gb, available_gb, recommended_gb = _host_memory()
     return LaunchSettings(
-        allocated_ram_gb=settings.allocated_ram_gb,
+        allocated_ram_gb=settings.effective_ram_gb,
         maximum_recommended_ram_gb=recommended_gb,
         available_ram_gb=available_gb,
         total_ram_gb=total_gb,
@@ -99,6 +80,12 @@ async def update_launch_settings(payload: LaunchSettingsUpdate) -> LaunchSetting
     if payload.allocated_ram_gb > maximum:
         raise HTTPException(status_code=422, detail=f"Esta computadora recomienda reservar al menos 2 GB para el sistema; elegí hasta {maximum} GB.")
     _apply_ram_to_jvm_args(payload.allocated_ram_gb)
+    # When craftpanel.txt exists, its memory value is the source of truth: keep it in step.
+    if server_settings_file.load(settings).exists:
+        try:
+            server_settings_file.save_fields(settings, values={"memory": f"{payload.allocated_ram_gb}G"})
+        except SettingsFileError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
     settings.allocated_ram_gb = payload.allocated_ram_gb
     settings.playit_enabled = payload.playit_enabled
     try:
@@ -106,7 +93,7 @@ async def update_launch_settings(payload: LaunchSettingsUpdate) -> LaunchSetting
     except OSError as error:
         raise HTTPException(status_code=500, detail="No se pudo guardar la preferencia de RAM.") from error
     return LaunchSettings(
-        allocated_ram_gb=settings.allocated_ram_gb,
+        allocated_ram_gb=settings.effective_ram_gb,
         maximum_recommended_ram_gb=maximum,
         available_ram_gb=available_gb,
         total_ram_gb=total_gb,
