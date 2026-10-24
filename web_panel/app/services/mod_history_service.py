@@ -39,6 +39,7 @@ from typing import Any, Final
 from app.core.config import Settings, settings
 from app.core.path_safety import is_safe_component, write_private_text
 from app.services.runtime_guard import ServerState
+from app.services.protected_paths import require_not_protected
 from app.services.server_process import server_manager
 
 logger = logging.getLogger(__name__)
@@ -828,6 +829,7 @@ class ModHistoryService:
         current_exact = {(r.filename, r.sha256) for r in current}
         to_place = [r for r in records if (r.filename, r.sha256) not in current_exact]
         to_park = [r for r in current if (r.filename, r.sha256) not in target_exact]
+        require_not_protected(*(mods / r.filename for r in [*to_place, *to_park]), configured=self._settings)
         if not to_place and not to_park:
             return False
         # Files that leave the folder must be kept in the cache, or the rollback could not be undone.

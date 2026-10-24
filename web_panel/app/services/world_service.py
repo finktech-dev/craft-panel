@@ -14,6 +14,7 @@ from app.core.path_safety import is_safe_component
 from app.schemas.worlds import WorldCreateRequest, WorldItem
 from app.services.server_properties_service import server_properties_service
 from app.services.runtime_guard import require_server_stopped
+from app.services.protected_paths import require_tree_not_protected
 from app.services.server_process import MinecraftServerManager, server_manager
 
 
@@ -158,6 +159,7 @@ class WorldService:
             if not (target_path / "level.dat").is_file():
                 raise ValueError(f"'{world_name}' no es una carpeta de mundo; no se eliminó.")
 
+            await asyncio.to_thread(require_tree_not_protected, target_path, self._settings)
             await asyncio.to_thread(shutil.rmtree, target_path)
             return {
                 "success": True,

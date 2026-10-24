@@ -26,6 +26,7 @@ from app.core.net_safety import (
 from app.services.progress import ProgressCallback, StepPlan, download_message, report
 from app.services.runtime_discovery import RuntimeDiscoveryService
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
+from app.services.protected_paths import ProtectedPathError, require_not_protected
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.services.server_version_service import neoforge_to_minecraft
 from app.services.version_catalog_service import (
@@ -147,6 +148,17 @@ class InstallerService:
         if not _MINECRAFT_VERSION.match(minecraft_version or ""):
             raise InstallerValidationError("Elegí una versión de Minecraft válida, por ejemplo 1.21.1.")
         self._assert_runtime_is_not_already_installed()
+        self._assert_targets_not_protected()
+
+    def _assert_targets_not_protected(self) -> None:
+        """The installer writes these files and folders; refuse up front if the user protected any."""
+        assert self._settings.server_directory is not None
+        root = self._settings.server_directory
+        targets = [root / name for name in ("eula.txt", "user_jvm_args.txt", "run.bat", "run.sh", "server.jar", "libraries", "versions")]
+        try:
+            require_not_protected(*targets, configured=self._settings)
+        except ProtectedPathError as error:
+            raise InstallerConflictError(str(error)) from error
 
     async def _install_locked(self, flavor: str, minecraft_version: str) -> None:
         self._step("prepare", "Revisando la carpeta del servidor.")
@@ -157,6 +169,7 @@ class InstallerService:
         if not _MINECRAFT_VERSION.match(minecraft_version or ""):
             raise InstallerValidationError("Elegí una versión de Minecraft válida, por ejemplo 1.21.1.")
         self._assert_runtime_is_not_already_installed()
+        self._assert_targets_not_protected()
         if flavor in {"neoforge", "fabric"}:
             await self._assert_java_is_compatible(minecraft_version)
         assert self._settings.server_directory is not None
@@ -288,7 +301,7 @@ class InstallerService:
         )
 
     async def _run_java(self, *args: str) -> None:
-        java = self._settings.local_java_executable_path
+        java = self._settings.server_java_executable or self._settings.local_java_executable_path
         command = str(java) if java.is_file() else "java"
         try:
             process = await asyncio.create_subprocess_exec(

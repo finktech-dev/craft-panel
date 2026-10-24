@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}">{% endif %}
-  <title>{% block title %}Craft Panel{% endblock %}</title>
+  <title>{% block title %}{{ brand_name or 'Craft Panel' }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/tailwind.css">
   <link rel="stylesheet" href="/static/css/panel-v2.css">
   <script defer src="/static/js/app.js"></script>
@@ -30,7 +30,7 @@
   {% if is_admin %}
   <header class="topbar sticky top-0 z-30">
     <div class="mx-auto flex h-16 max-w-5xl items-center gap-2 px-4 sm:px-6">
-      <a href="/" class="mr-3 flex items-center gap-2.5 font-display text-[1.05rem] font-semibold text-zinc-50">{{ pixel('grass', 24) }}Craft Panel</a>
+      <a href="/" class="mr-3 flex items-center gap-2.5 font-display text-[1.05rem] font-semibold text-zinc-50">{{ pixel('grass', 24) }}{{ brand_name or 'Craft Panel' }}</a>
       <nav class="hidden items-center gap-0.5 md:flex" aria-label="Navegación principal">
         {% for href, label, page, icon in main_links %}<a href="{{ href }}" class="nav-link gap-2"{% if page and current_page == page %} aria-current="page"{% endif %}>{{ pixel(icon) }}{{ label }}</a>{% endfor %}
         <details class="relative" data-menu>

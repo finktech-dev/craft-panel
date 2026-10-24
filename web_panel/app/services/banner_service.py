@@ -31,7 +31,7 @@ class BannerService:
         state_label = "ONLINE · objetivo 20.0 TPS" if online else "OFFLINE"
         state_color = (52, 211, 153) if online else (251, 113, 133)
         ram_used_gb = metrics.ram_used_mb / 1024
-        public_address = tunnel.public_address or self._settings.server_public_address or "Dirección aún no asignada"
+        public_address = tunnel.public_address or self._settings.effective_public_address or "Dirección aún no asignada"
 
         image = Image.new("RGB", (600, 160), (18, 21, 27))
         draw = ImageDraw.Draw(image)
@@ -40,6 +40,8 @@ class BannerService:
         small_font = _font(12)
         draw.rounded_rectangle((1, 1, 598, 158), radius=14, outline=(190, 148, 64), width=2, fill=(24, 24, 27))
         draw.rectangle((20, 22, 25, 136), fill=(190, 148, 64))
+        title = self._settings.effective_server_name or self._settings.banner_title
+        draw.text((43, 20), title[:40], fill=(244, 244, 245), font=title_font)
         subtitle = (
             self._settings.banner_subtitle.strip()
             or self._settings.discord_server_software_label.strip()
@@ -49,7 +51,7 @@ class BannerService:
         draw.text((43, 50), subtitle, fill=(161, 161, 170), font=small_font)
         draw.ellipse((43, 83, 55, 95), fill=state_color)
         draw.text((65, 80), state_label, fill=(244, 244, 245), font=body_font)
-        draw.text((43, 111), f"RAM  {ram_used_gb:.1f} GB / {self._settings.allocated_ram_gb:.1f} GB", fill=(212, 212, 216), font=body_font)
+        draw.text((43, 111), f"RAM  {ram_used_gb:.1f} GB / {self._settings.effective_ram_gb:.1f} GB", fill=(212, 212, 216), font=body_font)
         draw.text((330, 111), public_address, fill=(110, 231, 183), font=small_font)
 
         output = BytesIO()

@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import time
+from collections import namedtuple
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -147,23 +148,224 @@ def test_terminate_only_kills_currently_detected_java(tmp_path: Path, listener, 
     assert process.poll() is not None
 
 
+# Same fields psutil exposes; its own tuples live in a private module that changes between releases.
+_OpenFile = namedtuple("_OpenFile", "path fd")
+_Address = namedtuple("_Address", "ip port")
+
+
+class FakeProcess:
+    """Stands in for psutil.Process; each signal can be given or made to raise AccessDenied."""
+
+    def __init__(
+        self,
+        pid: int,
+        name: str = "java.exe",
+        cwd: str | None = None,
+        cmdline: list[str] | None = None,
+        open_files: list[str] | None = None,
+        denied: bool = False,
+    ) -> None:
+        self.pid = pid
+        self._name = name
+        self._cwd = cwd or str(Path.home())
+        self._cmdline = cmdline or ["java", "-jar", "tool.jar"]
+        self._open_files = open_files or []
+        self._denied = denied
+        self.info = {"pid": pid, "name": name}
+
+    def _check(self) -> None:
+        if self._denied:
+            raise psutil.AccessDenied(self.pid)
+
+    def name(self) -> str:
+        return self._name
+
+    def cwd(self) -> str:
+        self._check()
+        return self._cwd
+
+    def cmdline(self) -> list[str]:
+        self._check()
+        return self._cmdline
+
+    def open_files(self) -> list:
+        self._check()
+        return [_OpenFile(path, -1) for path in self._open_files]
+
+    def children(self, recursive: bool = False) -> list:
+        return []
+
+
+class FakeConnection:
+    def __init__(self, pid: int, port: int) -> None:
+        self.pid = pid
+        self.status = psutil.CONN_LISTEN
+        self.laddr = _Address("0.0.0.0", port)
+
+
+def fake_machine(monkeypatch, processes: list[FakeProcess], listening: dict[int, int] | None = None) -> None:
+    """Replace process listing, lookup and sockets with ``processes`` (pid -> port for listeners)."""
+    by_pid = {process.pid: process for process in processes}
+
+    def lookup(pid: int) -> FakeProcess:
+        if pid not in by_pid:
+            raise psutil.NoSuchProcess(pid)
+        return by_pid[pid]
+
+    connections = [FakeConnection(pid, port) for pid, port in (listening or {}).items()]
+    monkeypatch.setattr(external_server_service.psutil, "process_iter", lambda attrs: iter(processes))
+    monkeypatch.setattr(external_server_service.psutil, "Process", lookup)
+    monkeypatch.setattr(external_server_service.psutil, "net_connections", lambda kind: connections)
+
+
 def test_detects_java_running_in_server_directory(tmp_path: Path, monkeypatch) -> None:
     configured = _settings(tmp_path, _free_port())
-    server_directory = configured.server_directory
-
-    class FakeJava:
-        info = {"pid": 999_991, "name": "java.exe"}
-
-        def cwd(self) -> str:
-            return str(server_directory)
-
-    monkeypatch.setattr(external_server_service.psutil, "process_iter", lambda attrs: iter([FakeJava()]))
+    fake_machine(monkeypatch, [FakeProcess(999_991, cwd=str(configured.server_directory))])
 
     found = ExternalServerDetector(configured).detect()
 
     assert found is not None
-    assert (found.pid, found.reason) == (999_991, "server_directory")
+    assert (found.pid, found.reason, found.kind) == (999_991, "server_directory", "is_our_server")
     assert "run.bat" in found.message
+    assert "Se abrió desde la carpeta del servidor" in found.reasons
+    assert found.can_terminate
+
+
+def test_world_lock_is_the_strongest_signal(tmp_path: Path, monkeypatch) -> None:
+    configured = _settings(tmp_path, _free_port())
+    (configured.server_directory / "server.properties").write_text("level-name=Adventure\n", encoding="utf-8")
+    lock = configured.server_directory / "Adventure" / "session.lock"
+    fake_machine(
+        monkeypatch,
+        [
+            FakeProcess(11, cwd=str(tmp_path / "elsewhere"), open_files=[str(lock)]),
+            FakeProcess(12, cwd=str(configured.server_directory)),
+        ],
+    )
+
+    found = ExternalServerDetector(configured).inspect()
+
+    assert [server.pid for server in found] == [11, 12]
+    assert found[0].reason == "world_lock"
+    assert "Tiene abierto el mundo Adventure" in found[0].reasons
+    assert found[0].can_terminate
+
+
+def test_command_line_mentioning_the_server_folder_is_confident(tmp_path: Path, monkeypatch) -> None:
+    configured = _settings(tmp_path, _free_port())
+    jar = configured.server_directory / "server.jar"
+    fake_machine(monkeypatch, [FakeProcess(21, cmdline=["java", "-Xmx4G", "-jar", str(jar), "nogui"])])
+
+    found = ExternalServerDetector(configured).detect()
+
+    assert found is not None and found.kind == "is_our_server" and found.reason == "command_line"
+    assert "Su línea de inicio menciona la carpeta del servidor" in found.reasons
+
+
+def test_a_sibling_folder_with_a_longer_name_does_not_match(tmp_path: Path, monkeypatch) -> None:
+    configured = _settings(tmp_path, _free_port())
+    sibling = Path(f"{configured.server_directory}2")
+    fake_machine(monkeypatch, [FakeProcess(22, cmdline=["java", "-jar", str(sibling / "server.jar")])])
+
+    assert ExternalServerDetector(configured).detect() is None
+
+
+def test_user_hint_from_settings_file_is_confident(tmp_path: Path, monkeypatch) -> None:
+    configured = _settings(tmp_path, _free_port())
+    (configured.server_directory / "craftpanel.txt").write_text("[detect]\nmy-modpack-launcher\n", encoding="utf-8")
+    fake_machine(monkeypatch, [FakeProcess(31, cmdline=["javaw", "-jar", "D:/games/My-Modpack-Launcher.jar"], name="javaw.exe")])
+
+    found = ExternalServerDetector(configured).detect()
+
+    assert found is not None and found.kind == "is_our_server" and found.reason == "hint"
+    assert any("my-modpack-launcher" in reason for reason in found.reasons)
+
+
+def test_minecraft_from_another_folder_on_our_port_cannot_be_closed(tmp_path: Path, monkeypatch) -> None:
+    port = _free_port()
+    configured = _settings(tmp_path, port)
+    other = FakeProcess(41, cwd=str(tmp_path / "other-server"), cmdline=["java", "@user_jvm_args.txt", "@libraries/net/neoforged/neoforge/x/win_args.txt", "nogui"])
+    fake_machine(monkeypatch, [other], listening={41: port})
+
+    found = ExternalServerDetector(configured).detect()
+
+    assert found is not None
+    assert found.kind == "other_java_server"
+    assert f"Usa el puerto {port}" in found.reasons
+    assert any("Arranca como un servidor de Minecraft" in reason for reason in found.reasons)
+    assert not found.can_terminate
+    assert "otra carpeta" in found.message
+
+
+def test_minecraft_from_another_folder_elsewhere_is_ignored(tmp_path: Path, monkeypatch) -> None:
+    configured = _settings(tmp_path, _free_port())
+    fake_machine(monkeypatch, [FakeProcess(42, cwd=str(tmp_path / "other"), cmdline=["java", "@user_jvm_args.txt", "nogui"])])
+
+    assert ExternalServerDetector(configured).detect() is None
+
+
+def test_other_program_on_port_is_explained(tmp_path: Path, monkeypatch) -> None:
+    port = _free_port()
+    configured = _settings(tmp_path, port)
+    fake_machine(monkeypatch, [FakeProcess(51, name="game.exe")], listening={51: port})
+
+    found = ExternalServerDetector(configured).detect()
+
+    assert found is not None and found.kind == "other_program_on_port"
+    assert "Es otro programa (game.exe), no un servidor de Minecraft" in found.reasons
+    assert not found.can_terminate
+    assert str(port) in found.explanation and "Lo que encontramos" in found.explanation
+
+
+def test_access_denied_signals_are_skipped(tmp_path: Path, monkeypatch) -> None:
+    port = _free_port()
+    configured = _settings(tmp_path, port)
+    fake_machine(monkeypatch, [FakeProcess(61, denied=True)], listening={61: port})
+
+    found = ExternalServerDetector(configured).detect()
+
+    # Unknown origin: it is in the way, but the panel is not sure enough to close it.
+    assert found is not None and found.kind == "other_program_on_port" and not found.can_terminate
+
+
+def test_the_panel_own_tree_is_never_reported(tmp_path: Path, monkeypatch) -> None:
+    configured = _settings(tmp_path, _free_port())
+    fake_machine(monkeypatch, [FakeProcess(71, cwd=str(configured.server_directory))])
+
+    assert ExternalServerDetector(configured).detect(own_pid=71) is None
+
+
+def test_open_files_is_only_asked_of_java_and_port_holders(tmp_path: Path, monkeypatch) -> None:
+    configured = _settings(tmp_path, _free_port())
+    asked: list[int] = []
+
+    class Watched(FakeProcess):
+        def open_files(self) -> list:
+            asked.append(self.pid)
+            return []
+
+    fake_machine(monkeypatch, [Watched(81, name="chrome.exe"), Watched(82, name="explorer.exe"), Watched(83)])
+
+    ExternalServerDetector(configured).inspect()
+
+    assert asked == [83]
+
+
+@pytest.mark.asyncio
+async def test_external_endpoint_lists_reasons(monkeypatch) -> None:
+    from app.api import endpoints_server
+
+    found = ExternalServer(
+        pid=4321, name="java.exe", reason="world_lock", port=25565, kind="is_our_server",
+        reasons=("Tiene abierto el mundo world", "Usa el puerto 25565"),
+    )
+    monkeypatch.setattr(endpoints_server, "server_manager", _StoppedManager())
+    monkeypatch.setattr(endpoints_server, "external_server_detector", _Detector(found))
+
+    info = await endpoints_server.external_server()
+
+    assert info.detected and info.kind == "is_our_server" and info.can_terminate
+    assert info.reasons == ["Tiene abierto el mundo world", "Usa el puerto 25565"]
 
 
 class _StoppedManager:

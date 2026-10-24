@@ -18,7 +18,8 @@ const files = [
   'admin-configs.js',
   'admin-restrictions.js',
   'admin-ranks.js',
-  'admin-discord.js'
+  'admin-discord.js',
+  'admin-server-file.js'
 ];
 
 // 1. Test de Sintaxis
@@ -278,6 +279,12 @@ vm.runInNewContext(discordCode, discordEnv);
 
 assert(discordEnv.window.loadDiscordConfig, 'loadDiscordConfig debe estar expuesto');
 console.log('  ✓ Integración de Discord expuesta y operativa');
+
+// 8. admin-server-file.js must stay inert on pages without the "Tu servidor" section.
+console.log('\n[7] Probando admin-server-file.js (craftpanel.txt)...');
+const { context: fileEnv } = createMockEnvironment();
+vm.runInNewContext(fs.readFileSync(path.join(jsDir, 'admin-server-file.js'), 'utf8'), fileEnv);
+console.log('  ✓ admin-server-file.js se carga sin errores');
 
 console.log('\n' + '='.repeat(60));
 console.log('TODOS LOS TESTS DE REGRESIÓN JS PASARON SATISFACTORIAMENTE (0 ERRORES)');

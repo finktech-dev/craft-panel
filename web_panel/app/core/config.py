@@ -314,11 +314,70 @@ class Settings(BaseSettings):
             raise ValueError(f"{field_name} debe estar dentro de {resolved_parent}")
         return resolved_path
 
+    def _server_file_settings(self):  # noqa: ANN202 - avoids importing services at module load
+        from app.services.server_settings_file import read_server_settings
+
+        return read_server_settings(self)
+
+    @property
+    def default_server_start_script_name(self) -> str:
+        return "run.bat" if sys.platform == "win32" else "run.sh"
+
     @property
     def server_start_script(self) -> Path:
-        """Use the native launch script generated for this operating system."""
+        """The ``inicio`` script from craftpanel.txt, or the native generated launch script."""
         assert self.server_directory is not None
-        return self.server_directory / ("run.bat" if sys.platform == "win32" else "run.sh")
+        configured = self._server_file_settings().start_script
+        return self.server_directory / (configured or self.default_server_start_script_name)
+
+    @property
+    def server_java_executable(self) -> Path | None:
+        """The ``java`` chosen in craftpanel.txt, when it is set and still exists."""
+        configured = self._server_file_settings().java
+        if configured and Path(configured).is_file():
+            return Path(configured)
+        return None
+
+    @property
+    def server_java_bin_directory(self) -> Path | None:
+        """Folder put first on PATH for the server: craftpanel.txt's Java, else tools/java."""
+        if (chosen := self.server_java_executable) is not None:
+            return chosen.parent
+        if self.local_java_executable_path.is_file():
+            return self.local_java_executable_path.parent
+        return None
+
+    # craftpanel.txt values that replace a panel setting when they are written in the file.
+
+    @property
+    def effective_backups_directory(self) -> Path:
+        """``backup_location`` from craftpanel.txt, else the panel's backups folder."""
+        assert self.backups_directory is not None
+        location = self._server_file_settings().value("backup_location")
+        return Path(location) if location else self.backups_directory
+
+    @property
+    def effective_backup_retention_count(self) -> int:
+        return self._server_file_settings().value("backup_keep") or self.backup_retention_count
+
+    @property
+    def effective_backup_max_disk_gb(self) -> int:
+        return self._server_file_settings().value("backup_max_size") or self.backup_max_disk_gb
+
+    @property
+    def effective_ram_gb(self) -> int:
+        """``memory`` from craftpanel.txt, else the RAM chosen in the panel."""
+        return self._server_file_settings().value("memory") or self.allocated_ram_gb
+
+    @property
+    def effective_server_name(self) -> str | None:
+        return self._server_file_settings().value("server_name") or None
+
+    @property
+    def effective_public_address(self) -> str | None:
+        """``public_address`` from craftpanel.txt, else the configured address."""
+        return self._server_file_settings().value("public_address") or self.server_public_address
+
     @property
     def local_java_executable_path(self) -> Path:
         """Optional portable Java unpacked at tools/java/bin inside this clone."""
@@ -341,10 +400,16 @@ class Settings(BaseSettings):
 
     @property
     def server_start_command(self) -> tuple[str, ...]:
-        """Run the native generated script without relying on a Windows-only shell."""
-        if self.server_start_script.suffix.casefold() == ".bat":
+        """Run the launch script without relying on a Windows-only shell.
+
+        The name is either the built-in default or an ``inicio`` value that
+        craftpanel.txt validation limited to letters, digits, ``.``, ``_`` and
+        ``-``, so it cannot carry cmd.exe metacharacters.
+        """
+        script = self.server_start_script.name
+        if self.server_start_script.suffix.casefold() in {".bat", ".cmd"}:
             # An explicit .\ path works even when NoDefaultCurrentDirectoryInExePath stops
             # cmd.exe from looking for commands in the current folder.
-            return ("cmd.exe", "/d", "/s", "/c", "call .\\run.bat nogui")
-        return ("sh", "./run.sh", "nogui")
+            return ("cmd.exe", "/d", "/s", "/c", f"call .\\{script} nogui")
+        return ("sh", f"./{script}", "nogui")
 settings = Settings()

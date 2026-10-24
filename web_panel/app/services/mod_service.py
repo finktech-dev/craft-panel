@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import contextlib
 import json
 import logging
@@ -32,6 +33,8 @@ from app.schemas.mod import (
 )
 from app.services.mod_history_service import HistoryToken, ModHistoryService, is_mod_filename
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
+from app.services.protected_paths import require_not_protected
+from app.services.server_settings_file import read_server_settings
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.services.server_version_service import ServerVersionService
 
@@ -74,6 +77,30 @@ class ModConflictError(ModServiceError):
 
 class ModrinthServiceError(ModServiceError):
     status_code = 502
+
+
+def user_server_only_mods(configured: Settings) -> tuple[str, ...]:
+    """[server_only_mods] from craftpanel.txt; empty when unavailable."""
+    try:
+        return read_server_settings(configured).items("server_only_mods")
+    except Exception:  # noqa: BLE001 - a broken settings file must not break the mod list
+        return ()
+
+
+def matches_server_only_rule(filename: str, mod_id: str | None, rules: Iterable[str]) -> bool:
+    """A rule with * or ? (or ending in .jar) is a file name pattern; anything else is a mod id or name prefix."""
+    name = filename.casefold().removesuffix(".disabled")
+    for rule in rules:
+        lowered = rule.casefold()
+        if any(character in lowered for character in "*?") or lowered.endswith(".jar"):
+            if fnmatch.fnmatchcase(name, lowered):
+                return True
+            continue
+        if mod_id and mod_id.casefold() == lowered:
+            return True
+        if name == f"{lowered}.jar" or name.startswith((f"{lowered}-", f"{lowered}_")):
+            return True
+    return False
 
 
 class ModService:
@@ -142,6 +169,7 @@ class ModService:
         target = self._resolve_mod_path(target_name)
         if target.exists():
             raise ModConflictError("Ya existe un mod con el nombre de destino.")
+        require_not_protected(source, target, configured=self._settings)
 
         try:
             async with self._history_step("toggle", {"filename": source.name}):
@@ -168,6 +196,7 @@ class ModService:
         destination = self._resolve_mod_path(filename)
         if destination.exists():
             raise ModConflictError("Ya existe un mod con ese nombre.")
+        require_not_protected(destination, configured=self._settings)
 
         temporary_path = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.uploading")
         written_bytes = 0
@@ -193,13 +222,14 @@ class ModService:
             if temporary_path.exists():
                 await asyncio.to_thread(temporary_path.unlink)
 
-        return await asyncio.to_thread(self._mod_item_from_path, destination)
+        return await asyncio.to_thread(self._mod_item_from_path, destination, self._settings)
 
     async def delete_mod(self, filename: str) -> None:
         self._require_server_stopped("eliminar mods")
         target = self._resolve_mod_path(filename)
         if not target.is_file():
             raise ModNotFoundError("No existe el mod indicado.")
+        require_not_protected(target, configured=self._settings)
         try:
             async with self._history_step("delete", {"filename": target.name}):
                 await asyncio.to_thread(target.unlink)
@@ -236,6 +266,11 @@ class ModService:
                 if not target.is_file():
                     errors.append(f"{name}: no existe.")
                     continue
+                if action in {"enable", "disable", "delete"}:
+                    renamed = target.with_name(
+                        target.name.removesuffix(".disabled") if action == "enable" else f"{target.name}.disabled"
+                    )
+                    require_not_protected(target, renamed, configured=self._settings)
 
                 if action == "enable":
                     if target.name.endswith(".jar.disabled"):
@@ -342,6 +377,8 @@ class ModService:
                 project_id, version_id, loader, game_version, install_dependencies, visited_projects
             )
         replaced = self._resolve_mod_path(replace_filename) if replace_filename else None
+        if replaced is not None:
+            require_not_protected(replaced, configured=self._settings)
         action = "update" if replaced is not None else "install"
         async with self._history_step(action, {"project_id": project_id}) as token:
             item = await self._install_modrinth_mod(
@@ -377,6 +414,7 @@ class ModService:
         destination = self._resolve_mod_path(filename)
         if destination.exists():
             raise ModConflictError("Ese archivo ya está instalado.")
+        require_not_protected(destination, configured=self._settings)
 
         download_url = file_data.get("url")
         if not isinstance(download_url, str) or not is_allowed_url(download_url, MODRINTH_HOSTS):
@@ -426,7 +464,7 @@ class ModService:
                             except Exception as dep_err:
                                 logger.warning("No se pudo autoinstalar dependencia requerida %s: %s", dep_proj, dep_err)
 
-        return await asyncio.to_thread(self._mod_item_from_path, destination)
+        return await asyncio.to_thread(self._mod_item_from_path, destination, self._settings)
 
     async def check_updates(self) -> list[ModUpdateItem]:
         """Comprueba de forma asíncrona si hay versiones más nuevas en Modrinth para los mods instalados."""
@@ -588,8 +626,13 @@ class ModService:
     def _build_client_pack_sync(self, destination: Path) -> None:
         with zipfile.ZipFile(destination, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             written_names: set[str] = set()
+            user_rules = user_server_only_mods(self._settings)
             for mod_file in self._iter_active_mod_files():
-                if mod_file.is_symlink() or self._is_server_only_mod(mod_file):
+                if mod_file.is_symlink():
+                    continue
+                # Mod ids in [server_only_mods] need the jar's metadata; file name rules do not.
+                mod_id = self._extract_jar_metadata(mod_file).get("mod_id") if user_rules else None
+                if self._is_server_only_mod(mod_file, mod_id, user_rules):
                     continue
                 archive.write(mod_file, arcname=Path("mods") / mod_file.name)
                 written_names.add(mod_file.name.lower())
@@ -621,7 +664,7 @@ class ModService:
                 archive.write(file_path, arcname=archive_root / rel)
 
     def _list_mods_sync(self) -> list[ModItem]:
-        items = [self._mod_item_from_path(path) for path in self._iter_mod_files()]
+        items = [self._mod_item_from_path(path, self._settings) for path in self._iter_mod_files()]
         return sorted(items, key=lambda item: item.filename.casefold())
 
     def _iter_mod_files(self) -> Iterable[Path]:
@@ -735,10 +778,12 @@ class ModService:
         return None
 
     @staticmethod
-    def _is_server_only_mod(mod_file: Path, mod_id: str | None = None) -> bool:
+    def _is_server_only_mod(mod_file: Path, mod_id: str | None = None, user_rules: tuple[str, ...] = ()) -> bool:
         if mod_id and mod_id.casefold() in SERVER_ONLY_MODS:
             return True
         normalized_name = mod_file.name.casefold()
+        if user_rules and matches_server_only_rule(mod_file.name, mod_id, user_rules):
+            return True
         return any(
             normalized_name == f"{mod_name}.jar"
             or normalized_name.startswith(f"{mod_name}-")
@@ -769,7 +814,7 @@ class ModService:
             size_mb=round(path.stat().st_size / _MEBIBYTE, 2),
             is_enabled=is_enabled,
             modified_at=datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(),
-            is_server_only=cls._is_server_only_mod(path, mod_id),
+            is_server_only=cls._is_server_only_mod(path, mod_id, user_server_only_mods(active_settings)),
             mod_id=mod_id,
             version=version,
             description=description,

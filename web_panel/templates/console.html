@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Consola · Craft Panel{% endblock %}
+{% block title %}Consola · {{ brand_name or 'Craft Panel' }}{% endblock %}
 {% block content %}
 {%- set quick_commands = [
   ('/save-all', 'Guardar el mundo'),

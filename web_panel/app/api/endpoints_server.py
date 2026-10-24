@@ -20,7 +20,8 @@ from app.schemas.server import ServerActionResponse, ServerMetrics
 from app.schemas.runtime import FriendConnectionInfo, TunnelStatus
 from app.services import job_service as job_service_module
 from app.services.backup_service import BACKUP_STEPS, backup_service
-from app.services.job_service import JobReporter
+from app.services.crash_guard import crash_guard
+from app.services.job_service import Job, JobReporter
 from app.services.metrics_service import metrics_service
 from app.services.player_crash_service import player_crash_service
 from app.services.playit_service import PlayitServiceError, playit_service
@@ -36,6 +37,7 @@ from app.services.server_process import (
     server_manager,
 )
 from app.services.server_properties_service import server_properties_service
+from app.services.server_settings_file import read_server_settings
 from app.services.spark_service import spark_service
 
 logger = logging.getLogger(__name__)
@@ -86,11 +88,16 @@ async def _create_first_backup_after_ready() -> None:
         logger.warning("The first automatic backup was not created: %s", error)
 
 
+def _ready_timeout_seconds() -> float:
+    """``startup_timeout`` from craftpanel.txt (5 minutes when not set)."""
+    return float(read_server_settings(settings).value("startup_timeout") or READY_TIMEOUT_SECONDS)
+
+
 async def _wait_until_ready(reporter: JobReporter) -> bool:
     """Final ``ready`` step shared by start and restart jobs."""
     reporter("ready", "Esperando a que el servidor termine de cargar el mundo.")
     try:
-        await server_manager.wait_until_ready(timeout_seconds=READY_TIMEOUT_SECONDS)
+        await server_manager.wait_until_ready(timeout_seconds=_ready_timeout_seconds())
     except ServerStartTimeoutError:
         reporter.done_message = (
             "El servidor sigue cargando. Con muchos mods puede tardar más; "
@@ -114,9 +121,18 @@ async def _launch_first_backup_if_missing() -> None:
 
 @router.post("/start", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
 async def start_server(dev_mode: bool = False) -> JobAccepted:
+    job = await launch_start_job(dev_mode=dev_mode)
+    # Starting by hand means someone is looking: automatic crash restarts may run again.
+    crash_guard.reset()
+    return accepted(job, "Encendiendo el servidor.")
+
+
+async def launch_start_job(*, dev_mode: bool = False, title: str = "Encender el servidor") -> Job:
+    """Run every check, then start the server as a job; shared by the button and the automations."""
     if server_manager.is_running:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El servidor ya está en ejecución.")
     _raise_if_busy()
+    await _raise_if_settings_file_blocks_start()
     await _raise_if_external_server()
     _require_playit_ready()
 
@@ -144,8 +160,7 @@ async def start_server(dev_mode: bool = False) -> JobAccepted:
             job_service_module.job_service.spawn(_create_first_backup_after_ready(), "first-world-backup")
         return {"state": str(server_manager.state)}
 
-    job = start_job("start", "Encender el servidor", START_STEPS, work)
-    return accepted(job, "Encendiendo el servidor.")
+    return start_job("start", title, START_STEPS, work)
 
 
 @router.post("/stop", response_model=ServerActionResponse)
@@ -164,7 +179,14 @@ async def _raise_if_external_server() -> None:
     own_pid = getattr(server_manager, "process_pid", None)
     found = await asyncio.to_thread(external_server_detector.detect, own_pid)
     if found is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=found.message)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=found.explanation)
+
+
+async def _raise_if_settings_file_blocks_start() -> None:
+    """A wrong ``inicio`` or ``java`` in craftpanel.txt fails right away, before any job starts."""
+    file_settings = await asyncio.to_thread(read_server_settings, settings)
+    if problem := file_settings.launch_problem:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=problem)
 
 
 def _raise_if_busy() -> None:
@@ -199,6 +221,7 @@ def _restart_work(restart: Callable[[JobReporter], Awaitable[bool]]) -> Callable
 @router.post("/restart", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
 async def restart_server() -> JobAccepted:
     _raise_if_busy()
+    await _raise_if_settings_file_blocks_start()
     await _raise_if_external_server()
     _require_playit_ready()
     job = start_job(
@@ -214,18 +237,24 @@ async def restart_server() -> JobAccepted:
 async def graceful_restart_server(countdown: int = 10) -> JobAccepted:
     if countdown < 3 or countdown > 60:
         countdown = 10
+    job = await launch_graceful_restart_job(countdown)
+    return accepted(job, f"Avisamos a los jugadores y reiniciamos en {countdown} segundos.")
+
+
+async def launch_graceful_restart_job(countdown: int, *, title: str = "Reiniciar avisando a los jugadores") -> Job:
+    """Warn in the chat, save and restart as a job; also used by the daily restart."""
     _raise_if_busy()
+    await _raise_if_settings_file_blocks_start()
     await _raise_if_external_server()
     _require_playit_ready()
-    job = start_job(
+    return start_job(
         "graceful_restart",
-        "Reiniciar avisando a los jugadores",
+        title,
         GRACEFUL_RESTART_STEPS,
         _restart_work(
             lambda reporter: server_manager.graceful_restart(countdown_seconds=countdown, progress=reporter)
         ),
     )
-    return accepted(job, f"Avisamos a los jugadores y reiniciamos en {countdown} segundos.")
 
 
 @router.post("/kill", response_model=ServerActionResponse)
@@ -240,6 +269,8 @@ class ExternalServerInfo(BaseModel):
     pid: int | None = None
     process_name: str | None = None
     reason: str | None = None
+    kind: str | None = None
+    reasons: list[str] = Field(default_factory=list)
     port: int | None = None
     message: str | None = None
     can_terminate: bool = False
@@ -270,6 +301,8 @@ async def external_server() -> ExternalServerInfo:
         pid=found.pid,
         process_name=found.name,
         reason=found.reason,
+        kind=found.kind,
+        reasons=list(found.reasons),
         port=found.port,
         message=found.message,
         can_terminate=found.can_terminate,
@@ -331,16 +364,28 @@ def _friend_connection_info(
     custom_address: str | None,
     configured_address: str | None,
     tunnel: TunnelStatus,
+    file_address: str | None = None,
 ) -> FriendConnectionInfo:
     """Describe una dirección existente sin iniciar, detener ni configurar túneles."""
     custom_address = custom_address.strip() if custom_address else None
     configured_address = configured_address.strip() if configured_address else None
+    file_address = file_address.strip() if file_address else None
+    # Playit running as a Windows service may report no address of its own (it then echoes the
+    # configured one); public_address from craftpanel.txt fills that gap.
+    detected = tunnel.public_address
+    if file_address and detected in {file_address, configured_address}:
+        detected = None
 
-    if tunnel.is_running and tunnel.public_address:
+    if tunnel.is_running and detected:
         address = tunnel.public_address
         source = "playit_detected"
         message = "Pasales esta dirección. En Minecraft van a Multijugador → Agregar servidor y la pegan."
         next_step = ""
+    elif file_address:
+        address = file_address
+        source = "configured"
+        message = "Esta es la dirección escrita en craftpanel.txt. Pasásela a tus amigos."
+        next_step = "Si alguno no puede entrar, revisá que la dirección siga siendo la correcta."
     elif custom_address:
         address = custom_address
         source = "manual"
@@ -388,6 +433,7 @@ async def get_connection_info() -> FriendConnectionInfo:
         port=port,
         custom_address=custom_addr,
         configured_address=settings.server_public_address,
+        file_address=read_server_settings(settings).value("public_address"),
         tunnel=tunnel_stat,
     )
 

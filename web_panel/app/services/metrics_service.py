@@ -36,7 +36,7 @@ class MetricsService:
             process = self._get_java_process(self._manager.process_pid)
             memory_info = process.memory_info()
             ram_used_mb = round(memory_info.rss / _MEBIBYTE, 2)
-            ram_total_mb = float(self._settings.allocated_ram_gb * 1024)
+            ram_total_mb = float(self._settings.effective_ram_gb * 1024)
             return ServerMetrics(
                 cpu_percent=round(max(process.cpu_percent(interval=None), 0.0), 2),
                 ram_used_mb=ram_used_mb,
@@ -63,7 +63,7 @@ class MetricsService:
         return ServerMetrics(
             cpu_percent=0.0,
             ram_used_mb=0.0,
-            ram_total_mb=float(self._settings.allocated_ram_gb * 1024),
+            ram_total_mb=float(self._settings.effective_ram_gb * 1024),
             ram_percent=0.0,
             uptime_seconds=0,
             is_running=False,

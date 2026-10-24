@@ -28,6 +28,31 @@ The panel detects Java and the server installation before it starts Minecraft. I
 
 See [Installing mods](docs/MODS.md) for the host workflow and the friend-facing modpack flow.
 
+## Per-server settings: `server/craftpanel.txt`
+
+Each server can keep its own plain-text settings file, `server/craftpanel.txt`, editable with Notepad or from **Ajustes › Tu servidor**. It works like `.gitignore`: `#` starts a comment, `key = value` sets a value, and `[section]` starts a list with one entry per line. Keys and sections are English; the comments the panel writes are in Spanish. Empty values mean "use the panel's default", and the panel never creates the file until you save from Ajustes.
+
+```ini
+# Craft Panel · ajustes de este servidor
+start_script = run.bat
+memory = 6G
+restart_on_crash = true
+daily_restart = 05:30
+backup_location = D:\Server copies
+
+[detect]
+my-modpack-server.jar
+
+[backup_exclude]
+logs/
+*.tmp
+
+[protected]
+config/my-tuned-mod.toml
+```
+
+See [docs/SERVER_FILE.md](docs/SERVER_FILE.md) for every key and section. Supported and tested on Windows 10 and Windows 11.
+
 ## Privacy and local configuration
 
 This repository contains no webhook URLs, player names, world names, or machine-specific paths. Copy [`web_panel/.env.example`](web_panel/.env.example) to `web_panel/.env` only when you want to override defaults. Do not commit `.env`, webhook URLs, or the local panel settings files.

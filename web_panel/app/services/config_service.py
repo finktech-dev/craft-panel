@@ -7,6 +7,7 @@ from app.core.config import Settings, settings
 from app.core.path_safety import UnsafePathError, safe_relative_parts
 from app.schemas.universal import ConfigDocument, ConfigFile, ConfigNode
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
+from app.services.protected_paths import ProtectedPathError, require_not_protected
 from app.services.server_process import MinecraftServerManager, server_manager
 
 _MAX_CONFIG_BYTES=4*1024*1024
@@ -77,6 +78,8 @@ class ConfigService:
   if len(content.encode('utf-8'))>_MAX_CONFIG_BYTES: raise ConfigServiceError('El contenido es demasiado grande.')
   try: require_server_stopped(self.m, 'guardar configuraciones de mods')
   except ServerActiveError as e: raise ConfigConflictError(str(e)) from e
+  try: require_not_protected(p, configured=self.s)
+  except ProtectedPathError as e: raise ConfigConflictError(str(e)) from e
   try: tomlkit.parse(content) if fmt=='toml' else (json5.loads(content) if fmt in {'json','json5','jsonc'} else self._cfg(content))
   except Exception as e: raise ConfigServiceError(f'Sintaxis inválida: {e}') from e
   async with self.lock:

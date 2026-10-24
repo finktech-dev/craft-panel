@@ -68,7 +68,9 @@ class DiscordService:
         return configured.strip() or str(getattr(self._settings, setting_name, "") or "").strip() or fallback
 
     def _server_name(self, cfg: DiscordConfig) -> str:
-        return self._display_value(cfg.server_name, "discord_server_name", "Servidor Minecraft")
+        # server_name in craftpanel.txt wins over the Discord form and the panel settings.
+        from_file = self._settings.effective_server_name
+        return from_file or self._display_value(cfg.server_name, "discord_server_name", "Servidor Minecraft")
 
     def _software_label(self, cfg: DiscordConfig) -> str:
         configured = self._display_value(cfg.server_software_label, "discord_server_software_label")
@@ -271,7 +273,7 @@ class DiscordService:
         if not cfg.notify_server_lifecycle:
             return False
 
-        addr = public_address or self._settings.server_public_address or "IP en el panel"
+        addr = public_address or self._settings.effective_public_address or "IP en el panel"
         raw_mention = (cfg.mention_role or "").strip()
         mention = None
         if raw_mention:

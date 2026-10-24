@@ -8,11 +8,12 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.api import server_automation
 from app.api.router import router as api_router
 from app.core.config import settings
 from app.core.security import (
@@ -27,6 +28,7 @@ from app.services.job_service import job_service
 from app.services.server_process import server_manager
 from app.services.cloudflare_service import cloudflare_quick_tunnel_service
 from app.services.playit_service import playit_service
+from app.services.protected_paths import ProtectedPathError
 from app.services.scheduler_service import scheduler_service
 from app.services.server_version_service import server_version_service
 from app.websocket.terminal import router as terminal_router
@@ -40,7 +42,9 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Conserva el proceso de Minecraft consistente al apagar el panel."""
+    server_automation.install()
     scheduler_service.start()
+    asyncio.create_task(server_automation.start_with_panel(), name="start-with-panel")
     try:
         yield
     except asyncio.CancelledError:
@@ -99,6 +103,12 @@ app.include_router(api_router)
 app.include_router(terminal_router)
 
 
+@app.exception_handler(ProtectedPathError)
+async def protected_path_handler(_: Request, error: ProtectedPathError) -> JSONResponse:
+    """Any write the user protected in craftpanel.txt ends as a plain 409, wherever it was attempted."""
+    return JSONResponse(status_code=409, content={"detail": str(error)})
+
+
 @app.get("/health", tags=["system"])
 async def healthcheck() -> dict[str, str]:
     """Sonda mínima que no intenta iniciar ni inspeccionar el servidor."""
@@ -114,7 +124,8 @@ def _template_context(request: Request, current_page: str) -> dict[str, object]:
         "request": request,
         "current_page": current_page,
         "is_admin": request_has_admin_session(request),
-        "public_address": settings.server_public_address,
+        "public_address": settings.effective_public_address,
+        "brand_name": settings.effective_server_name or "Craft Panel",
         "minecraft_version": server_version_service.detect().minecraft_version or "",
         "two_factor_enabled": two_factor_enabled,
         "csrf_token": get_csrf_token(request) if request_has_admin_session(request) else None,

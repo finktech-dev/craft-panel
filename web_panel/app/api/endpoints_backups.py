@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
@@ -73,9 +74,15 @@ async def audit_backups() -> BackupAuditResponse:
         _raise_backup_error(error if isinstance(error, BackupServiceError) else BackupServiceError(str(error)))
 
 
+class RestoreRequest(BaseModel):
+    # Put back the [backup_include] files saved in the copy too (never [protected] ones).
+    restore_server_files: bool = False
+
+
 @router.post("/{filename}/restore", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
-async def restore_backup(filename: str) -> JobAccepted:
+async def restore_backup(filename: str, request: RestoreRequest | None = None) -> JobAccepted:
     """Validate the request right away, then replace the world in a job."""
+    restore_server_files = bool(request and request.restore_server_files)
     try:
         require_server_stopped(server_manager, "volver a una copia")
     except ServerActiveError as error:
@@ -91,7 +98,9 @@ async def restore_backup(filename: str) -> JobAccepted:
     async def work(reporter: JobReporter) -> dict:
         if backup_service.is_busy:
             raise BackupConflictError(_BUSY_MESSAGE)
-        backup = await backup_service.restore_backup(filename, progress=reporter)
+        backup = await backup_service.restore_backup(
+            filename, progress=reporter, restore_server_files=restore_server_files
+        )
         return {"backup": backup.model_dump(mode="json")}
 
     job = start_job(

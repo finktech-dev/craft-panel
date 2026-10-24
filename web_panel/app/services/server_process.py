@@ -9,16 +9,18 @@ import logging
 import os
 import re
 from collections import deque
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Any, Final
 
 from app.core.config import Settings, settings
 from app.services.crash_analyzer import crash_analyzer
 from app.services.discord_service import discord_service
 from app.services.external_server_service import ExternalServerDetector
+from app.services.server_settings_file import read_server_settings
 from app.services.progress import ProgressCallback, StepPlan, report
 from app.websocket.manager import ConnectionManager, connection_manager
 
@@ -99,6 +101,28 @@ class ExternalServerRunningError(ServerProcessError):
     status_code = 409
 
 
+class ServerSettingsFileError(ServerProcessError):
+    """craftpanel.txt names a start script or Java that cannot be used."""
+
+    status_code = 409
+
+
+def _describe_countdown(seconds: int) -> str:
+    """"90 segundos", "2 minutos": how long until a restart, for the chat."""
+    if seconds >= 120 and seconds % 60 == 0:
+        return f"{seconds // 60} minutos"
+    return f"{seconds} segundos"
+
+
+def server_environment(configured: Settings) -> dict[str, str]:
+    """Environment for the server process: the chosen Java goes first on PATH."""
+    environment = os.environ.copy()
+    java_bin = configured.server_java_bin_directory
+    if java_bin is not None:
+        environment["PATH"] = f"{java_bin}{os.pathsep}{environment.get('PATH', '')}"
+    return environment
+
+
 @dataclass(frozen=True, slots=True)
 class TerminalLine:
     timestamp: str
@@ -153,6 +177,7 @@ class MinecraftServerManager:
         self._last_join_notified: dict[str, float] = {}
         self._last_leave_notified: dict[str, float] = {}
         self._last_death_notified: dict[str, float] = {}
+        self._crash_listeners: list[Callable[[], Coroutine[Any, Any, None]]] = []
         self._initialized = True
 
     @property
@@ -191,6 +216,15 @@ class MinecraftServerManager:
         """PID del lanzador; MetricsService resuelve Java cuando es un hijo."""
         return self._process.pid if self.is_running and self._process is not None else None
 
+    def add_crash_listener(self, listener: Callable[[], Coroutine[Any, Any, None]]) -> None:
+        """Run ``listener`` each time the server ends on its own (not a requested stop or kill)."""
+        if listener not in self._crash_listeners:
+            self._crash_listeners.append(listener)
+
+    async def log_system(self, message: str) -> None:
+        """Show a panel message in the console, like the panel's own start/stop notes."""
+        await self._record_log("system", message)
+
     @property
     def history(self) -> list[dict[str, str]]:
         return [asdict(line) for line in self._log_buffer]
@@ -226,24 +260,32 @@ class MinecraftServerManager:
                 raise ServerProcessError(
                     f"No existe el directorio del servidor: {self._settings.server_directory}"
                 )
+            file_settings = await asyncio.to_thread(read_server_settings, self._settings)
+            if problem := file_settings.launch_problem:
+                raise ServerSettingsFileError(problem)
+            if file_settings.java and not Path(file_settings.java).is_file():
+                raise ServerSettingsFileError(
+                    f"No encontramos el Java elegido para este servidor ({file_settings.java}). "
+                    "Corregilo en Ajustes › Tu servidor o dejalo vacío."
+                )
+            if (memory := file_settings.value("memory")) is not None:
+                await asyncio.to_thread(self._apply_memory, memory)
             if not self._settings.server_start_script.is_file():
                 raise ServerProcessError(
-                    f"No existe el script de inicio del servidor: {self._settings.server_start_script}"
+                    f"No encontramos {self._settings.server_start_script.name} en la carpeta del servidor. "
+                    "Revisá «Archivo para encender» en Ajustes › Tu servidor."
                 )
 
             external = await asyncio.to_thread(self._external_detector.detect)
             if external is not None:
-                raise ExternalServerRunningError(external.message)
+                raise ExternalServerRunningError(external.explanation)
 
             self._state = ServerState.STARTING
             self._stop_requested = False
             self._start_requested_time = asyncio.get_running_loop().time()
             self._ready_notified = False
             try:
-                environment = os.environ.copy()
-                local_java = self._settings.local_java_executable_path
-                if local_java.is_file():
-                    environment["PATH"] = f"{local_java.parent}{os.pathsep}{environment.get('PATH', '')}"
+                environment = server_environment(self._settings)
                 self._process = await asyncio.create_subprocess_exec(
                     *self._settings.server_start_command,
                     cwd=str(self._settings.server_directory),
@@ -269,6 +311,20 @@ class MinecraftServerManager:
             if not self._dev_mode:
                 asyncio.create_task(discord_service.send_server_starting(), name="discord-server-starting")
             return True
+
+    def _apply_memory(self, memory_gb: int) -> None:
+        """craftpanel.txt's memory is the source of truth: write it into user_jvm_args.txt before starting."""
+        from app.services.jvm_args import JvmArgsMissingError, apply_ram
+        from app.services.protected_paths import ProtectedPathError
+
+        try:
+            apply_ram(self._settings, memory_gb)
+        except JvmArgsMissingError:
+            logger.info("No user_jvm_args.txt; the start script decides the server's memory.")
+        except ProtectedPathError:
+            logger.info("user_jvm_args.txt is protected in craftpanel.txt; its memory is left as it is.")
+        except OSError as error:
+            raise ServerProcessError(f"No se pudo poner la memoria en user_jvm_args.txt: {error}") from error
 
     async def stop(self) -> bool:
         """Solicita una detención limpia mediante la consola de Minecraft."""
@@ -309,9 +365,10 @@ class MinecraftServerManager:
 
     async def _announce_restart(self, countdown_seconds: int, progress: ProgressCallback | None = None) -> None:
         try:
-            report(progress, "notice", f"Avisamos en el chat: reinicio en {countdown_seconds} segundos.")
+            when = _describe_countdown(countdown_seconds)
+            report(progress, "notice", f"Avisamos en el chat: reinicio en {when}.")
             await self.send_command(
-                f"/say §c[Servidor] El servidor se reiniciará en {countdown_seconds} segundos para aplicar cambios. ¡Guarden sus cosas!"
+                f"/say §c[Servidor] El servidor se reiniciará en {when}. ¡Guarden sus cosas!"
             )
             if countdown_seconds > 5:
                 await asyncio.sleep(countdown_seconds - 5)
@@ -506,7 +563,12 @@ class MinecraftServerManager:
             else:
                 report = await crash_analyzer.get_latest_crash_report()
                 asyncio.create_task(discord_service.send_crash(report), name="discord-server-crashed")
+        # Test runs (dev mode) never trigger automatic restarts.
+        crashed = self._state == ServerState.CRASHED and not self._dev_mode
         self._dev_mode = False
+        if crashed:
+            for listener in tuple(self._crash_listeners):
+                asyncio.create_task(listener(), name="server-crash-listener")
 
     async def _record_log(self, stream: str, message: str) -> None:
         line = TerminalLine(

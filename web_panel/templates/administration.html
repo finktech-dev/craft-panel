@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Ajustes · Craft Panel{% endblock %}
+{% block title %}Ajustes · {{ brand_name or 'Craft Panel' }}{% endblock %}
 {% block content %}
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
@@ -126,7 +126,112 @@
     <button id="tab-btn-discord" data-master-tab="discord" type="button" role="tab" aria-selected="false" aria-controls="panel-master-discord" class="master-tab-btn tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Avisos en Discord</button>
     <button id="tab-btn-rules" data-master-tab="rules" type="button" role="tab" aria-selected="false" aria-controls="panel-master-rules" class="master-tab-btn tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Reglas del servidor</button>
     <button id="tab-btn-configs" data-master-tab="configs" type="button" role="tab" aria-selected="false" aria-controls="panel-master-configs" class="master-tab-btn tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Mods y mundo</button>
+    <button id="tab-btn-myserver" data-master-tab="myserver" type="button" role="tab" aria-selected="false" aria-controls="panel-master-myserver" class="master-tab-btn tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Tu servidor</button>
   </nav>
+
+  {#- One craftpanel.txt value: label, the key as written in the file, a hint and its input (wired by admin-server-file.js). -#}
+  {%- macro file_field(key, label, hint, placeholder='', mono=false, inputmode='text') -%}
+  <div class="border-b border-zinc-800 py-4">
+    <label for="sf-{{ key }}" class="flex flex-wrap items-baseline gap-x-2 font-medium text-zinc-200">{{ label }} <span class="font-mono text-xs font-normal text-zinc-500">{{ key }}</span></label>
+    <p class="mt-0.5 text-sm leading-relaxed text-zinc-500">{{ hint }}</p>
+    <input id="sf-{{ key }}" data-file-key="{{ key }}" type="text" inputmode="{{ inputmode }}" autocomplete="off" spellcheck="false" placeholder="{{ placeholder }}" class="mt-2 {{ 'font-mono ' if mono }}{{ input_cls }}" />
+    <p class="mt-1 hidden text-sm text-[#f3a79b]" data-error-for="{{ key }}" role="alert"></p>
+  </div>
+  {%- endmacro -%}
+
+  {#- A true/false value shown as a switch. -#}
+  {%- macro file_switch(key, label, hint) -%}
+  <div class="border-b border-zinc-800 py-4">
+    <label class="flex cursor-pointer items-center justify-between gap-4">
+      <span class="min-w-0">
+        <span class="flex flex-wrap items-baseline gap-x-2 font-medium text-zinc-200">{{ label }} <span class="font-mono text-xs font-normal text-zinc-500">{{ key }}</span></span>
+        <span class="mt-0.5 block text-sm leading-relaxed text-zinc-500">{{ hint }}</span>
+      </span>
+      <span class="relative inline-flex shrink-0 items-center">
+        <input id="sf-{{ key }}" data-file-key="{{ key }}" data-file-bool="true" type="checkbox" class="peer sr-only" />
+        <span aria-hidden="true" class="{{ switch_cls }}"></span>
+      </span>
+    </label>
+    <p class="mt-1 hidden text-sm text-[#f3a79b]" data-error-for="{{ key }}" role="alert"></p>
+  </div>
+  {%- endmacro -%}
+
+  {#- A [section] list: one entry per line. -#}
+  {%- macro file_list(key, label, hint, placeholder) -%}
+  <div class="border-b border-zinc-800 py-4">
+    <label for="sf-{{ key }}" class="flex flex-wrap items-baseline gap-x-2 font-medium text-zinc-200">{{ label }} <span class="font-mono text-xs font-normal text-zinc-500">[{{ key }}]</span></label>
+    <p class="mt-0.5 text-sm leading-relaxed text-zinc-500">{{ hint }}</p>
+    <textarea id="sf-{{ key }}" data-file-list="{{ key }}" rows="4" spellcheck="false" placeholder="{{ placeholder }}" class="mt-2 font-mono text-sm {{ textarea_cls }}"></textarea>
+    <p class="mt-1 hidden whitespace-pre-line text-sm text-[#f3a79b]" data-error-for="{{ key }}" role="alert"></p>
+  </div>
+  {%- endmacro -%}
+
+  <!-- YOUR SERVER: server/craftpanel.txt -->
+  <div id="panel-master-myserver" class="master-tab-panel mx-auto hidden max-w-3xl" role="tabpanel" aria-labelledby="tab-btn-myserver">
+    <section id="server-file" class="py-9" aria-labelledby="server-file-title">
+      <h2 id="server-file-title" class="text-lg font-semibold text-zinc-50">Tu servidor</h2>
+      <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Estos ajustes se guardan en <span class="font-mono text-zinc-300">craftpanel.txt</span>, dentro de la carpeta del servidor. Si dejás algo vacío, el panel usa lo de siempre.</p>
+      <p id="server-file-state" class="mt-2 text-sm text-zinc-500" aria-live="polite">Cargando…</p>
+      <div id="server-file-problems" class="mt-4 hidden rounded-xl border border-[#e8b04b]/30 bg-[#e8b04b]/[.06] p-4" role="alert">
+        <p class="font-semibold text-zinc-50">Hay líneas para revisar en el archivo</p>
+        <p class="mt-1 text-sm text-zinc-400">Mientras tanto el panel usa lo de siempre para esas líneas.</p>
+        <ul id="server-file-problem-list" class="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-300"></ul>
+      </div>
+
+      <form id="server-file-form" class="mt-6" novalidate>
+        <h3 class="font-semibold text-zinc-100">Encender y apagar</h3>
+        <p id="server-file-running-note" class="mt-1 hidden text-sm text-zinc-500">El archivo para encender y Java se cambian con el servidor apagado.</p>
+        <div class="mt-2 border-t border-zinc-800">
+          {{ file_field('start_script', 'Archivo para encender', 'El archivo que enciende el servidor, dentro de su carpeta. Vacío = run.bat.', 'run.bat', mono=true) }}
+          {{ file_field('java', 'Java (opcional)', 'La ruta completa a java.exe. Dejalo vacío para que el panel elija.', 'C:\\Program Files\\Java\\bin\\java.exe', mono=true) }}
+          {{ file_field('memory', 'Memoria', 'Cuánta memoria usa el servidor, por ejemplo 6G. Vacío = la que elegiste al prepararlo.', '6G', mono=true) }}
+          {{ file_switch('start_with_panel', 'Encenderlo al abrir el panel', 'Cuando abrís el panel, el servidor se enciende solo.') }}
+          {{ file_field('startup_timeout', 'Cuánto esperar a que cargue', 'Después de este tiempo te avisamos que sigue cargando. Por ejemplo 5m o 10m.', '5m', mono=true) }}
+          {{ file_switch('restart_on_crash', 'Volver a encenderlo si se cae', 'Si se cierra por un error, se enciende de nuevo a los pocos segundos.') }}
+          {{ file_field('max_crash_restarts', 'Cuántas veces intentar', 'Si se cae esta cantidad de veces en 10 minutos, deja de intentar y te avisa.', '3', mono=true, inputmode='numeric') }}
+          {{ file_field('daily_restart', 'Reiniciar todos los días a esta hora', 'En formato de 24 horas, por ejemplo 05:30. Vacío = no reiniciar solo.', '05:30', mono=true) }}
+          {{ file_field('restart_warning', 'Cuánto antes avisar en el chat', 'Antes de un reinicio diario. Por ejemplo 60s o 5m.', '60s', mono=true) }}
+        </div>
+
+        <h3 class="mt-9 font-semibold text-zinc-100">Copias</h3>
+        <div class="mt-2 border-t border-zinc-800">
+          {{ file_field('backup_interval', 'Cada cuánto hacer una copia', 'Como mínimo 1h. Por ejemplo 6h o 1d. Vacío = lo que elegiste en «Copias automáticas».', '6h', mono=true) }}
+          {{ file_field('backup_keep', 'Cuántas copias guardar', 'Las más viejas se borran solas. Vacío = 4.', '4', mono=true, inputmode='numeric') }}
+          {{ file_field('backup_max_size', 'Espacio máximo para las copias', 'Todas juntas, por ejemplo 15GB. Vacío = 15GB.', '15GB', mono=true) }}
+          {{ file_field('backup_location', 'Dónde guardar las copias', 'Una carpeta fuera del servidor, mejor en otro disco. Vacío = la carpeta backups del panel. Las copias que ya tenías se siguen viendo.', 'D:\\Copias del servidor', mono=true) }}
+          {{ file_list('backup_exclude', 'Qué no guardar en las copias', 'Archivos o carpetas del mundo, uno por línea, como en .gitignore: logs/, *.tmp, **/cache/. Lo que no se copia no vuelve al restaurar.', 'logs/\n*.tmp') }}
+          {{ file_list('backup_include', 'Qué más guardar en las copias', 'Otras cosas de la carpeta del servidor, una por línea, por ejemplo config/ o server.properties.', 'config/\nserver.properties') }}
+        </div>
+
+        <h3 class="mt-9 font-semibold text-zinc-100">Mods y amigos</h3>
+        <div class="mt-2 border-t border-zinc-800">
+          {{ file_field('server_name', 'Nombre del servidor', 'Se ve en el panel, en Discord y en la imagen de estado. Vacío = el de siempre.', 'Mi servidor') }}
+          {{ file_field('public_address', 'Dirección para tus amigos', 'Por ejemplo mi-servidor.ejemplo.com:25565. Vacío = el panel la busca solo.', 'mi-servidor.ejemplo.com', mono=true) }}
+          {{ file_list('server_only_mods', 'Mods solo del servidor', 'No se mandan a tus amigos. El nombre del archivo (se puede usar *) o el identificador del mod, uno por línea.', '*-server.jar') }}
+        </div>
+
+        <h3 class="mt-9 font-semibold text-zinc-100">Protección</h3>
+        <div class="mt-2 border-t border-zinc-800">
+          {{ file_list('protected', 'Lo que el panel nunca toca', 'Archivos o carpetas de la carpeta del servidor que el panel no puede cambiar ni borrar, uno por línea, como en .gitignore.', 'config/mi-mod.toml\nserver.properties') }}
+          {{ file_list('detect', 'Cómo reconocer tu servidor', 'Palabras que aparecen al abrir tu servidor, una por línea. Ayudan a reconocerlo cuando lo abrís fuera del panel, por ejemplo el nombre de su .jar.', 'mi-servidor.jar') }}
+        </div>
+
+        <p id="server-file-error" class="mt-4 hidden whitespace-pre-line text-sm text-[#f3a79b]" role="alert"></p>
+        <div class="mt-6">
+          <button id="server-file-save" type="submit" class="v2-button btn-primary">Guardar</button>
+        </div>
+      </form>
+
+      <details class="mt-9 text-sm text-zinc-400">
+        <summary class="cursor-pointer hover:text-zinc-200">Ver o editar el archivo</summary>
+        <p class="mt-3 leading-relaxed text-zinc-500">Es el mismo archivo que podés abrir con el Bloc de notas. Las líneas que empiezan con # son comentarios.</p>
+        <label for="server-file-raw" class="sr-only">Contenido de craftpanel.txt</label>
+        <textarea id="server-file-raw" spellcheck="false" class="mt-3 h-96 w-full rounded-lg border border-zinc-800 bg-zinc-900 p-4 font-mono text-xs leading-relaxed text-zinc-100 outline-none focus:border-emerald-400"></textarea>
+        <p id="server-file-raw-error" class="mt-2 hidden whitespace-pre-line text-sm text-[#f3a79b]" role="alert"></p>
+        <button id="server-file-raw-save" type="button" class="v2-button btn-quiet mt-3">Guardar archivo</button>
+      </details>
+    </section>
+  </div>
 
   <!-- RANKS AND PERMISSIONS (LuckPerms) -->
   <div id="panel-master-ranks" class="master-tab-panel mx-auto max-w-3xl" role="tabpanel" aria-labelledby="tab-btn-ranks">
@@ -747,4 +852,5 @@
 <script src="/static/js/admin-restrictions.js"></script>
 <script src="/static/js/admin-ranks.js"></script>
 <script src="/static/js/admin-discord.js"></script>
+<script defer src="/static/js/admin-server-file.js"></script>
 {% endblock %}
