@@ -924,7 +924,8 @@ document.addEventListener('DOMContentLoaded', () => {
     ws.onmessage = e => {
       try {
         const data = JSON.parse(e.data);
-        if (data.type === 'line' && data.line && data.line.message) {
+        // Live console lines arrive as {type: 'log', line: {...}} (see app/websocket and server_process).
+        if (data.type === 'log' && data.line && data.line.message) {
           const msg = data.line.message;
           const low = msg.toLowerCase();
           if (
