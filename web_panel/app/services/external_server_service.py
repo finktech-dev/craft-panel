@@ -27,8 +27,11 @@ import json
 import logging
 import os
 import re
+import signal
+import subprocess
+import sys
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -44,6 +47,48 @@ _DEFAULT_SERVER_PORT = 25565
 _JAVA_NAMES = frozenset({"java.exe", "javaw.exe", "java", "javaw"})
 _PID_FILENAME = ".server_process.json"
 _PROCESS_ERRORS = (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError)
+# Minecraft saves the world when it gets Ctrl+C or SIGTERM; give it this long before forcing.
+GRACEFUL_STOP_SECONDS = 60
+CloseOutcome = Literal["saved", "forced"]
+
+# Runs in a separate, windowless Python: it joins the server's console and presses Ctrl+C there,
+# like typing it in the server window. It refuses when the panel shares that console, because the
+# panel would get the Ctrl+C too. Exit code 0 means the keystroke was sent.
+_WINDOWS_CTRL_C_HELPER = r"""
+import ctypes, sys
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+target, panel = int(sys.argv[1]), int(sys.argv[2])
+kernel32.FreeConsole()
+if not kernel32.AttachConsole(target):
+    sys.exit(2)
+pids = (ctypes.c_uint32 * 64)()
+count = kernel32.GetConsoleProcessList(pids, 64)
+if count == 0 or count > 64 or panel in list(pids)[:count]:
+    sys.exit(3)
+kernel32.SetConsoleCtrlHandler(None, True)
+sys.exit(0 if kernel32.GenerateConsoleCtrlEvent(0, 0) else 4)
+"""
+
+
+def request_graceful_stop(pid: int) -> bool:
+    """Ask a server process to stop the way Ctrl+C in its window would. True if the request went out."""
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                [sys.executable, "-I", "-c", _WINDOWS_CTRL_C_HELPER, str(pid), str(os.getpid())],
+                timeout=15,
+                capture_output=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            logger.warning("Could not ask the server to stop gracefully: %s", error)
+            return False
+        return result.returncode == 0
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return False
+    return True
 # Command-line fragments that only a Minecraft server launch tends to have.
 _MINECRAFT_MARKERS: tuple[tuple[str, str], ...] = (
     ("@user_jvm_args.txt", "@user_jvm_args.txt"),
@@ -135,8 +180,15 @@ class _Evidence:
 class ExternalServerDetector:
     """Find server processes the panel did not start, so it never opens a second instance."""
 
-    def __init__(self, configured_settings: Settings = settings) -> None:
+    def __init__(
+        self,
+        configured_settings: Settings = settings,
+        graceful_stop: Callable[[int], bool] = request_graceful_stop,
+        graceful_timeout: float = GRACEFUL_STOP_SECONDS,
+    ) -> None:
         self._settings = configured_settings
+        self._graceful_stop = graceful_stop
+        self._graceful_timeout = graceful_timeout
 
     @property
     def pid_file(self) -> Path:
@@ -317,15 +369,36 @@ class ExternalServerDetector:
         return evidence
 
     def terminate(self, pid: int, own_pid: int | None = None) -> bool:
-        """Kill a detected external server tree; refuses PIDs that are not currently detected."""
+        """Close a detected external server; refuses PIDs that are not currently detected."""
+        return self.close(pid, own_pid) is not None
+
+    def close(self, pid: int, own_pid: int | None = None) -> CloseOutcome | None:
+        """Stop a detected server, saving the world when it can.
+
+        First the server is asked to stop like Ctrl+C in its window (Minecraft then saves and
+        exits). Only if that is impossible or it does not finish in time is the tree killed.
+        Returns "saved", "forced", or None when nothing was closed.
+        """
         detected = self.detect(own_pid)
         if detected is None or detected.pid != pid:
-            return False
-        # Never kill an unrelated program, or a server we are not sure is this one.
+            return None
+        # Never close an unrelated program, or a server we are not sure is this one.
         if not detected.can_terminate:
-            return False
+            return None
         try:
             process = psutil.Process(pid)
+        except psutil.NoSuchProcess:
+            self.forget_panel_process()
+            return "saved"
+        if self._graceful_stop(pid):
+            try:
+                process.wait(timeout=self._graceful_timeout)
+            except psutil.TimeoutExpired:
+                logger.warning("External server %s did not stop in time; forcing it.", pid)
+            else:
+                self.forget_panel_process()
+                return "saved"
+        try:
             for child in process.children(recursive=True):
                 child.kill()
             process.kill()
@@ -334,9 +407,9 @@ class ExternalServerDetector:
             pass
         except (psutil.AccessDenied, psutil.TimeoutExpired) as error:
             logger.warning("Could not terminate external server %s: %s", pid, error)
-            return False
+            return None
         self.forget_panel_process()
-        return True
+        return "forced"
 
     def _remembered_pid(self) -> int | None:
         try:

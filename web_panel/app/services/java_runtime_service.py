@@ -45,6 +45,14 @@ class JavaRuntimeValidationError(JavaRuntimeServiceError):
     status_code = 422
 
 
+# Said when the panel's own folder cannot be written; never shows the path (it may hold the user's name).
+_READ_ONLY_FOLDER = (
+    "No podemos guardar archivos en la carpeta del panel, así que no se puede bajar Java ahí. "
+    "Suele pasar si está dentro de «Archivos de programa» o en una carpeta protegida. "
+    "Mové la carpeta del panel a Documentos o al Escritorio y volvé a intentar."
+)
+
+
 class JavaRuntimeService:
     """Installs only the runtime in ``tools/java``; it never changes system Java."""
 
@@ -87,6 +95,18 @@ class JavaRuntimeService:
                 "tools/java ya existe, pero no contiene un ejecutable Java válido. "
                 "Corregilo o eliminá esa carpeta antes de descargar otro runtime."
             )
+        self._require_writable(self._settings.tools_directory)
+
+    @staticmethod
+    def _require_writable(folder: Path) -> None:
+        """Fail before downloading anything when the panel's folder is read-only for this user."""
+        probe = folder / f".write-test-{uuid.uuid4().hex[:8]}"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            probe.write_bytes(b"")
+            probe.unlink()
+        except OSError as error:
+            raise JavaRuntimeValidationError(_READ_ONLY_FOLDER) from error
 
     async def install_for(self, minecraft_version: str, progress: ProgressCallback | None = None) -> str:
         """Download Java into tools/java; ``progress`` receives :data:`INSTALL_JAVA_STEPS`."""
@@ -101,15 +121,19 @@ class JavaRuntimeService:
         async with self._lock:
             if destination.is_file():
                 return "Ya existe Java local en tools/java. No se reemplazó."
-            await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(self._require_writable, target.parent)
             # Short names keep deep JDK paths under the 260-character Windows limit.
             archive = target.parent / f".java-{uuid.uuid4().hex[:8]}.download"
             staging = target.parent / f".java-{uuid.uuid4().hex[:8]}.extract"
+            # Which step failed decides the message for a permission error.
+            stage = "find"
             try:
                 report(progress, "find", f"Buscando Java {required} para tu computadora.")
                 package = await self._find_package(required)
+                stage = "download"
                 report(progress, "download")
                 await self._download(package["link"], archive, package.get("checksum"), progress)
+                stage = "extract"
                 report(progress, "extract")
                 await asyncio.to_thread(self._extract_runtime, archive, staging, progress)
                 report(progress, "finish")
@@ -122,6 +146,8 @@ class JavaRuntimeService:
                 if isinstance(error, JavaRuntimeServiceError):
                     raise
                 if isinstance(error, PermissionError):
+                    if stage in {"find", "download"}:
+                        raise JavaRuntimeServiceError(_READ_ONLY_FOLDER) from error
                     raise JavaRuntimeServiceError(
                         "Java se descargó, pero Windows o el antivirus bloqueó los archivos al prepararlo. "
                         "Esperá unos segundos e intentá de nuevo."

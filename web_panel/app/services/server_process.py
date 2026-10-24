@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 import contextlib
 import json
 import logging
@@ -150,6 +151,8 @@ class TerminalLine:
     timestamp: str
     stream: str
     message: str
+    # Grows by one per line, so a reconnecting browser can skip the lines it already shows.
+    seq: int = 0
 
 
 class MinecraftServerManager:
@@ -185,6 +188,9 @@ class MinecraftServerManager:
         self._state = ServerState.STOPPED
         self._online_players: dict[str, str] = {}
         self._log_buffer: deque[TerminalLine] = deque(maxlen=self._settings.log_buffer_size)
+        self._log_seq = 0
+        # Line numbers restart with the panel; browsers compare this to know when that happened.
+        self.log_session = uuid.uuid4().hex[:12]
         self._lock = asyncio.Lock()
         # Serializes whole lifecycle operations; _lock only guards process creation.
         self._lifecycle_lock = asyncio.Lock()
@@ -248,7 +254,7 @@ class MinecraftServerManager:
         await self._record_log("system", message)
 
     @property
-    def history(self) -> list[dict[str, str]]:
+    def history(self) -> list[dict[str, Any]]:
         return [asdict(line) for line in self._log_buffer]
 
     def get_online_players(self) -> list[dict[str, Any]]:
@@ -595,10 +601,12 @@ class MinecraftServerManager:
     async def _record_log(self, stream: str, message: str) -> None:
         # Java and mods print absolute paths; never show the host's user folder in the console.
         message = redact_personal_paths(message)
+        self._log_seq += 1
         line = TerminalLine(
             timestamp=datetime.now(UTC).isoformat(),
             stream=stream,
             message=message,
+            seq=self._log_seq,
         )
         self._log_buffer.append(line)
 

@@ -333,14 +333,18 @@ async def terminate_external_server(request: ExternalServerTerminateRequest) -> 
                 "así que el panel no lo cierra. Cerralo desde su propia ventana."
             ),
         )
-    if not await asyncio.to_thread(
-        external_server_detector.terminate, request.pid, server_manager.process_pid
-    ):
+    outcome = await asyncio.to_thread(external_server_detector.close, request.pid, server_manager.process_pid)
+    if outcome is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No se pudo cerrar ese servidor. Cerralo desde su propia ventana.",
         )
-    return _action_response("Se cerró el servidor que estaba corriendo fuera del panel.")
+    if outcome == "saved":
+        return _action_response("Listo: el servidor que estaba abierto aparte guardó el mundo y se cerró.")
+    return _action_response(
+        "Se cerró el servidor que estaba abierto aparte. No respondió al pedido de guardar, "
+        "así que pudo perderse lo de los últimos minutos."
+    )
 
 
 @router.get("/metrics", response_model=ServerMetrics)

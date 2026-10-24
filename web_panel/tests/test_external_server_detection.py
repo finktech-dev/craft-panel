@@ -127,7 +127,7 @@ def test_terminate_refuses_programs_that_are_not_java(tmp_path: Path, listener) 
 
 def test_terminate_only_kills_currently_detected_java(tmp_path: Path, listener, monkeypatch) -> None:
     process, port = listener
-    detector = ExternalServerDetector(_settings(tmp_path, port))
+    detector = ExternalServerDetector(_settings(tmp_path, port), graceful_stop=lambda pid: False)
     original_detect = detector.detect
 
     def as_java(own_pid=None):
@@ -386,6 +386,10 @@ class _Detector:
         self.terminated = True
         return True
 
+    def close(self, pid, own_pid=None):
+        self.terminated = True
+        return "saved"
+
 
 @pytest.mark.asyncio
 async def test_start_endpoint_refuses_before_creating_a_job(monkeypatch) -> None:
@@ -438,3 +442,97 @@ async def test_start_refuses_when_external_server_is_running(tmp_path: Path, lis
     assert not manager.is_running
     assert psutil.pid_exists(listener[0].pid)
     await asyncio.sleep(0)
+
+
+def _as_java_detector(tmp_path: Path, port: int, monkeypatch, **kwargs) -> ExternalServerDetector:
+    detector = ExternalServerDetector(_settings(tmp_path, port), **kwargs)
+    original_detect = detector.detect
+
+    def as_java(own_pid=None):
+        found = original_detect(own_pid)
+        return None if found is None else ExternalServer(pid=found.pid, name="java.exe", reason=found.reason, port=found.port)
+
+    monkeypatch.setattr(detector, "detect", as_java)
+    return detector
+
+
+def test_close_asks_the_server_to_save_before_forcing(tmp_path: Path, listener, monkeypatch) -> None:
+    process, port = listener
+    asked: list[int] = []
+
+    def stop_gracefully(pid: int) -> bool:
+        asked.append(pid)
+        psutil.Process(pid).kill()  # stands in for Minecraft saving and exiting
+        return True
+
+    detector = _as_java_detector(tmp_path, port, monkeypatch, graceful_stop=stop_gracefully)
+    assert detector.close(process.pid) == "saved"
+    assert asked == [process.pid]
+
+
+def test_close_forces_when_the_server_does_not_answer(tmp_path: Path, listener, monkeypatch) -> None:
+    process, port = listener
+    detector = _as_java_detector(tmp_path, port, monkeypatch, graceful_stop=lambda pid: True, graceful_timeout=0.5)
+    assert detector.close(process.pid) == "forced"
+    deadline = time.monotonic() + 10
+    while process.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert process.poll() is not None
+
+
+# Test runners may start with Ctrl+C ignored, a flag Windows passes to child processes; a server
+# started from a normal console window does not have it, so the child clears it first.
+_WAITS_FOR_CTRL_C = (
+    "import ctypes, sys, time\n"
+    "ctypes.windll.kernel32.SetConsoleCtrlHandler(None, False)\n"
+    "try:\n"
+    "    time.sleep(60)\n"
+    "except KeyboardInterrupt:\n"
+    "    open(sys.argv[1], 'w').write('saved')\n"
+)
+
+
+def _hidden_console_child(marker: Path) -> subprocess.Popen:
+    """A process in its own console window, kept hidden, like a server started from run.bat."""
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = 0
+    return subprocess.Popen(
+        [sys.executable, "-I", "-c", _WAITS_FOR_CTRL_C, str(marker)],
+        creationflags=subprocess.CREATE_NEW_CONSOLE,
+        startupinfo=startup,
+    )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows console Ctrl+C")
+def test_windows_ctrl_c_reaches_a_server_in_its_own_console(tmp_path: Path) -> None:
+    marker = tmp_path / "saved.txt"
+    child = _hidden_console_child(marker)
+    try:
+        time.sleep(1.5)  # let the child start sleeping
+        assert external_server_service.request_graceful_stop(child.pid) is True
+        child.wait(timeout=15)
+        assert marker.read_text() == "saved"
+    finally:
+        if child.poll() is None:
+            child.kill()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows console Ctrl+C")
+def test_windows_ctrl_c_is_never_sent_to_the_panels_own_console(tmp_path: Path) -> None:
+    marker = tmp_path / "saved.txt"
+    child = _hidden_console_child(marker)
+    try:
+        time.sleep(1.5)
+        # Pretend the child is the panel: the helper must refuse, since it shares that console.
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", external_server_service._WINDOWS_CTRL_C_HELPER, str(child.pid), str(child.pid)],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            timeout=15,
+        )
+        assert result.returncode == 3
+        time.sleep(0.5)
+        assert child.poll() is None
+        assert not marker.exists()
+    finally:
+        child.kill()

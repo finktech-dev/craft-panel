@@ -489,10 +489,15 @@ class ServerPropertiesService:
         require_not_protected(self.file_path, configured=self._settings)
         if not self.file_path.is_file():
             # Create from scratch if it does not exist
-            lines = [f"{k}={v}" for k, v in updates.items()]
-            self.file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            return
+            new_lines = [f"{k}={v}" for k, v in updates.items()]
+        else:
+            new_lines = self._merge_lines(updates)
+        tmp = self.file_path.with_name(f".server.properties.{uuid.uuid4().hex}.tmp")
+        tmp.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        os.replace(tmp, self.file_path)
 
+    def _merge_lines(self, updates: dict[str, str]) -> list[str]:
+        """The current file with the updated keys replaced in place and new keys appended."""
         original_lines = self.file_path.read_text(encoding="utf-8", errors="replace").splitlines()
         new_lines: list[str] = []
         updated_keys = set(updates.keys())
@@ -518,9 +523,7 @@ class ServerPropertiesService:
             if key not in written_keys:
                 new_lines.append(f"{key}={val}")
 
-        tmp = self.file_path.with_name(f".server.properties.{uuid.uuid4().hex}.tmp")
-        tmp.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-        os.replace(tmp, self.file_path)
+        return new_lines
 
 
 server_properties_service = ServerPropertiesService()

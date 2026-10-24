@@ -30,6 +30,7 @@ async def terminal_socket(websocket: WebSocket) -> None:
             "type": "history",
             "lines": server_manager.history,
             "state": server_manager.state,
+            "session": server_manager.log_session,
         },
     )
 

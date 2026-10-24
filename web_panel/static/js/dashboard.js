@@ -254,8 +254,8 @@
   };
   const terminateExternal = async (button) => {
     if (!externalPid) return;
-    if (!window.confirm('¿Cerrar el servidor que está abierto en la otra ventana? Lo que no se haya guardado se pierde. Si podés, mejor cerralo desde esa ventana.')) return;
-    await withBusy(button, 'Cerrando…', async () => {
+    if (!window.confirm('¿Cerrar el servidor que está abierto aparte? Primero le pedimos que guarde el mundo y se cierre, como si apretaras Ctrl+C en su ventana; puede tardar hasta un minuto. Si no responde, lo cerramos a la fuerza.')) return;
+    await withBusy(button, 'Guardando y cerrando…', async () => {
       try {
         const result = await Panel.api('/api/server/external/terminate', { method: 'POST', body: { pid: externalPid, confirm: true } });
         reportResult(result, 'Listo, se cerró.');

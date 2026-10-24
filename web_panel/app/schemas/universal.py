@@ -8,9 +8,9 @@ class ConfigFile(BaseModel):
     format: str
     size_kb: float
 class ConfigNode(BaseModel): path: str; key: str; type: Literal['boolean','number','string','list','section','null']; value: Any = None; comment: str | None = None; minimum: float | None = None; maximum: float | None = None; children: list['ConfigNode'] = Field(default_factory=list)
-class ConfigDocument(BaseModel): path: str; format: str; raw_content: str; tree: ConfigNode
+class ConfigDocument(BaseModel): path: str; format: str; raw_content: str; tree: ConfigNode; fingerprint: str = ''
 class ConfigEditorInfo(BaseModel): can_open_locally: bool; editor_name: str | None = None
-class ConfigSaveRequest(BaseModel): content: str | None = Field(default=None, max_length=2_000_000); changes: dict[str, Any] | None = None
+class ConfigSaveRequest(BaseModel): content: str | None = Field(default=None, max_length=2_000_000); changes: dict[str, Any] | None = None; expected_fingerprint: str | None = Field(default=None, max_length=64)
 class BlacklistState(BaseModel): items: list[str]; enforcement_available: bool; message: str
 class BlacklistItemRequest(BaseModel): item_id: str = Field(pattern=r'^!?[a-zA-Z0-9_.*-]+:[a-zA-Z0-9_./*-]+$')
 class RegistryItem(BaseModel): item_id: str; mod_id: str; source_jar: str
