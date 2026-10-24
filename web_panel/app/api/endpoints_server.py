@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -26,6 +25,7 @@ from app.services.metrics_service import metrics_service
 from app.services.player_crash_service import player_crash_service
 from app.services.playit_service import PlayitServiceError, playit_service
 from app.services.external_server_service import external_server_detector
+from app.services.friend_address import FriendAddressError, normalize_address, panel_address, save_address
 from app.services.safety_service import SafetySummary, safety_service
 from app.services.server_process import (
     GRACEFUL_RESTART_STEPS,
@@ -58,8 +58,11 @@ READY_TIMEOUT_SECONDS = 300.0
 
 
 def _require_playit_ready() -> None:
-    """Fail fast (before any job starts) when Playit is chosen but not connected yet."""
-    if settings.playit_enabled and playit_service.needs_setup:
+    """Fail fast (before any job starts) when Playit is chosen but not connected yet.
+
+    An installed but stopped official Playit app is fine: the start job turns it on.
+    """
+    if settings.playit_enabled and playit_service.needs_setup and not playit_service.can_start_external_agent:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Conectá tu cuenta de Playit antes de iniciar, o elegí Solo red local en Preparar servidor.",
@@ -365,6 +368,7 @@ def _friend_connection_info(
     configured_address: str | None,
     tunnel: TunnelStatus,
     file_address: str | None = None,
+    playit_host_state: str | None = None,
 ) -> FriendConnectionInfo:
     """Describe una dirección existente sin iniciar, detener ni configurar túneles."""
     custom_address = custom_address.strip() if custom_address else None
@@ -399,8 +403,19 @@ def _friend_connection_info(
     else:
         address = f"127.0.0.1:{port}"
         source = "local_only"
-        message = "Por ahora solo se puede jugar desde esta computadora."
-        next_step = "Para que entren amigos desde sus casas, activá el acceso por Internet en Ajustes."
+        # The next step depends on the official Playit app (None when Internet access is off).
+        if playit_host_state == "stopped":
+            message = "Tu Playit está instalado pero apagado."
+            next_step = "Al tocar Encender lo prendemos solo, y después aparece acá la dirección para tus amigos."
+        elif playit_host_state == "running":
+            message = "Playit está funcionando, pero todavía no sabemos tu dirección."
+            next_step = "Tocá «Usar la dirección de mi Playit» o pegá abajo la que te muestra Playit."
+        elif playit_host_state == "not_installed":
+            message = "Por ahora solo se puede jugar desde esta computadora."
+            next_step = "Para que entren amigos desde sus casas, instalá Playit desde playit.gg/download y volvé acá."
+        else:
+            message = "Por ahora solo se puede jugar desde esta computadora."
+            next_step = "Para que entren amigos desde sus casas, activá el acceso por Internet en Ajustes."
 
     return FriendConnectionInfo(
         public_address=address,
@@ -419,34 +434,29 @@ async def get_connection_info() -> FriendConnectionInfo:
     props = server_properties_service.read_properties()
     port = int(props.get("server-port", "25565"))
 
-    conn_file = settings.panel_directory / ".server_connection.json" if settings.panel_directory else None
-    custom_addr = None
-    if conn_file and conn_file.is_file():
-        try:
-            data = json.loads(conn_file.read_text(encoding="utf-8"))
-            custom_addr = data.get("public_address")
-        except Exception:
-            pass
+    custom_addr = panel_address(settings)
 
     tunnel_stat = playit_service.status()
+    host_state = (await asyncio.to_thread(playit_service.host_status)).state if settings.playit_enabled else None
     return _friend_connection_info(
         port=port,
         custom_address=custom_addr,
         configured_address=settings.server_public_address,
         file_address=read_server_settings(settings).value("public_address"),
         tunnel=tunnel_stat,
+        playit_host_state=host_state,
     )
 
 
 @router.post("/connection-info")
 async def update_connection_info(req: ConnectionInfoUpdateRequest) -> dict[str, Any]:
-    conn_file = settings.panel_directory / ".server_connection.json" if settings.panel_directory else None
-    if conn_file:
-        try:
-            conn_file.write_text(json.dumps({"public_address": req.public_address.strip()}, indent=2), encoding="utf-8")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"No se pudo guardar la dirección: {e}")
-    return {"success": True, "public_address": req.public_address.strip(), "message": "Dirección permanente guardada correctamente."}
+    """Save the address for friends (craftpanel.txt when it exists, else the panel)."""
+    try:
+        address = normalize_address(req.public_address)
+        await asyncio.to_thread(save_address, settings, address)
+    except FriendAddressError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+    return {"success": True, "public_address": address, "message": "Dirección guardada."}
 
 
 @router.get("/health-summary")

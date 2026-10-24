@@ -15,6 +15,12 @@ echo.
 echo  Panel local del servidor de Minecraft
 echo.
 
+rem Double-clicking the file inside the ZIP runs it from a temporary folder
+rem without the rest of the panel.
+if not exist "%PANEL%\requirements.txt" goto :not_extracted
+rem OneDrive can lock or remove files of the .venv folder while the panel runs.
+echo "%ROOT%" | "%SystemRoot%\System32\find.exe" /i "\OneDrive" >nul && echo  Aviso: la carpeta del panel esta dentro de OneDrive. Si algo falla, movela a C:\CraftPanel.
+
 if not exist "%PYTHON%" goto :create_venv
 rem A venv stops working when the Python it was created from is uninstalled.
 "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info < (3, 11))" >nul 2>nul <nul
@@ -27,9 +33,13 @@ if exist "%VENV%" goto :venv_locked
 call :find_python
 if "%errorlevel%"=="0" goto :make_venv
 call :install_python
-if not "%errorlevel%"=="0" goto :python_error
+set "INSTALL_RESULT=%errorlevel%"
+rem winget can report an error and still leave a working Python (for example
+rem when it was already installed for another user), so always look again.
 call :find_python
-if not "%errorlevel%"=="0" goto :python_restart
+if "%errorlevel%"=="0" goto :make_venv
+if not "%INSTALL_RESULT%"=="0" goto :python_error
+goto :python_restart
 
 :make_venv
 echo  Creando el entorno local de Python. Solo ocurre la primera vez...
@@ -40,7 +50,18 @@ if not exist "%PYTHON%" goto :venv_error
 :install_deps
 echo  Revisando las dependencias del panel...
 "%PYTHON%" -m pip install --disable-pip-version-check -q -r "%PANEL%\requirements.txt"
-if not "%errorlevel%"=="0" goto :deps_error
+if "%errorlevel%"=="0" goto :run_panel
+rem A venv without a working pip cannot repair itself: create it again once.
+"%PYTHON%" -m pip --version >nul 2>nul <nul
+if "%errorlevel%"=="0" goto :deps_error
+if defined VENV_RECREATED goto :deps_error
+set "VENV_RECREATED=1"
+echo  El entorno de Python de la carpeta .venv esta incompleto. Se va a crear de nuevo...
+rmdir /s /q "%VENV%" >nul 2>nul
+if exist "%VENV%" goto :venv_locked
+goto :create_venv
+
+:run_panel
 
 echo  Iniciando el panel. El navegador se abrira cuando este listo.
 echo  No cierres esta ventana mientras uses el panel.
@@ -50,6 +71,15 @@ if not "%errorlevel%"=="0" goto :panel_error
 endlocal
 exit /b 0
 
+:not_extracted
+echo.
+echo  [ERROR] Primero hay que descomprimir el ZIP.
+echo  1. Hace clic derecho en el archivo ZIP y elegi "Extraer todo".
+echo  2. Abri la carpeta nueva y hace doble clic en iniciar_panel.bat.
+echo.
+pause
+exit /b 1
+
 :python_error
 echo.
 echo  [ERROR] Se necesita Python 3.11 o superior para iniciar el panel.
@@ -57,7 +87,7 @@ echo  1. Descargalo desde https://www.python.org/downloads/
 echo  2. Durante la instalacion marca la casilla "Add python.exe to PATH".
 echo  3. Vuelve a abrir este archivo.
 echo  Si al escribir python se abre Microsoft Store, busca "Alias de ejecucion
-echo  de aplicaciones" en Configuracion de Windows y desactiva python.exe y python3.exe.
+echo  de aplicaciones" en Configuracion de Windows y apaga python.exe y python3.exe.
 echo.
 pause
 exit /b 1

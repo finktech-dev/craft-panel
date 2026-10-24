@@ -61,8 +61,27 @@ def test_onboarding_template_uses_guided_install_and_connection_actions():
     assert "/api/onboarding/status" in source
     assert "/api/onboarding/install" in source
     assert "/api/tunnel/setup" in source
-    assert "waitForPublicAddress" in source
+    assert "waitForFriendAddress" in source
     assert "/api/tunnel/status" in source
+    # The official Playit app: turn it on, read its address, or paste one.
+    assert "/api/tunnel/external/start" in source
+    assert "/api/tunnel/external/address" in source
+    assert "/api/tunnel/address" in source
+    # Only the automatic lookup after a start, which must never use Playit's agent key.
+    assert source.count("use_agent_key=false") == 1
+
+
+def test_onboarding_friends_step_has_a_block_for_each_playit_state():
+    from pathlib import Path
+
+    source = (Path(__file__).parent.parent / "templates" / "onboarding.html").read_text(encoding="utf-8")
+    for block in ("playit-running", "playit-stopped", "playit-broken", "playit-missing", "friend-address-form"):
+        assert f'id="{block}"' in source
+    assert "https://playit.gg/download" in source
+    assert "Usar la dirección de mi Playit" in source
+    assert "Pegá la dirección que te muestra Playit" in source
+    assert "Descargar Java" in source and ">Encender<" in source
+    assert "onclick" not in source.casefold() and "<script>" not in source
 
 
 def test_first_login_shows_and_copies_the_generated_pin():

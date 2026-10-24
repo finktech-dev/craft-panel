@@ -92,17 +92,28 @@
       }
     };
 
+    // Each group is its own sub-screen; bring the first one with a problem into view.
+    const revealGroupOf = (node) => {
+      const group = node.closest('[data-subpanel-key]');
+      if (group && group.hidden && window.AdminTabs) {
+        window.AdminTabs.openSub(group.dataset.subpanel, group.dataset.subpanelKey);
+        try { history.replaceState(null, '', `#${group.dataset.subpanel}/${group.dataset.subpanelKey}`); } catch { /* ignore */ }
+      }
+    };
+
     const showErrors = (issue) => {
-      let placed = false;
+      let placed = null;
       (issue.errors || []).forEach((problem) => {
         const target = problem.field && section.querySelector(`[data-error-for="${CSS.escape(problem.field)}"]`);
         if (target) {
           target.textContent = [target.textContent, problem.message].filter(Boolean).join('\n');
           show(target, true);
-          placed = true;
+          placed = placed || target;
         }
       });
-      if (!placed) {
+      if (placed) {
+        revealGroupOf(placed);
+      } else {
         setText(formError, issue.message);
         show(formError, true);
       }
@@ -139,15 +150,16 @@
         Panel.toast('No hay cambios para guardar.');
         return;
       }
-      const button = $('#server-file-save');
-      if (button) button.disabled = true;
+      // Every group has its own Guardar; all of them save the whole form.
+      const buttons = all('[data-server-file-save]');
+      buttons.forEach((button) => { button.disabled = true; });
       try {
         render(await put(ENDPOINT, changes));
         Panel.toast('Listo, se guardó en craftpanel.txt.');
       } catch (issue) {
         showErrors(issue);
       } finally {
-        if (button) button.disabled = false;
+        buttons.forEach((button) => { button.disabled = false; });
       }
     });
 

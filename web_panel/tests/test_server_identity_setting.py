@@ -70,4 +70,5 @@ def test_header_and_title_show_the_server_name() -> None:
         two_factor_enabled=False, public_address=None, minecraft_version="",
     )
     assert "<title>Inicio · Friends server</title>" in html
-    assert "Friends server</a>" in html
+    assert "Friends server</span></a>" in html  # truncated with an ellipsis when long
+    assert 'title="Friends server"' in html

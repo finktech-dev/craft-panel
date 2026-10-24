@@ -20,6 +20,21 @@ class TunnelStatus(BaseModel):
     last_error: str | None = None
     needs_setup: bool = False
     claim_url: str | None = None
+    # The official Playit app for Windows, which runs on its own as the "playitd" service.
+    external_agent: Literal["running", "stopped", "not_installed"] = "not_installed"
+    external_autostart: bool | None = None
+
+
+class FriendAddressRequest(BaseModel):
+    """An address the host copied from Playit (or another service) to share with friends."""
+
+    public_address: str = Field(min_length=1, max_length=260)
+
+
+class FriendAddressResponse(BaseModel):
+    public_address: str
+    saved_to: Literal["craftpanel.txt", "panel"]
+    message: str
 
 
 class FriendConnectionInfo(BaseModel):
@@ -68,7 +83,11 @@ class JavaRuntimeStatus(BaseModel):
     """Un Java encontrado en el host, sin modificar su instalación."""
 
     state: Literal["available", "missing", "unusable"]
-    executable: str | None = None
+    # Absolute path, used by the panel to run Java; never sent to the browser.
+    executable: str | None = Field(default=None, exclude=True)
+    # Where it was found and who built it, to describe it without showing paths.
+    source: Literal["craftpanel.txt", "tools/java", "system", "minecraft_launcher"] | None = None
+    vendor: str | None = None
     version: str | None = None
     major_version: int | None = None
     message: str
@@ -78,11 +97,13 @@ class MinecraftInstallationStatus(BaseModel):
     """Huella de un servidor Minecraft local; no enumera mundos ni mods."""
 
     state: Literal["detected", "not_detected"]
-    root: str
+    # Absolute paths stay inside the panel; the browser only gets the script's file name.
+    root: str = Field(exclude=True)
     loader: Literal["neoforge", "forge", "fabric", "quilt", "paper", "vanilla", "custom", "unknown"] | None = None
     loader_version: str | None = None
     minecraft_version: str | None = None
-    start_script: str | None = None
+    start_script: str | None = Field(default=None, exclude=True)
+    start_script_name: str | None = None
     message: str
 
 

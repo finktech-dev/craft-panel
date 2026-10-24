@@ -187,12 +187,9 @@ async def backups_page(request: Request):
 
 
 @app.get("/schematics", include_in_schema=False)
-async def schematics_page(request: Request):
-    if redirect := _require_html_session(request):
-        return redirect
-    return templates.TemplateResponse(
-        request=request, name="schematics.html", context=_template_context(request, "schematics")
-    )
+async def schematics_page() -> RedirectResponse:
+    # The schematics page was removed; old bookmarks land on the home page instead of a 404.
+    return RedirectResponse(url="/", status_code=307)
 
 @app.get("/administration", include_in_schema=False)
 async def administration_page(request: Request):

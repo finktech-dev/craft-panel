@@ -68,6 +68,28 @@ def test_windows_launcher_verifies_python_candidates_by_running_them() -> None:
     assert "EnableDelayedExpansion" not in source.replace("DisableDelayedExpansion", "")
 
 
+def test_windows_launcher_recovers_from_common_first_run_problems() -> None:
+    source = (REPO_ROOT / "iniciar_panel.bat").read_text(encoding="ascii")
+
+    # Opened from inside the ZIP: there is no web_panel folder next to it.
+    assert 'if not exist "%PANEL%\\requirements.txt" goto :not_extracted' in source
+    # winget may fail and still leave Python installed: look again before giving up.
+    assert source.index("call :install_python") < source.index('set "INSTALL_RESULT=%errorlevel%"') < source.rindex("call :find_python")
+    # A venv without pip is created again once instead of failing forever.
+    assert '"%PYTHON%" -m pip --version' in source and "VENV_RECREATED" in source
+    # OneDrive only gets a warning, with an absolute path to the system find.exe.
+    assert '"%SystemRoot%\\System32\\find.exe"' in source
+
+
+def test_browser_opens_this_pc_when_the_panel_listens_on_every_address() -> None:
+    import run_panel
+
+    assert run_panel._browser_host("0.0.0.0") == "127.0.0.1"
+    assert run_panel._browser_host("::") == "127.0.0.1"
+    assert run_panel._browser_host("::1") == "[::1]"
+    assert run_panel._browser_host("127.0.0.1") == "127.0.0.1"
+
+
 def test_password_reset_launcher_uses_the_panel_directory() -> None:
     source = (REPO_ROOT / "restablecer_contrasena_panel.bat").read_text(encoding="ascii")
 
@@ -231,14 +253,22 @@ def test_java_discovery_tolerates_non_utf8_console_output(tmp_path: Path) -> Non
 
 
 def test_playit_service_query_tolerates_localized_sc_output(monkeypatch, tmp_path: Path) -> None:
+    import psutil
+
     received: dict[str, object] = {}
 
     def fake_run(args, **kwargs):
         received.update(kwargs)
         return subprocess.CompletedProcess(args=args, returncode=1060, stdout="", stderr="")
 
+    def denied(_name):
+        raise psutil.AccessDenied()
+
     monkeypatch.setattr("app.services.playit_service.platform.system", lambda: "Windows")
+    monkeypatch.setattr("app.services.playit_service.psutil.win_service_get", denied, raising=False)
     monkeypatch.setattr("app.services.playit_service.subprocess.run", fake_run)
+    monkeypatch.setenv("ProgramFiles", str(tmp_path))
+    monkeypatch.setenv("ProgramW6432", str(tmp_path))
 
     assert PlayitService(configured_settings=Settings(project_root=tmp_path)).uses_external_agent is False
     assert received.get("errors") == "replace"

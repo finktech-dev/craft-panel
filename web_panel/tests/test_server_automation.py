@@ -53,6 +53,7 @@ class Launches:
 
 class FakePlayit:
     needs_setup = False
+    can_start_external_agent = False
 
 
 @pytest.fixture
