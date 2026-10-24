@@ -23,6 +23,7 @@ from app.services.discord_service import DiscordService, discord_service
 from app.services.progress import ProgressCallback, StepPlan, format_megabytes, report
 from app.services.server_process import MinecraftServerManager, ServerProcessError, server_manager
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
+from app.services.server_settings_file import BackupIgnore, read_server_settings
 
 logger = logging.getLogger("backups")
 
@@ -211,14 +212,28 @@ class BackupService:
                 raise BackupServiceError(f"No se pudo restaurar el backup: {error}") from error
         return await asyncio.to_thread(self._backup_item_from_path, backup_path)
 
+    def _backup_ignore(self) -> BackupIgnore:
+        """The user's [backup_exclude] rules from craftpanel.txt (invalid lines are already dropped)."""
+        return BackupIgnore(read_server_settings(self._settings).backup_exclude)
+
+    def _world_files_sync(self) -> list[Path]:
+        """Files a copy includes: never links, lock/temporary files or [backup_exclude] matches."""
+        world = self.world_directory
+        if not world.is_dir():
+            return []
+        return [
+            path
+            for path in self._backup_ignore().walk_files(world)
+            # Never follow links out of the world into other files of the host.
+            if not path.is_symlink()
+            and path.is_file()
+            and path.name.lower() not in _IGNORED_BACKUP_FILENAMES
+            and path.suffix.lower() not in _IGNORED_BACKUP_EXTENSIONS
+        ]
+
     def _archive_candidates_sync(self) -> list[tuple[Path, int]]:
         candidates: list[tuple[Path, int]] = []
-        for path in self.world_directory.rglob("*"):
-            # Never follow links out of the world into other files of the host.
-            if path.is_symlink() or not path.is_file():
-                continue
-            if path.name.lower() in _IGNORED_BACKUP_FILENAMES or path.suffix.lower() in _IGNORED_BACKUP_EXTENSIONS:
-                continue
+        for path in self._world_files_sync():
             try:
                 candidates.append((path, path.stat().st_size))
             except OSError:
@@ -485,19 +500,13 @@ class BackupService:
         # Without previous copies, the uncompressed size is a safe upper bound.
         return sum(path.stat().st_size for path in self._world_files_sync())
 
-    def _world_files_sync(self) -> list[Path]:
-        return [
-            path
-            for path in self.world_directory.rglob("*")
-            if path.is_file()
-            and path.name.lower() not in _IGNORED_BACKUP_FILENAMES
-            and path.suffix.lower() not in _IGNORED_BACKUP_EXTENSIONS
-        ]
-
     def _world_fingerprint_sync(self) -> dict[str, str | int]:
         file_count = total_bytes = latest_mtime_ns = 0
         for path in self._world_files_sync():
-            stat = path.stat()
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
             file_count += 1
             total_bytes += stat.st_size
             latest_mtime_ns = max(latest_mtime_ns, stat.st_mtime_ns)

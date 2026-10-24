@@ -77,6 +77,9 @@ class RuntimeDiscoveryService:
 
     def _java_candidates(self) -> tuple[Path, ...]:
         executable_name = "java.exe" if self._operating_system() == "windows" else "java"
+        # A Java chosen in craftpanel.txt is the one the server runs with, so it is the only one checked.
+        if (chosen := self._settings.server_java_executable) is not None:
+            return (chosen,)
         candidates: list[Path] = []
         assert self._settings.tools_directory is not None
         local_java = self._settings.tools_directory / "java" / "bin" / executable_name

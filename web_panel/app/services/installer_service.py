@@ -288,7 +288,7 @@ class InstallerService:
         )
 
     async def _run_java(self, *args: str) -> None:
-        java = self._settings.local_java_executable_path
+        java = self._settings.server_java_executable or self._settings.local_java_executable_path
         command = str(java) if java.is_file() else "java"
         try:
             process = await asyncio.create_subprocess_exec(

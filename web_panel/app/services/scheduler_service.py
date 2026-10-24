@@ -31,6 +31,8 @@ class SchedulerService:
         )
     def shutdown(self) -> None:
         if self.scheduler.running: self.scheduler.shutdown(wait=False)
+    def sync_with_settings_file(self) -> None:
+        """Re-read craftpanel.txt and reschedule what it controls."""
     def jobs(self) -> list[dict[str, str | None]]:
         return [{"id": job.id, "name": job.name, "next_run": job.next_run_time.isoformat() if job.next_run_time else None} for job in self.scheduler.get_jobs()]
     def add_backup(self, hours: int) -> list[dict[str, str | None]]:

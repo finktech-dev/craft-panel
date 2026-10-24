@@ -12,6 +12,7 @@ from app.api.endpoints_runtime import router as runtime_router
 from app.api.endpoints_mods import router as mods_router
 from app.api.endpoints_public import router as public_router
 from app.api.endpoints_server import router as server_router
+from app.api.endpoints_server_file import router as server_file_router
 from app.api.endpoints_schematics import banner_router, router as schematics_router
 from app.api.endpoints_tunnel import router as tunnel_router
 from app.api.endpoints_configs import router as configs_router
@@ -40,6 +41,7 @@ router.include_router(runtime_router)
 router.include_router(mods_router)
 router.include_router(public_router)
 router.include_router(server_router)
+router.include_router(server_file_router)
 router.include_router(schematics_router)
 router.include_router(banner_router)
 router.include_router(tunnel_router)
