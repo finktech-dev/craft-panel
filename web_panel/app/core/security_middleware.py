@@ -144,7 +144,8 @@ class SecurityHeadersAndCsrfMiddleware(BaseHTTPMiddleware):
         websocket_sources = f"ws://{host} wss://{host}" if host else ""
         response.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            # No inline scripts or on* handlers anywhere: page code lives in /static/js.
+            "default-src 'self'; script-src 'self'; "
             "style-src 'self' 'unsafe-inline'; "
             # Player heads and Modrinth icons are the only remote images.
             "img-src 'self' data: https://mc-heads.net https://cdn.modrinth.com; "

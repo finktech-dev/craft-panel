@@ -152,6 +152,24 @@
   });
 
   window.Panel = { api, escapeHtml, formatDuration, readResponse, sendConsoleCommand, setStatus, toast, websocketUrl };
+
+  // Replacement for inline `onerror` handlers (blocked by the strict CSP):
+  // images with data-fallback-src swap to that URL once when they fail to load.
+  const useFallbackImage = (image) => {
+    const fallback = image.dataset.fallbackSrc;
+    if (!fallback || image.src === new URL(fallback, window.location.href).href) return;
+    image.src = fallback;
+  };
+  // Load errors do not bubble, so listen in the capture phase.
+  document.addEventListener('error', (event) => {
+    if (event.target instanceof HTMLImageElement) useFallbackImage(event.target);
+  }, true);
+  // Images that already failed before this deferred script ran.
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('img[data-fallback-src]').forEach((image) => {
+      if (image.complete && image.naturalWidth === 0 && image.getAttribute('src')) useFallbackImage(image);
+    });
+  });
 })();
 
 // "Jugadores" and "Mundo" share /worlds; highlight the one matching the open tab.

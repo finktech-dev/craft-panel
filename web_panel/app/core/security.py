@@ -22,6 +22,7 @@ from fastapi import HTTPException, Request, WebSocket, status
 from starlette.requests import HTTPConnection
 
 from app.core.config import settings
+from app.core.passwords import verify_password
 from app.core.path_safety import write_private_text
 
 _SESSION_ADMIN_KEY: Final = "is_admin"
@@ -69,8 +70,12 @@ class TOTPManager:
             self._write_state({"pending_secret": secret, "enabled": False})
         return secret
 
+    @staticmethod
+    def provisioning_uri(secret: str) -> str:
+        return pyotp.TOTP(secret).provisioning_uri(name="Administrador", issuer_name="Craft Panel")
+
     def provisioning_qr_base64(self, secret: str) -> str:
-        uri = pyotp.TOTP(secret).provisioning_uri(name="Administrador", issuer_name="Panel Minecraft")
+        uri = self.provisioning_uri(secret)
         image = qrcode.make(uri)
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
@@ -83,11 +88,24 @@ class TOTPManager:
             pending = state.get("secret")  # setup started by an older panel version
         if not isinstance(pending, str):
             raise TwoFactorError("No hay una configuración 2FA pendiente.")
-        if self._matching_counter(pending, code) is None:
+        counter = self._matching_counter(pending, code)
+        if counter is None:
             return False
         self._write_state({"secret": pending, "enabled": True})
-        self._last_used_counter = -1
+        # The code that confirmed the setup cannot be replayed to sign in.
+        self._last_used_counter = max(self._last_used_counter, counter)
         return True
+
+    def disable(self) -> None:
+        """Turn the second factor off and drop any pending setup.
+
+        Callers must have checked a current code first (``verify_login_code``)
+        when the factor is active.
+        """
+        try:
+            self._secret_path.unlink(missing_ok=True)
+        except OSError as error:
+            raise TwoFactorError("No se pudo apagar la verificación en dos pasos.") from error
 
     def verify_login_code(self, code: str | None) -> bool:
         if not self.is_enabled:
@@ -182,10 +200,16 @@ class LoginAttemptTracker:
 
 
 def is_valid_admin_pin(candidate: str) -> bool:
-    """Compara secretos sin revelar diferencias de tiempo observables."""
-    assert settings.admin_pin is not None
-    # compare_digest only accepts ASCII str; bytes keeps it constant-time for any input.
-    return secrets.compare_digest(candidate.encode("utf-8"), settings.admin_pin.get_secret_value().encode("utf-8"))
+    """Check the administrator password against its scrypt hash.
+
+    The hash is always computed, and the final comparison is constant-time
+    (see ``app.core.passwords.verify_password``). This is CPU-bound: call it
+    from a worker thread inside async code.
+    """
+    stored_hash = settings.admin_password_hash
+    if stored_hash is None:
+        return False
+    return verify_password(candidate, stored_hash)
 
 
 def _is_loopback(host: str | None) -> bool:
