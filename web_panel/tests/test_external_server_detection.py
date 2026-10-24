@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import time
+from collections import namedtuple
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -147,6 +148,11 @@ def test_terminate_only_kills_currently_detected_java(tmp_path: Path, listener, 
     assert process.poll() is not None
 
 
+# Same fields psutil exposes; its own tuples live in a private module that changes between releases.
+_OpenFile = namedtuple("_OpenFile", "path fd")
+_Address = namedtuple("_Address", "ip port")
+
+
 class FakeProcess:
     """Stands in for psutil.Process; each signal can be given or made to raise AccessDenied."""
 
@@ -184,7 +190,7 @@ class FakeProcess:
 
     def open_files(self) -> list:
         self._check()
-        return [psutil._common.popenfile(path, -1) for path in self._open_files]
+        return [_OpenFile(path, -1) for path in self._open_files]
 
     def children(self, recursive: bool = False) -> list:
         return []
@@ -194,7 +200,7 @@ class FakeConnection:
     def __init__(self, pid: int, port: int) -> None:
         self.pid = pid
         self.status = psutil.CONN_LISTEN
-        self.laddr = psutil._common.addr("0.0.0.0", port)
+        self.laddr = _Address("0.0.0.0", port)
 
 
 def fake_machine(monkeypatch, processes: list[FakeProcess], listening: dict[int, int] | None = None) -> None:
