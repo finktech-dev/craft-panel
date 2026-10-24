@@ -254,19 +254,114 @@
       }
     });
 
-    // Status banner: copy a Markdown image link to paste in Discord or a forum.
+    // Status banner. Discord fetches images itself, so a link only works when the panel can be
+    // reached from the internet; otherwise the image is downloaded and pasted.
+    const isPrivateHost = (host) => /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|.*\.local$)/i.test(host);
+    let bannerOrigin = isPrivateHost(window.location.hostname) ? null : window.location.origin;
+    const showBannerLink = (origin, note) => {
+      bannerOrigin = origin;
+      $('#copy-banner-markdown')?.classList.remove('hidden');
+      const share = $('#banner-share-note');
+      if (share) share.textContent = note;
+    };
+    if (bannerOrigin) {
+      showBannerLink(bannerOrigin, 'Copiá el enlace y pegalo en Discord o en un foro: la imagen se actualiza sola. También podés descargarla.');
+    } else {
+      // A Cloudflare quick tunnel gives the panel a public address for a while.
+      Panel.api('/api/cloudflare/status').then((tunnel) => {
+        if (tunnel?.public_url) showBannerLink(tunnel.public_url.replace(/\/$/, ''), 'Copiá el enlace mientras el túnel de Cloudflare esté encendido: la imagen se actualiza sola. Si el túnel se reinicia, el enlace cambia.');
+      }).catch(() => { /* No tunnel: downloading is the way. */ });
+    }
     $('#copy-banner-markdown')?.addEventListener('click', async () => {
-      const markdown = `![Estado](${window.location.origin}/api/server/banner.png)`;
+      if (!bannerOrigin) return;
       try {
-        await navigator.clipboard.writeText(markdown);
+        // A plain link: Discord shows the image under the message.
+        await navigator.clipboard.writeText(`${bannerOrigin}/api/server/banner.png`);
         Panel.toast('Enlace copiado. Pegalo en Discord o en un foro.');
       } catch {
         Panel.toast('No pudimos copiar el enlace. Probá de nuevo.', 'error');
       }
     });
 
-    // 7. Carga inicial
+    // Chat bridge: the panel's notices need no mod; linking the game chat with Discord does.
+    const renderBridge = (bridge, env) => {
+      const textNode = $('#discord-bridge-text');
+      const actions = $('#discord-bridge-actions');
+      const steps = $('#discord-bridge-steps');
+      if (!textNode || !actions) return;
+      const envNode = $('#discord-bridge-env');
+      if (envNode && env?.label) envNode.textContent = env.label;
+      actions.replaceChildren();
+      const link = (href, label) => Object.assign(document.createElement('a'), { href, textContent: label, className: 'link text-sm', target: '_blank', rel: 'noopener noreferrer' });
+      const button = (label, className) => Object.assign(document.createElement('button'), { type: 'button', textContent: label, className });
+      if (!bridge.installed) {
+        textNode.textContent = `¿Querés que lo que escriben en Discord aparezca en el juego, y al revés? Hace falta un mod con un bot de Discord. Te recomendamos ${bridge.suggestion.name}.`;
+        const install = button('Instalar desde el panel', 'v2-button btn-primary min-h-0 py-1.5 text-sm');
+        install.addEventListener('click', async () => {
+          install.disabled = true;
+          install.textContent = 'Instalando…';
+          try {
+            const mod = await Panel.api('/api/mods/install', { method: 'POST', body: { project_id: bridge.suggestion.project_id, install_dependencies: true } });
+            Panel.toast(`Instalaste ${mod.name}. Encendé el servidor una vez para que cree sus ajustes.`);
+            await loadBridge();
+          } catch (error) {
+            Panel.toast(error.message, 'error');
+            install.disabled = false;
+            install.textContent = 'Instalar desde el panel';
+          }
+        });
+        actions.append(install, link(bridge.suggestion.modrinth_url, 'Ver en Modrinth'));
+        steps?.classList.remove('hidden');
+        if (steps) steps.open = true;
+        return;
+      }
+      steps?.classList.add('hidden');
+      if (!bridge.enabled) {
+        textNode.textContent = `${bridge.name} está instalado pero apagado. Encendelo en Mods y reiniciá el servidor.`;
+        actions.append(Object.assign(document.createElement('a'), { href: '/mods', textContent: 'Ir a Mods', className: 'link text-sm' }));
+        return;
+      }
+      if (!bridge.config_file) {
+        textNode.textContent = `${bridge.name} está instalado. Encendé el servidor una vez para que cree su archivo de ajustes; ahí va el token del bot.`;
+        actions.append(link(bridge.modrinth_url, 'Cómo se configura'));
+        return;
+      }
+      textNode.textContent = `${bridge.name} está instalado. El token del bot y el canal van en sus ajustes. Si el mod también avisa cuando el servidor se enciende, apagá ese aviso acá o en el mod para no recibirlo dos veces.`;
+      const open = button('Abrir sus ajustes', 'v2-button btn-quiet min-h-0 py-1.5 text-sm');
+      open.addEventListener('click', async () => {
+        open.disabled = true;
+        try {
+          const result = await Panel.api(`/api/config-editor/open/${encodeURIComponent(bridge.config_file).replaceAll('%2F', '/')}`, { method: 'POST' });
+          Panel.toast(result.message);
+        } catch (error) {
+          // From another device: go to the mod settings list, already filtered to this mod.
+          if (error.status === 409) {
+            const search = document.querySelector('#config-search');
+            if (search) search.value = bridge.config_file.split('/')[0];
+            window.location.hash = 'configs';
+            window.showFiles?.();
+          } else {
+            Panel.toast(error.message, 'error');
+          }
+        } finally {
+          open.disabled = false;
+        }
+      });
+      actions.append(open, link(bridge.modrinth_url, 'Cómo se configura'));
+    };
+    const loadBridge = async () => {
+      try {
+        const [bridge, env] = await Promise.all([Panel.api('/api/discord/bridge'), Panel.api('/api/mods/environment').catch(() => null)]);
+        renderBridge(bridge, env);
+      } catch {
+        const textNode = $('#discord-bridge-text');
+        if (textNode) textNode.textContent = 'No pudimos revisar tus mods ahora. Probá recargar la página.';
+      }
+    };
+
+    // 7. First load
     loadDiscordConfig();
+    loadBridge();
   };
 
   if (document.readyState === 'loading') {

@@ -134,3 +134,24 @@ class DiscordActionResponse(BaseModel):
 
     success: bool
     message: str
+
+
+class DiscordBridgeSuggestion(BaseModel):
+    """The chat bridge mod the panel recommends when none is installed."""
+
+    name: str
+    project_id: str
+    modrinth_url: str
+
+
+class DiscordBridgeStatus(BaseModel):
+    """Whether a mod that links the game chat with Discord is installed."""
+
+    installed: bool
+    enabled: bool
+    name: str | None = None
+    filename: str | None = None
+    modrinth_url: str | None = None
+    # Relative to config/; exists once the server started with the mod.
+    config_file: str | None = None
+    suggestion: DiscordBridgeSuggestion
