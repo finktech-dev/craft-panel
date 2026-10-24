@@ -579,3 +579,28 @@ def test_settings_file_endpoints_are_admin_only() -> None:
     client = TestClient(app, base_url="http://127.0.0.1")
     assert client.get("/api/server/settings-file").status_code in {401, 403}
     assert client.put("/api/server/settings-file", json={}).status_code in {401, 403}
+
+
+def test_settings_written_below_a_section_are_reported_not_used_as_patterns() -> None:
+    """A "key = value" added at the end of the file must not silently become a [protected] pattern."""
+    from app.services.server_settings_file import parse_text
+
+    result = parse_text(
+        "startup_timeout = 10m\n[protected]\nconfig/x.toml\nstartup_timeout = 20m\nfuture_key = something\n"
+    )
+
+    assert result.lists["protected"] == ("config/x.toml",)
+    assert result.values["startup_timeout"] == 600
+    assert [(problem.line, problem.field) for problem in result.problems] == [(4, "protected"), (5, "protected")]
+    assert "los ajustes van arriba" in result.problems[0].message
+
+
+def test_raw_save_rejects_a_setting_written_below_a_section(tmp_path: Path) -> None:
+    from app.services.server_settings_file import ServerSettingsFile, SettingsFileError
+
+    configured = settings_for(tmp_path)
+    with pytest.raises(SettingsFileError) as error:
+        ServerSettingsFile().save_raw(configured, "[backup_exclude]\nlogs/\nbackup_keep = 9\n")
+
+    assert error.value.errors[0].line == 3
+    assert not (configured.server_directory / "craftpanel.txt").exists()

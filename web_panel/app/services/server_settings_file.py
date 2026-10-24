@@ -51,6 +51,8 @@ _SECTION_LINE = re.compile(r"^\s*\[([^\[\]]*)\]\s*$")
 _KEY_LINE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9_]*)\s*=(.*)$")
 _START_SCRIPT_NAME = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$")
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
+# "name = value" inside a [section]: a misplaced setting, never a real path pattern.
+_SETTING_LIKE_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=")
 _DURATION = re.compile(r"^(\d{1,6})\s*(s|m|h|d)$", re.IGNORECASE)
 _SIZE = re.compile(r"^(\d{1,7})\s*(m|mb|g|gb|t|tb)$", re.IGNORECASE)
 _TIME_OF_DAY = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
@@ -795,6 +797,16 @@ def _validated(document: _Document, exists: bool, raw: str, context: ValidationC
             if count == spec.max_items + 1:
                 problems.append(SettingsProblem(f"[{spec.name}] admite hasta {spec.max_items} líneas.", number, spec.name))
             if count > spec.max_items:
+                continue
+            # A "key = value" line written below a section would silently become a list item
+            # (for example a [protected] pattern); point the user back to the top of the file.
+            setting_like = _SETTING_LIKE_LINE.match(line.value)
+            if setting_like:
+                name = setting_like.group(1)
+                hint = f"«{name}» es un ajuste" if name in KEYS else "Esta línea parece un ajuste (nombre = valor)"
+                problems.append(
+                    SettingsProblem(f"{hint}: los ajustes van arriba, antes de las secciones [ ].", number, spec.name)
+                )
                 continue
             try:
                 lists[spec.name].append(spec.parser(line.value, context))
