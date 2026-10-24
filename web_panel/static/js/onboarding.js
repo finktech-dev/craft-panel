@@ -78,7 +78,7 @@
   };
 
   const waitForPublicAddress = async () => {
-    say('#ready-feedback', 'Encendiendo… preparando la dirección para tus amigos.');
+    say('#ready-feedback', 'Buscando la dirección para tus amigos.');
     for (let attempt = 0; attempt < 30; attempt += 1) {
       await sleep(1000);
       const tunnel = await Panel.api('/api/tunnel/status');
@@ -100,16 +100,16 @@
     document.querySelectorAll('input[name="flavor"]').forEach((input) => input.addEventListener('change', fillVersions));
     $('#minecraft-version')?.addEventListener('change', (event) => { chosenVersion[selectedFlavor()] = event.target.value; });
 
-    $('#download-java')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, 'Descargando…', async () => {
+    // Downloads and installs run as jobs; their progress shows right under the button.
+    $('#download-java')?.addEventListener('click', async ({ currentTarget }) => {
       const version = $('#minecraft-version')?.value || state?.recommended_versions?.vanilla?.[0];
-      say('#java-feedback', 'Descargando Java. Puede tardar unos minutos según tu conexión.');
+      say('#java-feedback', '');
       try {
         const body = version ? { minecraft_version: version } : {};
-        const result = await Panel.api('/api/onboarding/java', { method: 'POST', body });
-        say('#java-feedback', result.message);
-        await refresh();
+        const job = await PanelJobs.start('/api/onboarding/java', { mount: '#java-progress', button: currentTarget, body });
+        if (job.status === 'succeeded') await refresh();
       } catch (error) { say('#java-feedback', error.message); }
-    }));
+    });
 
     $('#check-imported-server')?.addEventListener('click', async () => {
       say('#install-feedback', 'Revisando la carpeta…');
@@ -121,19 +121,18 @@
       } catch (error) { say('#install-feedback', error.message); }
     });
 
-    $('#install-server')?.addEventListener('click', ({ currentTarget }) => {
+    $('#install-server')?.addEventListener('click', async ({ currentTarget }) => {
       if (!$('#accept-eula').checked) { say('#install-feedback', 'Para seguir tenés que aceptar las reglas de uso de Minecraft.'); return; }
-      return withButton(currentTarget, 'Instalando…', async () => {
-        say('#install-feedback', 'Descargando e instalando. Con mods puede tardar varios minutos; no cierres esta ventana.');
-        try {
-          const result = await Panel.api('/api/onboarding/install', {
-            method: 'POST',
-            body: { flavor: selectedFlavor(), minecraft_version: $('#minecraft-version').value, accept_eula: true },
-          });
-          say('#install-feedback', result.message);
-          await refresh();
-        } catch (error) { say('#install-feedback', error.message); }
-      });
+      say('#install-feedback', 'Con mods puede tardar varios minutos. Si cerrás esta ventana, la instalación sigue.');
+      try {
+        const job = await PanelJobs.start('/api/onboarding/install', {
+          mount: '#install-progress',
+          button: currentTarget,
+          body: { flavor: selectedFlavor(), minecraft_version: $('#minecraft-version').value, accept_eula: true },
+        });
+        say('#install-feedback', '');
+        if (job.status === 'succeeded') await refresh();
+      } catch (error) { say('#install-feedback', error.message); }
     });
 
     // Friends list: the first name added turns the list on, so only listed people can join.
@@ -224,18 +223,36 @@
       showStep('ready');
     });
 
-    $('#start-from-onboarding')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, 'Encendiendo…', async () => {
+    // Once the start job ends, tell the host what to do next in one sentence.
+    const afterStart = async (job, playitEnabled) => {
+      if (!job || job.status !== 'succeeded') { say('#ready-feedback', ''); return; }
+      let address = null;
+      if (playitEnabled) {
+        try { address = await waitForPublicAddress(); } catch (error) { say('#ready-feedback', error.message); }
+      }
+      say('#ready-feedback', address
+        ? `¡Listo! Pasales esta dirección a tus amigos: ${address}`
+        : 'Tu servidor está encendido. En el inicio vas a ver la dirección para compartir.');
+      $('#onboarding-done')?.classList.remove('hidden');
+    };
+
+    $('#start-from-onboarding')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, null, async () => {
+      say('#ready-feedback', '');
       try {
         const current = await Panel.api('/api/runtime/launch-settings');
         await Panel.api('/api/runtime/launch-settings', { method: 'PUT', body: { allocated_ram_gb: Number($('#onboarding-ram').value), playit_enabled: current.playit_enabled } });
-        await Panel.api('/api/server/start', { method: 'POST' });
-        const address = current.playit_enabled ? await waitForPublicAddress() : null;
-        say('#ready-feedback', address
-          ? `¡Listo! Pasales esta dirección a tus amigos: ${address}`
-          : 'Tu servidor se está encendiendo. En el inicio vas a ver cuándo está listo y la dirección para compartir.');
-        $('#onboarding-done')?.classList.remove('hidden');
+        const job = await PanelJobs.start('/api/server/start', { mount: '#start-progress', button: currentTarget });
+        await afterStart(job, current.playit_enabled);
       } catch (error) { say('#ready-feedback', error.message); }
     }));
+
+    // After a reload, show the install, Java download or first start that is still running.
+    PanelJobs.resume({ kinds: ['install_java'], mount: '#java-progress', button: '#download-java' })
+      .then((job) => { if (job?.status === 'succeeded') refresh(); });
+    PanelJobs.resume({ kinds: ['install_server'], mount: '#install-progress', button: '#install-server' })
+      .then((job) => { if (job?.status === 'succeeded') refresh(); });
+    PanelJobs.resume({ kinds: ['start'], mount: '#start-progress', button: '#start-from-onboarding' })
+      .then((job) => afterStart(job, Boolean(state?.playit_enabled)));
 
     refresh();
   });

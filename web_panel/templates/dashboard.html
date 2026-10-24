@@ -11,6 +11,8 @@
       <button id="hero-action" type="button" class="v2-button btn-primary px-6 text-base" disabled>Cargando…</button>
       <p id="hero-meta" class="text-sm text-zinc-500"></p>
     </div>
+    <div id="hero-progress" class="mt-6 hidden max-w-xl"></div>
+    <p id="jobs-now" class="mt-6 hidden text-sm leading-relaxed text-zinc-400" aria-live="polite"><span class="font-semibold text-zinc-200">Lo que está pasando:</span> <span id="jobs-now-text"></span></p>
   </div>
 
   <div id="external-server" class="mb-10 hidden rounded-xl border border-[#e8b04b]/30 bg-[#e8b04b]/[.06] p-5" role="alert" aria-labelledby="external-title">
@@ -42,6 +44,7 @@
       <button id="create-backup" type="button" class="v2-button btn-quiet">Hacer una copia ahora</button>
       <a href="/backups" class="link text-sm">Ver todas las copias</a>
     </div>
+    <div id="backup-progress" class="mt-5 hidden max-w-xl"></div>
   </section>
 
   <details class="group border-t border-zinc-800 py-7">
@@ -63,4 +66,4 @@
   <p id="dashboard-updated" class="mt-6 text-xs text-zinc-600" aria-live="polite"></p>
 </section>
 {% endblock %}
-{% block scripts %}<script defer src="/static/js/dashboard.js"></script>{% endblock %}
+{% block scripts %}<script defer src="/static/js/jobs.js"></script><script defer src="/static/js/dashboard.js"></script>{% endblock %}

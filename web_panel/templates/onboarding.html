@@ -28,6 +28,7 @@
       <button id="download-java" type="button" class="v2-button btn-primary">Descargar lo necesario</button>
       <button data-refresh type="button" class="v2-button btn-quiet">Ya lo tengo instalado</button>
     </div>
+    <div id="java-progress" class="mt-5 hidden max-w-xl"></div>
     <p id="java-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p>
     <details class="mt-6 text-sm text-zinc-400">
       <summary class="cursor-pointer hover:text-zinc-200">Prefiero instalar Java yo</summary>
@@ -53,6 +54,7 @@
       <select id="minecraft-version" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none focus:border-emerald-400"></select>
       <label class="mt-5 flex items-start gap-3 text-zinc-300"><input id="accept-eula" type="checkbox" class="mt-1 h-4 w-4"><span>Acepto las <a class="link" href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener noreferrer">reglas de uso de Minecraft (EULA)</a>.</span></label>
       <button id="install-server" type="button" class="v2-button btn-primary mt-6">Instalar</button>
+      <div id="install-progress" class="mt-5 hidden max-w-xl"></div>
     </div>
 
     <div id="import-existing-server" class="mt-6 hidden">
@@ -122,9 +124,10 @@
     <p id="onboarding-ram-hint" class="mt-0.5 text-sm text-zinc-500"></p>
     <select id="onboarding-ram" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none focus:border-emerald-400"></select>
     <button id="start-from-onboarding" type="button" class="v2-button btn-primary mt-6 px-6 text-base">Encender mi servidor</button>
+    <div id="start-progress" class="mt-5 hidden max-w-xl"></div>
     <p id="ready-feedback" class="mt-4 leading-relaxed text-zinc-300" aria-live="polite"></p>
     <a id="onboarding-done" href="/" class="link mt-2 hidden">Ir al inicio</a>
   </article>
 </section>
 {% endblock %}
-{% block scripts %}<script defer src="/static/js/onboarding.js"></script>{% endblock %}
+{% block scripts %}<script defer src="/static/js/jobs.js"></script><script defer src="/static/js/onboarding.js"></script>{% endblock %}
