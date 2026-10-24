@@ -12,6 +12,7 @@ from typing import Any
 from app.core.config import Settings, settings
 from app.core.path_safety import is_safe_component
 from app.services.runtime_guard import require_server_stopped
+from app.services.protected_paths import require_not_protected
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.schemas.worlds import (
     ServerPropertiesResponse,
@@ -485,6 +486,7 @@ class ServerPropertiesService:
 
     def _write_updates(self, updates: dict[str, str]) -> None:
         self._validate_updates(updates)
+        require_not_protected(self.file_path, configured=self._settings)
         if not self.file_path.is_file():
             # Crear desde cero si no existiera
             lines = [f"{k}={v}" for k, v in updates.items()]

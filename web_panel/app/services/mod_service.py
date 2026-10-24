@@ -32,6 +32,7 @@ from app.schemas.mod import (
 )
 from app.services.mod_history_service import HistoryToken, ModHistoryService, is_mod_filename
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
+from app.services.protected_paths import require_not_protected
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.services.server_version_service import ServerVersionService
 
@@ -142,6 +143,7 @@ class ModService:
         target = self._resolve_mod_path(target_name)
         if target.exists():
             raise ModConflictError("Ya existe un mod con el nombre de destino.")
+        require_not_protected(source, target, configured=self._settings)
 
         try:
             async with self._history_step("toggle", {"filename": source.name}):
@@ -168,6 +170,7 @@ class ModService:
         destination = self._resolve_mod_path(filename)
         if destination.exists():
             raise ModConflictError("Ya existe un mod con ese nombre.")
+        require_not_protected(destination, configured=self._settings)
 
         temporary_path = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.uploading")
         written_bytes = 0
@@ -200,6 +203,7 @@ class ModService:
         target = self._resolve_mod_path(filename)
         if not target.is_file():
             raise ModNotFoundError("No existe el mod indicado.")
+        require_not_protected(target, configured=self._settings)
         try:
             async with self._history_step("delete", {"filename": target.name}):
                 await asyncio.to_thread(target.unlink)
@@ -236,6 +240,11 @@ class ModService:
                 if not target.is_file():
                     errors.append(f"{name}: no existe.")
                     continue
+                if action in {"enable", "disable", "delete"}:
+                    renamed = target.with_name(
+                        target.name.removesuffix(".disabled") if action == "enable" else f"{target.name}.disabled"
+                    )
+                    require_not_protected(target, renamed, configured=self._settings)
 
                 if action == "enable":
                     if target.name.endswith(".jar.disabled"):
@@ -342,6 +351,8 @@ class ModService:
                 project_id, version_id, loader, game_version, install_dependencies, visited_projects
             )
         replaced = self._resolve_mod_path(replace_filename) if replace_filename else None
+        if replaced is not None:
+            require_not_protected(replaced, configured=self._settings)
         action = "update" if replaced is not None else "install"
         async with self._history_step(action, {"project_id": project_id}) as token:
             item = await self._install_modrinth_mod(
@@ -377,6 +388,7 @@ class ModService:
         destination = self._resolve_mod_path(filename)
         if destination.exists():
             raise ModConflictError("Ese archivo ya está instalado.")
+        require_not_protected(destination, configured=self._settings)
 
         download_url = file_data.get("url")
         if not isinstance(download_url, str) or not is_allowed_url(download_url, MODRINTH_HOSTS):
