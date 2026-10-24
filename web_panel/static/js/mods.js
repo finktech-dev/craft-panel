@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => document.querySelectorAll(selector);
   const esc = Panel.escapeHtml;
+  // Every change to the mods folder is recorded, so success messages point to the undo.
+  const UNDO_HINT = ' Podés deshacerlo en Historial.';
 
   // Estado del cliente
   let installedMods = [];
@@ -277,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
         target.disabled = true;
         try {
           const result = await Panel.api(`/api/mods/${filename}/toggle`, { method: 'POST' });
-          Panel.toast(result.message, 'success');
+          Panel.toast(result.message + UNDO_HINT, 'success');
           await loadMods();
         } catch (err) {
           Panel.toast(err.message, 'error');
@@ -302,14 +304,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (updateBtn) {
         const projectId = updateBtn.dataset.updateProject;
         if (!projectId) return;
+        const replaceFilename = decodeURIComponent(updateBtn.dataset.updateFilename || '');
         updateBtn.disabled = true;
         updateBtn.textContent = 'Actualizando…';
         try {
-          const mod = await Panel.api('/api/mods/install', {
-            method: 'POST',
-            body: { project_id: projectId },
-          });
-          Panel.toast(`¡Mod "${mod.name}" actualizado con éxito!`, 'success');
+          const body = { project_id: projectId };
+          // The old jar is removed once the new version is in place.
+          if (replaceFilename) body.replace_filename = replaceFilename;
+          const mod = await Panel.api('/api/mods/install', { method: 'POST', body });
+          Panel.toast(`Actualizaste ${mod.name}.${UNDO_HINT}`, 'success');
           await loadMods();
         } catch (err) {
           Panel.toast(err.message, 'error');
@@ -348,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
         method: 'POST',
         body: { action, filenames },
       });
-      Panel.toast(res.message, res.errors.length ? 'info' : 'success');
+      Panel.toast(res.affected_count ? res.message + UNDO_HINT : res.message, res.errors.length ? 'info' : 'success');
       selectedFilenames.clear();
       if (selectAllCheckbox) selectAllCheckbox.checked = false;
       updateBulkBar();
@@ -423,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.disabled = true;
     try {
       await Panel.api(`/api/mods/${encodeURIComponent(modToDelete)}`, { method: 'DELETE' });
-      Panel.toast(`Mod "${modToDelete}" eliminado correctamente.`, 'success');
+      Panel.toast(`Quitaste ${modToDelete}.${UNDO_HINT}`, 'success');
       if (deleteModal) deleteModal.close();
       modToDelete = null;
       await loadMods();
@@ -484,7 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (uploadedCount > 0) {
-      Panel.toast(`¡${uploadedCount} archivo(s) .jar subidos con éxito!`, 'success');
+      Panel.toast(`Agregaste ${uploadedCount === 1 ? '1 mod' : `${uploadedCount} mods`}.${UNDO_HINT}`, 'success');
       await loadMods();
     }
 
@@ -526,28 +529,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 10. PESTAÑAS PRINCIPALES: INSTALADOS VS MODRINTH
-  const tabBtnInstalled = $('#tab-btn-installed');
-  const tabBtnModrinth = $('#tab-btn-modrinth');
-  const panelInstalled = $('#panel-installed');
-  const panelModrinth = $('#panel-modrinth');
+  // 10. PESTAÑAS PRINCIPALES: TUS MODS, BUSCAR Y HISTORIAL
+  const TAB_ACTIVE = 'tab-pill -mb-px border-b-2 border-emerald-400 pb-3 font-semibold text-zinc-50';
+  const TAB_IDLE = 'tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200';
+  const mainTabs = ['installed', 'modrinth', 'history'];
 
   function switchMainTab(tab) {
-    if (tab === 'installed') {
-      tabBtnInstalled.className = 'tab-pill -mb-px border-b-2 border-emerald-400 pb-3 font-semibold text-zinc-50';
-      tabBtnModrinth.className = 'tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200';
-      panelInstalled.classList.remove('hidden');
-      panelModrinth.classList.add('hidden');
-    } else {
-      tabBtnModrinth.className = 'tab-pill -mb-px border-b-2 border-emerald-400 pb-3 font-semibold text-zinc-50';
-      tabBtnInstalled.className = 'tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200';
-      panelModrinth.classList.remove('hidden');
-      panelInstalled.classList.add('hidden');
-    }
+    mainTabs.forEach((name) => {
+      const button = $(`#tab-btn-${name}`);
+      const panel = $(`#panel-${name}`);
+      if (button) {
+        button.className = name === tab ? TAB_ACTIVE : TAB_IDLE;
+        button.setAttribute('aria-current', name === tab ? 'page' : 'false');
+      }
+      panel?.classList.toggle('hidden', name !== tab);
+    });
+    if (tab === 'history') loadHistory();
   }
 
-  tabBtnInstalled?.addEventListener('click', () => switchMainTab('installed'));
-  tabBtnModrinth?.addEventListener('click', () => switchMainTab('modrinth'));
+  mainTabs.forEach((name) => $(`#tab-btn-${name}`)?.addEventListener('click', () => switchMainTab(name)));
 
   // 11. BÚSQUEDA Y CATÁLOGO MODRINTH CON RESOLUCIÓN DE DEPENDENCIAS
   if (modrinthForm) {
@@ -636,15 +636,15 @@ document.addEventListener('DOMContentLoaded', () => {
           method: 'POST',
           body: installBody,
         });
-        Panel.toast(`¡Mod "${mod.name}" y sus librerías requeridas instalados correctamente!`, 'success');
+        Panel.toast(`Instalaste ${mod.name}.${UNDO_HINT}`, 'success');
         installBtn.replaceWith(document.createRange().createContextualFragment(
-          `<span class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-300">✓ Ya Instalado</span>`
+          `<span class="shrink-0 py-2 text-sm text-zinc-500">Ya lo tenés</span>`
         ));
         await loadMods();
       } catch (err) {
         Panel.toast(err.message, 'error');
         installBtn.disabled = false;
-        installBtn.textContent = 'Instalar Mod';
+        installBtn.textContent = 'Instalar';
       }
     });
   }
@@ -673,6 +673,137 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // 13. HISTORIAL Y VOLVER ATRÁS
+  const historyList = $('#history-list');
+  const historyEmpty = $('#history-empty');
+  const historyDialog = $('#modal-history-restore');
+  const historyConsequence = $('#history-restore-consequence');
+  const confirmHistoryRestore = $('#confirm-history-restore');
+  let historyTarget = null;
+
+  // "12 de octubre a las 18:04", the way people say it.
+  const formatMoment = (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    const sameYear = date.getFullYear() === new Date().getFullYear();
+    const dayOptions = sameYear ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' };
+    const day = date.toLocaleDateString('es-AR', dayOptions);
+    const time = date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    return `${day} a las ${time}`;
+  };
+
+  // "hace 5 minutos", "ayer", "hace 3 días"; older points show their date.
+  const relativeTime = (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+    const abs = Math.abs(seconds);
+    const format = new Intl.RelativeTimeFormat('es-AR', { numeric: 'auto' });
+    if (abs < 60) return 'recién';
+    if (abs < 3600) return format.format(Math.round(seconds / 60), 'minute');
+    if (abs < 86400) return format.format(Math.round(seconds / 3600), 'hour');
+    if (abs < 86400 * 7) return format.format(Math.round(seconds / 86400), 'day');
+    return `el ${formatMoment(value)}`;
+  };
+
+  async function loadHistory() {
+    if (!historyList) return;
+    try {
+      const entries = await Panel.api('/api/mods/history');
+      if (!entries.length) {
+        historyList.classList.add('hidden');
+        historyEmpty?.classList.remove('hidden');
+        return;
+      }
+      historyEmpty?.classList.add('hidden');
+      historyList.classList.remove('hidden');
+      historyList.innerHTML = entries.map((entry) => {
+        const id = esc(entry.id);
+        const missingNote = entry.restorable
+          ? ''
+          : ' · <span class="text-[#f3a79b]">Faltan archivos de este punto, no se puede volver</span>';
+        return `
+          <article class="flex flex-col gap-3 border-b border-zinc-800 py-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0 flex-1">
+              <h3 class="font-semibold text-zinc-50">${esc(entry.summary)}</h3>
+              <p class="mt-0.5 text-sm text-zinc-500"><time datetime="${esc(entry.created_at)}" title="${esc(formatMoment(entry.created_at))}">${esc(relativeTime(entry.created_at))}</time>${missingNote}</p>
+              <details class="history-details mt-2 text-sm" data-history-id="${id}">
+                <summary class="cursor-pointer text-zinc-400 hover:text-zinc-200">Qué cambia si volvés acá</summary>
+                <div class="history-diff mt-2 leading-relaxed text-zinc-400"><p class="text-zinc-500">Revisando…</p></div>
+              </details>
+            </div>
+            <button type="button" class="history-restore-btn v2-button btn-quiet shrink-0" data-history-id="${id}" data-created-at="${esc(entry.created_at)}" ${entry.restorable ? '' : 'disabled'}>Volver a este punto</button>
+          </article>`;
+      }).join('');
+    } catch (err) {
+      historyEmpty?.classList.add('hidden');
+      historyList.classList.remove('hidden');
+      historyList.innerHTML = `<p class="py-12 text-center text-[#f3a79b]">No pudimos cargar el historial. ${esc(err.message)}</p>`;
+    }
+  }
+
+  async function loadHistoryDiff(details) {
+    if (details.dataset.loaded === 'true') return;
+    const target = details.querySelector('.history-diff');
+    try {
+      const detail = await Panel.api(`/api/mods/history/${encodeURIComponent(details.dataset.historyId)}`);
+      const lines = detail.lines.length
+        ? `<ul class="space-y-1">${detail.lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>`
+        : '<p>Tus mods ya están así.</p>';
+      const missing = detail.missing.length
+        ? `<p class="mt-2 text-[#f3a79b]">Ya no tenemos: ${detail.missing.map((mod) => esc(mod.name)).join(', ')}.</p>`
+        : '';
+      target.innerHTML = lines + missing;
+      details.dataset.loaded = 'true';
+    } catch (err) {
+      target.innerHTML = `<p class="text-[#f3a79b]">${esc(err.message)}</p>`;
+    }
+  }
+
+  if (historyList) {
+    // "toggle" does not bubble, so listen in the capture phase.
+    historyList.addEventListener('toggle', (event) => {
+      const details = event.target;
+      if (details.classList && details.classList.contains('history-details') && details.open) loadHistoryDiff(details);
+    }, true);
+
+    historyList.addEventListener('click', (event) => {
+      const button = event.target.closest('.history-restore-btn');
+      if (!button || button.disabled) return;
+      historyTarget = button.dataset.historyId;
+      if (historyConsequence) {
+        historyConsequence.textContent = `Tus mods quedan como estaban el ${formatMoment(button.dataset.createdAt)}. Primero apagá el servidor.`;
+      }
+      historyDialog?.showModal();
+    });
+  }
+
+  $('#cancel-history-restore')?.addEventListener('click', () => {
+    historyTarget = null;
+    historyDialog?.close();
+  });
+
+  confirmHistoryRestore?.addEventListener('click', async () => {
+    if (!historyTarget) return;
+    confirmHistoryRestore.disabled = true;
+    confirmHistoryRestore.textContent = 'Volviendo…';
+    try {
+      const result = await Panel.api(`/api/mods/history/${encodeURIComponent(historyTarget)}/restore`, {
+        method: 'POST',
+        body: { confirm: true },
+      });
+      historyDialog?.close();
+      Panel.toast(result.undo_id ? result.message + UNDO_HINT : result.message, 'success');
+      historyTarget = null;
+      await Promise.all([loadMods(), loadHistory()]);
+    } catch (err) {
+      Panel.toast(err.message, 'error');
+    } finally {
+      confirmHistoryRestore.disabled = false;
+      confirmHistoryRestore.textContent = 'Volver a este punto';
+    }
+  });
 
   // Carga inicial
   loadEnvironment();
