@@ -94,3 +94,22 @@ async def test_ram_selector_writes_memory_into_an_existing_file(tmp_path: Path, 
     assert path.read_text(encoding="utf-8") == "# mine\nmemory = 4G\n"
     assert result.allocated_ram_gb == 4
     assert (await endpoints_runtime.get_launch_settings()).allocated_ram_gb == 4
+
+
+def test_cache_sees_same_size_saves_from_another_instance(tmp_path: Path) -> None:
+    """Two saves in one Windows clock tick keep mtime and size; the cache must still notice."""
+    import os
+
+    from app.services.server_settings_file import ServerSettingsFile
+
+    configured = settings_for(tmp_path)
+    path = write_file(configured, "memory = 3G\n")
+    reader, writer = ServerSettingsFile(), ServerSettingsFile()
+    assert reader.load(configured).values["memory"] == 3
+    before = path.stat()
+
+    writer.save_fields(configured, values={"memory": "4G"})
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))  # same tick, same size
+    assert path.stat().st_size == before.st_size
+
+    assert reader.load(configured).values["memory"] == 4

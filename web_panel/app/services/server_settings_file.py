@@ -932,7 +932,7 @@ class ServerSettingsFile:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._cache: dict[str, tuple[tuple[int, int], ServerFileSettings]] = {}
+        self._cache: dict[str, tuple[tuple[int, int, int], ServerFileSettings]] = {}
 
     @staticmethod
     def path(configured: Settings) -> Path:
@@ -950,7 +950,10 @@ class ServerSettingsFile:
             stat = path.stat()
         except OSError:
             return ServerFileSettings()
-        signature = (stat.st_mtime_ns, stat.st_size)
+        # Windows file times move in ~15 ms steps, so two same-size saves can share mtime and size.
+        # Every save goes through os.replace, which gives the file a new identity (st_ino), so
+        # including it means a save by any instance in this process is never served from a stale cache.
+        signature = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
         key = str(path)
         with self._lock:
             cached = self._cache.get(key)
