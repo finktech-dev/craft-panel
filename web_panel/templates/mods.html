@@ -2,6 +2,7 @@
 {% block title %}Mods · Craft Panel{% endblock %}
 
 {% block content %}
+{%- from "_icons.html" import pixel -%}
 <div class="mx-auto max-w-3xl">
   <header class="pb-8">
     <h1 class="font-display text-4xl font-semibold text-zinc-50">Mods</h1>
@@ -14,6 +15,7 @@
   <nav class="flex gap-6 border-b border-zinc-800" aria-label="Secciones de mods">
     <button id="tab-btn-installed" data-tab="installed" type="button" class="tab-pill -mb-px border-b-2 border-emerald-400 pb-3 font-semibold text-zinc-50">Tus mods (<span id="tab-badge-installed">0</span>)</button>
     <button id="tab-btn-modrinth" data-tab="modrinth" type="button" class="tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Buscar mods nuevos</button>
+    <button id="tab-btn-history" data-tab="history" type="button" class="tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Historial</button>
   </nav>
 
   <!-- Installed mods -->
@@ -110,6 +112,20 @@
       <p class="py-12 text-center text-zinc-500">Escribí el nombre de un mod para buscarlo.</p>
     </div>
   </section>
+
+  <!-- History -->
+  <section id="panel-history" class="hidden pt-6" aria-labelledby="history-heading">
+    <h2 id="history-heading" class="sr-only">Historial</h2>
+    <p class="max-w-xl leading-relaxed text-zinc-400">Antes de cada cambio guardamos cómo estaban tus mods. Si algo dejó de andar, volvé a un punto anterior: se deshace ese cambio y todos los que vinieron después.</p>
+    <div id="history-list" class="mt-5 border-t border-zinc-800" aria-live="polite">
+      <p class="py-12 text-center text-zinc-500">Cargando el historial…</p>
+    </div>
+    <div id="history-empty" class="hidden border-t border-zinc-800 py-14 text-center">
+      <div class="flex justify-center text-zinc-600">{{ pixel('mods', 48) }}</div>
+      <h3 class="mt-4 text-lg font-semibold text-zinc-100">Todavía no hay cambios</h3>
+      <p class="mx-auto mt-1 max-w-sm text-zinc-400">Cuando agregues, actualices o quites un mod, vas a poder volver atrás desde acá.</p>
+    </div>
+  </section>
 </div>
 
 <dialog id="modal-upload-mod" class="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-0 text-zinc-100 backdrop:bg-black/70">
@@ -149,6 +165,18 @@
     <div class="mt-6 flex justify-end gap-3">
       <button id="cancel-bulk-delete" type="button" class="v2-button btn-quiet">Cancelar</button>
       <button id="confirm-bulk-delete" type="button" class="v2-button bg-[#ec7a6a] text-[#2a0f0b] hover:bg-[#f3a79b]">Quitar</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="modal-history-restore" class="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-0 text-zinc-100 backdrop:bg-black/70">
+  <div class="p-6">
+    <h3 class="text-lg font-semibold">¿Volver a este punto?</h3>
+    <p id="history-restore-consequence" class="mt-3 leading-relaxed text-zinc-300"></p>
+    <p class="mt-3 leading-relaxed text-zinc-400">Antes guardamos cómo están tus mods ahora, así que también vas a poder deshacer esto.</p>
+    <div class="mt-6 flex justify-end gap-3">
+      <button id="cancel-history-restore" type="button" class="v2-button btn-quiet">Cancelar</button>
+      <button id="confirm-history-restore" type="button" class="v2-button btn-primary">Volver a este punto</button>
     </div>
   </div>
 </dialog>
