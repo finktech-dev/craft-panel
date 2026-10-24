@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from app.core.config import Settings, settings
+from app.core.privacy import redact_personal_paths
 from app.services.crash_analyzer import crash_analyzer
 from app.services.discord_service import discord_service
 from app.services.external_server_service import ExternalServerDetector
@@ -571,6 +572,8 @@ class MinecraftServerManager:
                 asyncio.create_task(listener(), name="server-crash-listener")
 
     async def _record_log(self, stream: str, message: str) -> None:
+        # Java and mods print absolute paths; never show the host's user folder in the console.
+        message = redact_personal_paths(message)
         line = TerminalLine(
             timestamp=datetime.now(UTC).isoformat(),
             stream=stream,

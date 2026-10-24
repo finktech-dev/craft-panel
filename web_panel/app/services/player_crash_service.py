@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.core.config import Settings, settings
+from app.core.privacy import redact_personal_paths
 from app.schemas.player_crashes import PlayerCrashEvent, PlayerCrashesListResponse
 
 # Patrones para detectar desconexiones en logs de Minecraft.
@@ -419,10 +420,10 @@ class PlayerCrashService:
                         category=category,
                         category_label=cat_label,
                         severity=severity,
-                        summary=reason_detail or "El jugador perdió la conexión",
+                        summary=redact_personal_paths(reason_detail) or "El jugador perdió la conexión",
                         timestamp=timestamp,
                         file_source=filename,
-                        context_lines=context_block,
+                        context_lines=[redact_personal_paths(line) for line in context_block],
                         suspected_mod=suspected_mod,
                         suggestion=suggestion,
                     )
