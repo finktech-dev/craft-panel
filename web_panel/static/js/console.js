@@ -358,6 +358,19 @@ document.addEventListener('DOMContentLoaded', () => {
     input.value = '';
   });
 
+  // Each line carries a number; after a reconnect only the missing ones are added.
+  // A new panel session restarts the numbering, so the count starts over too.
+  let lastSeq = 0;
+  let logSession = null;
+  let dropNotified = false;
+  const appendNew = (line) => {
+    if (Number.isInteger(line?.seq)) {
+      if (line.seq <= lastSeq) return;
+      lastSeq = line.seq;
+    }
+    appendLine(line);
+  };
+
   // WebSocket Connection with Status Badge
   const connect = () => {
     socketDot.className = 'h-2 w-2 rounded-full bg-[#e8b04b]';
@@ -368,16 +381,21 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.addEventListener('open', () => {
       socketDot.className = 'h-2 w-2 rounded-full bg-emerald-400';
       socketText.textContent = 'Conectada, en vivo';
+      dropNotified = false;
     });
 
     socket.addEventListener('message', (event) => {
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === 'history') {
-          payload.lines.forEach(appendLine);
+          if (payload.session && payload.session !== logSession) {
+            logSession = payload.session;
+            lastSeq = 0;
+          }
+          payload.lines.forEach(appendNew);
         }
         if (payload.type === 'log') {
-          appendLine(payload.line);
+          appendNew(payload.line);
         }
         if (payload.type === 'error') {
           Panel.toast(payload.message, 'error');
@@ -390,7 +408,9 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.addEventListener('close', () => {
       socketDot.className = 'h-2 w-2 rounded-full bg-[#ec7a6a]';
       socketText.textContent = 'Sin conexión';
-      Panel.toast('Se cortó la consola. Volvemos a intentar en 3 segundos.', 'error');
+      // One notice per outage, not one every retry.
+      if (!dropNotified) Panel.toast('Se cortó la consola. Volvemos a conectar solos.', 'error');
+      dropNotified = true;
       window.setTimeout(connect, 3000);
     });
   };

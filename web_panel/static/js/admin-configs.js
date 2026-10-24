@@ -207,7 +207,8 @@
           const codeEl = $('#config-code');
           current = await Panel.api('/api/configs/' + encodeURIComponent(current.path).replaceAll('%2F', '/'), {
             method: 'POST',
-            body: { content: codeEl ? codeEl.value : '' },
+            // The fingerprint stops this from overwriting changes made elsewhere since it was opened.
+            body: { content: codeEl ? codeEl.value : '', expected_fingerprint: current.fingerprint || null },
           });
           Panel.toast('Archivo revisado y guardado.');
         } catch (e) {

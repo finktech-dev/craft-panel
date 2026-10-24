@@ -45,6 +45,6 @@ async def config_read(filepath: str) -> ConfigDocument:
 @router.post("/configs/{filepath:path}", response_model=ConfigDocument)
 async def config_save(filepath: str, payload: ConfigSaveRequest) -> ConfigDocument:
     try:
-        return await config_service.save(filepath, payload.content, payload.changes)
+        return await config_service.save(filepath, payload.content, payload.changes, payload.expected_fingerprint)
     except ConfigServiceError as error:
         raise HTTPException(error.status_code, str(error)) from error

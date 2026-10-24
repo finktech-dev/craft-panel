@@ -1,6 +1,6 @@
 """Config editor limited to server/config, with no arbitrary paths."""
 from __future__ import annotations
-import asyncio, json, os, re, shutil, subprocess, sys, uuid
+import asyncio, hashlib, json, os, re, shutil, subprocess, sys, uuid
 from pathlib import Path
 import json5, tomlkit
 from app.core.config import Settings, settings
@@ -49,7 +49,7 @@ class ConfigService:
   raw=p.read_text(encoding='utf-8'); fmt=p.suffix.lower().lstrip('.')
   try: data=tomlkit.parse(raw) if fmt=='toml' else (json5.loads(raw) if fmt in {'json','json5','jsonc'} else self._cfg(raw))
   except Exception as e: raise ConfigServiceError(f'No se pudo parsear {rel}: {e}') from e
-  return ConfigDocument(path=rel,format=fmt,raw_content=raw,tree=self._node('root',data,'',None))
+  return ConfigDocument(path=rel,format=fmt,raw_content=raw,tree=self._node('root',data,'',None),fingerprint=_fingerprint(raw))
  def _cfg(self, raw):
   return {m.group(1).strip(): self._scalar(m.group(2).strip()) for m in re.finditer(r'^\s*([^#;=]+?)\s*=\s*(.*?)\s*$',raw,re.M)}
  def _scalar(self,v):
@@ -62,12 +62,25 @@ class ConfigService:
   typ='boolean' if isinstance(v,bool) else 'number' if isinstance(v,(int,float)) else 'list' if isinstance(v,list) else 'null' if v is None else 'string'
   text=str(comment or ''); m=re.search(r'Range:\s*([-+\d.]+)\s*~\s*([-+\d.]+)',text,re.I)
   return ConfigNode(path=full,key=key,type=typ,value=v,comment=text.lstrip('# ').strip() or None,minimum=float(m.group(1)) if m else None,maximum=float(m.group(2)) if m else None)
- async def save(self,rel,content,changes=None):
+ async def save(self,rel,content,changes=None,expected_fingerprint=None):
   p=self.path(rel); fmt=p.suffix.lower().lstrip('.')
+  if changes is not None and fmt!='toml': raise ConfigServiceError('El formulario visual preserva comentarios solo para TOML; usá el editor de código.')
+  try: require_server_stopped(self.m, 'guardar configuraciones de mods')
+  except ServerActiveError as e: raise ConfigConflictError(str(e)) from e
+  try: require_not_protected(p, configured=self.s)
+  except ProtectedPathError as e: raise ConfigConflictError(str(e)) from e
+  # Read, change and write under one lock: two quick switches never undo each other.
+  async with self.lock:
+   await asyncio.to_thread(self._save_sync,p,fmt,content,changes,expected_fingerprint)
+  return await self.read(rel)
+ def _save_sync(self,p,fmt,content,changes,expected_fingerprint):
+  current=p.read_text(encoding='utf-8') if p.is_file() else ''
+  # A whole-file save must start from what is on disk now; it may have changed in Notepad meanwhile.
+  if expected_fingerprint is not None and expected_fingerprint!=_fingerprint(current):
+   raise ConfigConflictError('Este archivo cambió desde que lo abriste (quizás en el Bloc de notas). Cerralo y volvé a abrirlo para ver lo último; tu texto no se guardó.')
   if changes is not None:
-   if fmt!='toml': raise ConfigServiceError('El formulario visual preserva comentarios solo para TOML; usá el editor de código.')
    try:
-    doc=tomlkit.parse(p.read_text(encoding='utf-8'))
+    doc=tomlkit.parse(current)
     for path,value in changes.items():
      target=doc; parts=path.split('.')
      for key in parts[:-1]: target=target[key]
@@ -76,15 +89,9 @@ class ConfigService:
    except Exception as e: raise ConfigServiceError(f'No se pudo aplicar el cambio: {e}') from e
   if content is None: raise ConfigServiceError('No se recibió contenido para guardar.')
   if len(content.encode('utf-8'))>_MAX_CONFIG_BYTES: raise ConfigServiceError('El contenido es demasiado grande.')
-  try: require_server_stopped(self.m, 'guardar configuraciones de mods')
-  except ServerActiveError as e: raise ConfigConflictError(str(e)) from e
-  try: require_not_protected(p, configured=self.s)
-  except ProtectedPathError as e: raise ConfigConflictError(str(e)) from e
   try: tomlkit.parse(content) if fmt=='toml' else (json5.loads(content) if fmt in {'json','json5','jsonc'} else self._cfg(content))
   except Exception as e: raise ConfigServiceError(f'Sintaxis inválida: {e}') from e
-  async with self.lock:
-   await asyncio.to_thread(self._atomic,p,content)
-  return await self.read(rel)
+  self._atomic(p,content)
  def system_editor(self) -> str | None:
   """Plain name of the text editor this computer would use, or None when there is none."""
   return _system_editor()[0]
@@ -103,6 +110,8 @@ class ConfigService:
   return name
  def _atomic(self,p,content):
   tmp=p.with_name(f'.{p.name}.{uuid.uuid4().hex}.tmp'); tmp.write_text(content,encoding='utf-8'); os.replace(tmp,p)
+def _fingerprint(text: str) -> str:
+ return hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
 def _system_editor() -> tuple[str | None, list[str] | None]:
  """The plain-text editor for this OS. Notepad is used explicitly so a file is never executed."""
  if sys.platform == 'win32':
