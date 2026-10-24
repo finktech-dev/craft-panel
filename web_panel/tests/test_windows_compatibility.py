@@ -231,14 +231,22 @@ def test_java_discovery_tolerates_non_utf8_console_output(tmp_path: Path) -> Non
 
 
 def test_playit_service_query_tolerates_localized_sc_output(monkeypatch, tmp_path: Path) -> None:
+    import psutil
+
     received: dict[str, object] = {}
 
     def fake_run(args, **kwargs):
         received.update(kwargs)
         return subprocess.CompletedProcess(args=args, returncode=1060, stdout="", stderr="")
 
+    def denied(_name):
+        raise psutil.AccessDenied()
+
     monkeypatch.setattr("app.services.playit_service.platform.system", lambda: "Windows")
+    monkeypatch.setattr("app.services.playit_service.psutil.win_service_get", denied, raising=False)
     monkeypatch.setattr("app.services.playit_service.subprocess.run", fake_run)
+    monkeypatch.setenv("ProgramFiles", str(tmp_path))
+    monkeypatch.setenv("ProgramW6432", str(tmp_path))
 
     assert PlayitService(configured_settings=Settings(project_root=tmp_path)).uses_external_agent is False
     assert received.get("errors") == "replace"

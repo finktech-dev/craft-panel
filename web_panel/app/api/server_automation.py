@@ -47,7 +47,9 @@ async def start_with_panel() -> None:
         return
     if server_manager.is_running:
         return
-    if settings.playit_enabled and _endpoints().playit_service.needs_setup:
+    tunnel = _endpoints().playit_service
+    # A stopped official Playit app is fine: the start job turns it on.
+    if settings.playit_enabled and tunnel.needs_setup and not tunnel.can_start_external_agent:
         logger.info("Not starting with the panel: Playit still needs to be connected.")
         return
     if reason := await _blocked_reason():

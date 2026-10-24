@@ -29,6 +29,12 @@ class OnboardingStatus(BaseModel):
     loader_version: str | None = None
     playit_connected: bool
     playit_enabled: bool = True
+    # The official Playit app for Windows: running, installed but stopped, or not installed.
+    playit_state: Literal["running", "stopped", "not_installed"] = "not_installed"
+    playit_message: str = ""
+    playit_autostart: bool | None = None
+    playit_download_url: str = "https://playit.gg/download"
+    friend_address: str | None = None
     whitelist_enabled: bool = False
     whitelisted_players: int = 0
     public_address: str | None

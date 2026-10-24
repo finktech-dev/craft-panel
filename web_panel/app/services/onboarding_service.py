@@ -7,11 +7,18 @@ import json
 
 from app.core.config import Settings, settings
 from app.schemas.onboarding import InstallFlavor, OnboardingStatus
+from app.services.friend_address import panel_address
 from app.services.playit_service import PlayitService, playit_service
 from app.services.runtime_discovery import RuntimeDiscoveryService, runtime_discovery_service
 from app.services.version_catalog_service import VersionCatalogError, VersionCatalogService, version_catalog_service
 
 _RECOMMENDED_COUNT = 10
+_PLAYIT_MESSAGES = {
+    "running": "Playit ya está instalado y funcionando.",
+    "stopped": "Playit está instalado, pero apagado.",
+    "broken": "Playit está instalado, pero le falta una parte. Volvé a instalarlo desde la página de Playit.",
+    "not_installed": "Playit no está instalado en esta computadora.",
+}
 _INSTALL_FLAVORS: tuple[InstallFlavor, ...] = ("vanilla", "neoforge", "fabric")
 
 
@@ -34,11 +41,15 @@ class OnboardingService:
         tunnel = self._tunnel.status()
         server_ready = runtime.minecraft.state == "detected" and bool(runtime.minecraft.start_script)
         whitelist_enabled, whitelisted_players = self._whitelist_state()
+        playit_state = getattr(tunnel, "external_agent", "not_installed")
+        can_start_playit = bool(getattr(self._tunnel, "can_start_external_agent", False))
+        # A stopped official Playit app counts as ready: "Encender" turns it on.
+        playit_ready = not tunnel.needs_setup or can_start_playit
         if runtime.java.state != "available":
             first_step = "java"
         elif not server_ready:
             first_step = "server"
-        elif self._settings.playit_enabled and (tunnel.needs_setup or not whitelist_enabled):
+        elif self._settings.playit_enabled and (not playit_ready or not whitelist_enabled):
             # Sharing over the Internet without a friends list lets anyone join.
             first_step = "connection"
         else:
@@ -53,8 +64,12 @@ class OnboardingService:
             server_flavor=runtime.minecraft.loader,
             minecraft_version=runtime.minecraft.minecraft_version,
             loader_version=runtime.minecraft.loader_version,
-            playit_connected=not tunnel.needs_setup,
+            playit_connected=playit_ready,
             playit_enabled=self._settings.playit_enabled,
+            playit_state=playit_state,
+            playit_message=_PLAYIT_MESSAGES[playit_state if playit_state != "stopped" or can_start_playit else "broken"],
+            playit_autostart=getattr(tunnel, "external_autostart", None),
+            friend_address=self._friend_address(tunnel),
             whitelist_enabled=whitelist_enabled,
             whitelisted_players=whitelisted_players,
             public_address=tunnel.public_address,
@@ -79,6 +94,10 @@ class OnboardingService:
 
         results = await asyncio.gather(*(newest(flavor) for flavor in _INSTALL_FLAVORS))
         return dict(zip(_INSTALL_FLAVORS, results, strict=True))
+
+    def _friend_address(self, tunnel) -> str | None:  # noqa: ANN001 - TunnelStatus or a test double
+        """The address friends use, from Playit, craftpanel.txt or the panel, if there is one."""
+        return tunnel.public_address or panel_address(self._settings)
 
     def _whitelist_state(self) -> tuple[bool, int]:
         server = self._settings.server_directory

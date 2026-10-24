@@ -36,7 +36,8 @@ GITHUB_RELEASE_HOSTS = frozenset({
     "release-assets.githubusercontent.com",
 })
 ADOPTIUM_HOSTS = frozenset({"api.adoptium.net"}) | GITHUB_RELEASE_HOSTS
-PLAYIT_HOSTS = frozenset({"api.playit.gg"}) | GITHUB_RELEASE_HOSTS
+PLAYIT_API_HOSTS = frozenset({"api.playit.gg"})
+PLAYIT_HOSTS = PLAYIT_API_HOSTS | GITHUB_RELEASE_HOSTS
 DISCORD_WEBHOOK_HOSTS = frozenset({"discord.com", "discordapp.com", "ptb.discord.com", "canary.discord.com"})
 
 

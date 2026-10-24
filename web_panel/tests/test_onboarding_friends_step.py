@@ -56,3 +56,69 @@ async def test_public_server_with_friends_list_is_ready(tmp_path: Path) -> None:
 async def test_local_only_server_is_not_blocked(tmp_path: Path) -> None:
     status = await (_service(tmp_path, playit_enabled=False, whitelist=False, players=0).status())
     assert status.first_step == "ready"
+
+
+class OfficialPlayit:
+    """The official Playit app in one of its states, as PlayitService reports it."""
+
+    def __init__(self, state: str, *, can_start: bool = False, address: str | None = None, autostart: bool | None = False) -> None:
+        self.can_start_external_agent = can_start
+        self._status = SimpleNamespace(
+            needs_setup=state != "running",
+            public_address=address,
+            external_agent=state,
+            external_autostart=autostart,
+        )
+
+    def status(self):
+        return self._status
+
+
+def _with_tunnel(tmp_path: Path, tunnel) -> OnboardingService:
+    service = _service(tmp_path, playit_enabled=True, whitelist=True, players=1)
+    service._tunnel = tunnel
+    return service
+
+
+@pytest.mark.asyncio
+async def test_running_official_playit_is_ready_and_never_asks_to_link(tmp_path: Path) -> None:
+    status = await _with_tunnel(tmp_path, OfficialPlayit("running", address="example-words.gl.joinmc.link")).status()
+
+    assert status.first_step == "ready" and status.playit_connected is True
+    assert status.playit_state == "running"
+    assert status.playit_message == "Playit ya está instalado y funcionando."
+    assert status.friend_address == "example-words.gl.joinmc.link"
+
+
+@pytest.mark.asyncio
+async def test_stopped_official_playit_does_not_block_because_start_turns_it_on(tmp_path: Path) -> None:
+    status = await _with_tunnel(tmp_path, OfficialPlayit("stopped", can_start=True)).status()
+
+    assert status.first_step == "ready" and status.playit_connected is True
+    assert status.playit_state == "stopped" and status.playit_autostart is False
+    assert status.playit_message == "Playit está instalado, pero apagado."
+
+
+@pytest.mark.asyncio
+async def test_official_playit_without_its_service_asks_to_reinstall(tmp_path: Path) -> None:
+    status = await _with_tunnel(tmp_path, OfficialPlayit("stopped", can_start=False, autostart=None)).status()
+
+    assert status.first_step == "connection" and status.playit_connected is False
+    assert "Volvé a instalarlo" in status.playit_message
+
+
+@pytest.mark.asyncio
+async def test_without_playit_the_friends_step_offers_the_download(tmp_path: Path) -> None:
+    status = await _with_tunnel(tmp_path, OfficialPlayit("not_installed", autostart=None)).status()
+
+    assert status.first_step == "connection" and status.playit_state == "not_installed"
+    assert status.playit_download_url == "https://playit.gg/download"
+
+
+@pytest.mark.asyncio
+async def test_pasted_address_counts_as_the_friends_address(tmp_path: Path) -> None:
+    service = _with_tunnel(tmp_path, OfficialPlayit("running"))
+    assert service._settings.panel_directory is not None
+    (service._settings.panel_directory / ".server_connection.json").write_text('{"public_address": "pasted.ply.gg:4000"}', encoding="utf-8")
+
+    assert (await service.status()).friend_address == "pasted.ply.gg:4000"

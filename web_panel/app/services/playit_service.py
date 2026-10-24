@@ -16,9 +16,20 @@ from pathlib import Path
 from typing import Final
 
 import httpx
+import psutil
 
 from app.core.config import Settings, settings
 from app.core.net_safety import PLAYIT_HOSTS, allowed_client, download_to_file
+from app.services.playit_host import (
+    PlayitAddressError,
+    PlayitHostStatus,
+    detect_playit_host,
+    official_secret_path,
+    pick_minecraft_address,
+    read_tunnels_from_api,
+    read_tunnels_from_pipe,
+    start_official_service,
+)
 from app.core.path_safety import write_private_text
 from app.schemas.runtime import TunnelLogLine, TunnelStatus
 from app.websocket.manager import ConnectionManager, connection_manager
@@ -27,6 +38,7 @@ logger = logging.getLogger(__name__)
 _RELEASE_API_URL = "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
 _PLAYIT_API = "https://api.playit.gg"
 _MAX_AGENT_BYTES = 128 * 1024 * 1024
+_OPEN_PLAYIT_HINT = "Playit está instalado pero apagado. Abrí Playit.gg desde el menú Inicio y probá de nuevo."
 _PUBLIC_ADDRESS: Final[re.Pattern[str]] = re.compile(
     r"\b(?:[a-z0-9-]+\.)+(?:joinmc\.link|playit\.gg|ply\.gg)(?::\d{2,5})?\b",
     re.IGNORECASE,
@@ -52,41 +64,43 @@ class PlayitService:
         self._stop_requested = False
         self._history: deque[TunnelLogLine] = deque(maxlen=configured_settings.log_buffer_size)
         self._lock = asyncio.Lock()
-        self._external_agent_running = False
-        self._external_agent_checked_at = 0.0
+        self._host_status = PlayitHostStatus(state="not_installed")
+        self._host_checked_at = 0.0
 
     @property
     def is_running(self) -> bool:
         return self._process is not None and self._process.returncode is None
 
+    def host_status(self) -> PlayitHostStatus:
+        """The official Playit app on this PC (installed, stopped or running), cached for 2 seconds."""
+        now = time.monotonic()
+        if now - self._host_checked_at < 2:
+            return self._host_status
+        self._host_checked_at = now
+        self._host_status = detect_playit_host(
+            system_name=platform.system(),
+            service_get=getattr(psutil, "win_service_get", None),
+            run=subprocess.run,
+        )
+        return self._host_status
+
+    def _forget_host_status(self) -> None:
+        self._host_checked_at = 0.0
+
     @property
     def uses_external_agent(self) -> bool:
-        """Whether an existing OS-managed Playit service is already running.
+        """Whether the official Playit service (``playitd``) is already running.
 
-        On Windows the official installer registers ``playitd`` as a service.
-        The panel deliberately does not read or copy that service's secret.
+        The panel then never starts a second agent and never reads or copies that
+        service's agent key to run one.
         """
-        if platform.system().lower() != "windows":
-            return False
-        now = time.monotonic()
-        if now - self._external_agent_checked_at < 2:
-            return self._external_agent_running
-        self._external_agent_checked_at = now
-        try:
-            result = subprocess.run(
-                ("sc.exe", "query", "playitd"),
-                capture_output=True,
-                text=True,
-                # sc.exe prints localized text in the OEM code page.
-                errors="replace",
-                timeout=1,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            self._external_agent_running = False
-            return False
-        self._external_agent_running = result.returncode == 0 and "RUNNING" in result.stdout.upper()
-        return self._external_agent_running
+        return self.host_status().state == "running"
+
+    @property
+    def can_start_external_agent(self) -> bool:
+        """The official app is installed but its service is stopped (it starts manually)."""
+        host = self.host_status()
+        return host.state == "stopped" and host.service_installed and host.app_installed
 
     @property
     def history(self) -> tuple[TunnelLogLine, ...]:
@@ -99,7 +113,10 @@ class PlayitService:
         return not self._settings.playit_secret_path.is_file() and not self.uses_external_agent
 
     def status(self) -> TunnelStatus:
+        host = self.host_status()
         return TunnelStatus(
+            external_agent=host.state,
+            external_autostart=host.starts_automatically,
             is_running=self.is_running or self.uses_external_agent,
             public_address=self._public_address or self._settings.effective_public_address,
             message=self._status_message(),
@@ -117,6 +134,10 @@ class PlayitService:
                 return self.status()
             if self.uses_external_agent:
                 await self._record("Usando el servicio Playit ya instalado en esta computadora.")
+                return self.status()
+            assert self._settings.playit_secret_path is not None
+            if self.can_start_external_agent and not self._settings.playit_secret_path.is_file():
+                await self._start_external_agent()
                 return self.status()
             secret = await self._read_secret()
             await self.ensure_installed()
@@ -143,6 +164,55 @@ class PlayitService:
             self._reader_task = asyncio.create_task(self._read_output(self._process.stdout), name="playit-output")
             self._watcher_task = asyncio.create_task(self._watch_process(self._process), name="playit-watch")
             return self.status()
+
+    async def start_external_agent(self) -> TunnelStatus:
+        """Turn on the official Playit service, the same way its Start menu shortcut does."""
+        async with self._lock:
+            if not self.uses_external_agent:
+                await self._start_external_agent()
+            return self.status()
+
+    async def _start_external_agent(self) -> None:
+        if not self.can_start_external_agent:
+            raise PlayitServiceError(_OPEN_PLAYIT_HINT)
+        await self._record("Encendiendo Playit…")
+        await asyncio.to_thread(start_official_service)
+        for _ in range(30):
+            self._forget_host_status()
+            if self.uses_external_agent:
+                await self._record("Playit está encendido.", level="success")
+                return
+            await asyncio.sleep(0.5)
+        self._last_error = _OPEN_PLAYIT_HINT
+        await self._record(self._last_error, level="error")
+        raise PlayitServiceError(self._last_error)
+
+    async def read_external_address(self, server_port: int, *, use_agent_key: bool = True) -> str:
+        """Public address of the Minecraft tunnel of the official Playit app.
+
+        First the service's local status pipe (no secret involved); if that is
+        not possible, one request to Playit's agent API with the key from
+        ``playit.toml``, used only in memory. Raises :class:`PlayitAddressError`.
+        """
+        host = self.host_status()
+        if host.state == "not_installed":
+            raise PlayitAddressError("No encontramos Playit instalado en esta computadora.")
+        tunnels = []
+        if host.state == "running":
+            try:
+                tunnels = await asyncio.to_thread(read_tunnels_from_pipe)
+            except PlayitAddressError as error:
+                logger.info("The Playit status pipe did not answer: %s", error)
+        if not tunnels:
+            if not use_agent_key:
+                raise PlayitAddressError("Playit todavía no muestra una dirección.")
+            tunnels = await read_tunnels_from_api(official_secret_path())
+        address = pick_minecraft_address(tunnels, server_port)
+        if address is None:
+            raise PlayitAddressError(
+                "No encontramos un túnel de Minecraft en tu Playit. Creá uno en playit.gg o pegá la dirección a mano."
+            )
+        return address
 
     async def begin_claim(self) -> TunnelStatus:
         """Create Playit's official browser claim without receiving account credentials."""
@@ -333,7 +403,9 @@ class PlayitService:
 
     def _status_message(self) -> str:
         if self.uses_external_agent:
-            return "Usando el servicio Playit ya instalado en esta computadora."
+            return "Playit está instalado y funcionando."
+        if self.can_start_external_agent and self.needs_setup:
+            return "Playit está instalado pero apagado. Lo encendemos cuando enciendas el servidor."
         if self.is_running and self._public_address:
             return "Túnel Playit activo y dirección pública detectada."
         if self.is_running:
