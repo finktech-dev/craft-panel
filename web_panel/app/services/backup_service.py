@@ -20,6 +20,7 @@ from app.core.config import Settings, settings
 from app.core.path_safety import is_safe_component
 from app.schemas.backup import BackupAuditItem, BackupAuditResponse, BackupItem, BackupSafetyItem, BackupSafetyOverview
 from app.services.discord_service import DiscordService, discord_service
+from app.services.progress import ProgressCallback, StepPlan, format_megabytes, report
 from app.services.server_process import MinecraftServerManager, ServerProcessError, server_manager
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 
@@ -41,6 +42,20 @@ _TEMPORARY_BACKUP_SUFFIXES = ("*.tmp", "*.part")
 _FINGERPRINT_FILENAME = ".last_backup_fingerprint.json"
 # Headroom over the last backup: the world only grows between copies.
 _BACKUP_SIZE_SAFETY_FACTOR = 1.2
+_PROGRESS_INTERVAL_SECONDS = 0.25
+
+# Steps announced through the ``progress`` callback, in order.
+BACKUP_STEPS: StepPlan = (
+    ("prepare", "Preparando la copia"),
+    ("archive", "Copiando los archivos del mundo"),
+    ("verify", "Comprobando que la copia esté sana"),
+    ("retention", "Ordenando las copias viejas"),
+)
+RESTORE_STEPS: StepPlan = (
+    ("extract", "Descomprimiendo la copia"),
+    ("verify", "Revisando el mundo descomprimido"),
+    ("swap", "Reemplazando el mundo actual"),
+)
 
 
 class BackupServiceError(RuntimeError):
@@ -99,10 +114,15 @@ class BackupService:
             return None
         return await self.create_backup()
 
-    async def create_backup(self) -> BackupItem:
+    async def create_backup(self, progress: ProgressCallback | None = None) -> BackupItem:
+        """Create a verified copy of the active world.
+
+        ``progress`` receives the steps in :data:`BACKUP_STEPS`.
+        """
         if not self.world_directory.is_dir():
             raise BackupNotFoundError("No existe el mundo para respaldar.")
         async with self._operation_lock:
+            report(progress, "prepare", "Revisando que haya espacio libre.")
             await asyncio.to_thread(self.backups_directory.mkdir, parents=True, exist_ok=True)
             await asyncio.to_thread(self._ensure_free_space_sync)
             fingerprint = await asyncio.to_thread(self._world_fingerprint_sync)
@@ -113,12 +133,15 @@ class BackupService:
             saves_paused = False
             try:
                 if self._manager.is_running:
+                    report(progress, "prepare", "Pidiéndole al servidor que guarde el mundo en el disco.")
                     await self._manager.send_command_and_wait_for_log("save-all flush", "Saved the game")
                     await self._manager.send_command("save-off")
                     saves_paused = True
                     # El comando anterior se procesa en el hilo principal del servidor.
                     await asyncio.sleep(0.2)
-                await asyncio.to_thread(self._create_archive_sync, temporary_path)
+                report(progress, "archive")
+                await asyncio.to_thread(self._create_archive_sync, temporary_path, progress)
+                report(progress, "verify")
                 verification_error = await asyncio.to_thread(self._verify_archive_sync, temporary_path)
                 if verification_error:
                     raise BackupServiceError(f"El backup creado no pasó la verificación de integridad: {verification_error}")
@@ -133,6 +156,7 @@ class BackupService:
                         await self._manager.send_command("save-on")
                         await self._manager.send_command_and_wait_for_log("save-all flush", "Saved the game")
             await asyncio.to_thread(self._save_fingerprint_sync, fingerprint, backup_path)
+            report(progress, "retention")
             try:
                 purged = await asyncio.to_thread(self._enforce_retention_sync)
             except OSError as error:
@@ -167,7 +191,8 @@ class BackupService:
             except OSError as error:
                 raise BackupServiceError(f"No se pudo eliminar el backup: {error}") from error
 
-    async def restore_backup(self, filename: str) -> BackupItem:
+    async def restore_backup(self, filename: str, progress: ProgressCallback | None = None) -> BackupItem:
+        """Replace the active world with a backup; ``progress`` gets :data:`RESTORE_STEPS`."""
         try:
             require_server_stopped(self._manager, "restaurar un backup")
         except ServerActiveError as error:
@@ -179,21 +204,35 @@ class BackupService:
 
         async with self._operation_lock:
             try:
-                await asyncio.to_thread(self._restore_archive_sync, backup_path)
+                await asyncio.to_thread(self._restore_archive_sync, backup_path, progress)
             except ArchiveSafetyError as error:
                 raise BackupServiceError(f"El backup no es seguro para restaurar: {error}") from error
             except (OSError, zipfile.BadZipFile) as error:
                 raise BackupServiceError(f"No se pudo restaurar el backup: {error}") from error
         return await asyncio.to_thread(self._backup_item_from_path, backup_path)
 
-    def _create_archive_sync(self, backup_path: Path) -> None:
+    def _archive_candidates_sync(self) -> list[tuple[Path, int]]:
+        candidates: list[tuple[Path, int]] = []
+        for path in self.world_directory.rglob("*"):
+            # Never follow links out of the world into other files of the host.
+            if path.is_symlink() or not path.is_file():
+                continue
+            if path.name.lower() in _IGNORED_BACKUP_FILENAMES or path.suffix.lower() in _IGNORED_BACKUP_EXTENSIONS:
+                continue
+            try:
+                candidates.append((path, path.stat().st_size))
+            except OSError:
+                candidates.append((path, 0))
+        return candidates
+
+    def _create_archive_sync(self, backup_path: Path, progress: ProgressCallback | None = None) -> None:
+        candidates = self._archive_candidates_sync()
+        total_files = len(candidates)
+        total_bytes = sum(size for _, size in candidates) or 1
+        done_bytes = 0
+        last_report = 0.0
         with zipfile.ZipFile(backup_path, mode="x", compression=zipfile.ZIP_DEFLATED) as archive:
-            for path in self.world_directory.rglob("*"):
-                # Never follow links out of the world into other files of the host.
-                if path.is_symlink() or not path.is_file():
-                    continue
-                if path.name.lower() in _IGNORED_BACKUP_FILENAMES or path.suffix.lower() in _IGNORED_BACKUP_EXTENSIONS:
-                    continue
+            for done_files, (path, size) in enumerate(candidates, start=1):
                 arcname = Path("world") / path.relative_to(self.world_directory)
                 for attempt in range(3):
                     try:
@@ -208,19 +247,33 @@ class BackupService:
                                 path.name,
                                 error,
                             )
+                done_bytes += size
+                now = time.monotonic()
+                if done_files == total_files or now - last_report >= _PROGRESS_INTERVAL_SECONDS:
+                    last_report = now
+                    report(
+                        progress,
+                        "archive",
+                        f"Copiados {done_files} de {total_files} archivos "
+                        f"({format_megabytes(done_bytes)} de {format_megabytes(total_bytes)} MB).",
+                        done_bytes * 100 / total_bytes,
+                    )
 
-    def _restore_archive_sync(self, backup_path: Path) -> None:
+    def _restore_archive_sync(self, backup_path: Path, progress: ProgressCallback | None = None) -> None:
         assert self._settings.server_directory is not None
         staging_root = self._settings.server_directory / f".world-restore-{uuid.uuid4().hex}"
         staged_world = staging_root / "world"
         previous_world = self._settings.server_directory / f".world-before-restore-{uuid.uuid4().hex}"
         try:
+            report(progress, "extract")
             staging_root.mkdir(parents=False, exist_ok=False)
             with zipfile.ZipFile(backup_path) as archive:
-                self._extract_world_safely(archive, staging_root)
+                self._extract_world_safely(archive, staging_root, progress)
+            report(progress, "verify")
             if not staged_world.is_dir():
                 raise BackupServiceError("El backup no contiene una carpeta world válida.")
 
+            report(progress, "swap")
             if self.world_directory.exists():
                 self.world_directory.rename(previous_world)
             try:
@@ -235,7 +288,12 @@ class BackupService:
             if staging_root.exists():
                 shutil.rmtree(staging_root)
 
-    def _extract_world_safely(self, archive: zipfile.ZipFile, target_directory: Path) -> None:
+    def _extract_world_safely(
+        self,
+        archive: zipfile.ZipFile,
+        target_directory: Path,
+        progress: ProgressCallback | None = None,
+    ) -> None:
         """Validate every entry (traversal, links, zip bombs) before extracting."""
         assert self._settings.server_directory is not None
         free_bytes = shutil.disk_usage(self._settings.server_directory).free
@@ -244,8 +302,17 @@ class BackupService:
         for _, parts in check_zip(archive, limits):
             if parts[0] != "world":
                 raise BackupServiceError("El backup contiene archivos fuera de world/.")
+        last_report = 0.0
+
+        def on_member(done: int, total: int) -> None:
+            nonlocal last_report
+            now = time.monotonic()
+            if done == total or now - last_report >= _PROGRESS_INTERVAL_SECONDS:
+                last_report = now
+                report(progress, "extract", f"Descomprimidos {done} de {total} archivos.", done * 100 / max(total, 1))
+
         try:
-            extract_zip(archive, target_directory, limits)
+            extract_zip(archive, target_directory, limits, on_member=on_member if progress else None)
         except ArchiveSafetyError as error:
             raise BackupServiceError(str(error)) from error
 

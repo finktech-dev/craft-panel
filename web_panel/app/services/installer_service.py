@@ -22,6 +22,7 @@ from app.core.net_safety import (
     allowed_client,
     download_to_file,
 )
+from app.services.progress import ProgressCallback, StepPlan, download_message, report
 from app.services.runtime_discovery import RuntimeDiscoveryService
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 from app.services.server_process import MinecraftServerManager, server_manager
@@ -44,6 +45,15 @@ _MINECRAFT_VERSION = re.compile(r"^\d+\.\d+(?:\.\d+)?$")
 _SHA1 = re.compile(r"^[0-9a-fA-F]{40}$")
 _INSTALLER_HOSTS = MOJANG_HOSTS | FABRIC_HOSTS | NEOFORGE_HOSTS
 _MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
+
+# Steps announced through the ``progress`` callback. Vanilla has no installer
+# program to run, so its ``install`` step is reported as skipped.
+INSTALL_SERVER_STEPS: StepPlan = (
+    ("prepare", "Revisando la carpeta del servidor"),
+    ("download", "Descargando el servidor oficial"),
+    ("install", "Instalando"),
+    ("finish", "Dejando todo listo"),
+)
 
 
 class InstallerServiceError(RuntimeError):
@@ -73,6 +83,8 @@ class InstallerService:
         self._catalog = catalog
         self._discovery = discovery or RuntimeDiscoveryService(configured_settings)
         self._lock = asyncio.Lock()
+        self._progress: ProgressCallback | None = None
+        self._current_step = "prepare"
 
     @staticmethod
     def neoforge_installer_url(build: str) -> str:
@@ -92,31 +104,68 @@ class InstallerService:
         minecraft_version: str,
         *,
         accept_eula: bool,
+        progress: ProgressCallback | None = None,
     ) -> None:
-        """Install only missing runtime files; never replace worlds or settings."""
+        """Install only missing runtime files; never replace worlds or settings.
+
+        ``progress`` receives the steps in :data:`INSTALL_SERVER_STEPS`.
+        """
         if not accept_eula:
             raise InstallerValidationError("Accept the Minecraft EULA before installing a server.")
         async with self._lock:
+            # The lock serializes installs, so per-run progress can live on the instance.
+            self._progress = progress
             try:
-                require_server_stopped(self._server, "install or replace a server runtime")
-            except ServerActiveError as error:
-                raise InstallerConflictError(str(error)) from error
-            if not _MINECRAFT_VERSION.match(minecraft_version or ""):
-                raise InstallerValidationError("Elegí una versión de Minecraft válida, por ejemplo 1.21.1.")
-            self._assert_runtime_is_not_already_installed()
-            if flavor in {"neoforge", "fabric"}:
-                await self._assert_java_is_compatible(minecraft_version)
-            assert self._settings.server_directory is not None
-            await asyncio.to_thread(self._settings.server_directory.mkdir, parents=True, exist_ok=True)
-            await self._publish(f"Preparing Minecraft {minecraft_version} ({flavor})…")
-            if flavor == "vanilla":
-                await self._install_vanilla(minecraft_version)
-            elif flavor == "fabric":
-                await self._install_fabric(minecraft_version)
-            else:
-                await self._install_neoforge(minecraft_version)
-            await asyncio.to_thread(self._write_safe_server_files, flavor)
-            await self._publish("Server runtime installed. Your worlds and existing settings were not replaced.")
+                await self._install_locked(flavor, minecraft_version)
+            finally:
+                self._progress = None
+                self._current_step = "prepare"
+
+    def preflight(self, minecraft_version: str, *, accept_eula: bool) -> None:
+        """Cheap checks that let a request fail right away instead of inside a job."""
+        if not accept_eula:
+            raise InstallerValidationError("Accept the Minecraft EULA before installing a server.")
+        if self._lock.locked():
+            raise InstallerConflictError("Ya hay una instalación en curso. Esperá a que termine.")
+        try:
+            require_server_stopped(self._server, "install or replace a server runtime")
+        except ServerActiveError as error:
+            raise InstallerConflictError(str(error)) from error
+        if not _MINECRAFT_VERSION.match(minecraft_version or ""):
+            raise InstallerValidationError("Elegí una versión de Minecraft válida, por ejemplo 1.21.1.")
+        self._assert_runtime_is_not_already_installed()
+
+    async def _install_locked(self, flavor: str, minecraft_version: str) -> None:
+        self._step("prepare", "Revisando la carpeta del servidor.")
+        try:
+            require_server_stopped(self._server, "install or replace a server runtime")
+        except ServerActiveError as error:
+            raise InstallerConflictError(str(error)) from error
+        if not _MINECRAFT_VERSION.match(minecraft_version or ""):
+            raise InstallerValidationError("Elegí una versión de Minecraft válida, por ejemplo 1.21.1.")
+        self._assert_runtime_is_not_already_installed()
+        if flavor in {"neoforge", "fabric"}:
+            await self._assert_java_is_compatible(minecraft_version)
+        assert self._settings.server_directory is not None
+        await asyncio.to_thread(self._settings.server_directory.mkdir, parents=True, exist_ok=True)
+        await self._publish(f"Preparando Minecraft {minecraft_version} ({flavor}).")
+        if flavor == "vanilla":
+            await self._install_vanilla(minecraft_version)
+        elif flavor == "fabric":
+            await self._install_fabric(minecraft_version)
+        else:
+            await self._install_neoforge(minecraft_version)
+        self._step("finish", "Dejando listos los archivos de inicio.")
+        await asyncio.to_thread(self._write_safe_server_files, flavor)
+        await self._publish("Servidor instalado. No se reemplazaron mundos ni ajustes existentes.")
+
+    def _step(self, key: str, message: str | None = None) -> None:
+        self._current_step = key
+        report(self._progress, key, message)
+
+    def _download_progress(self, done: int, total: int | None) -> None:
+        message, percent = download_message(done, total)
+        report(self._progress, "download", message, percent)
 
     def _assert_runtime_is_not_already_installed(self) -> None:
         assert self._settings.server_directory is not None
@@ -140,7 +189,8 @@ class InstallerService:
             raise InstallerValidationError(status.message)
 
     async def _install_vanilla(self, minecraft_version: str) -> None:
-        await self._publish("Finding the official Vanilla server download…")
+        self._step("download")
+        await self._publish("Buscando la descarga oficial del servidor de Minecraft.")
         try:
             async with allowed_client(_INSTALLER_HOSTS, timeout=60.0) as client:
                 manifest_response = await client.get(_MOJANG_MANIFEST)
@@ -183,21 +233,24 @@ class InstallerService:
             raise InstallerServiceError(str(error)) from error
 
     async def _install_neoforge(self, minecraft_version: str) -> None:
-        await self._publish("Finding the official NeoForge build…")
+        self._step("download")
+        await self._publish("Buscando la versión oficial de NeoForge.")
         build = await self._resolve_neoforge_build(minecraft_version)
         url = self.neoforge_installer_url(build)
-        await self._publish(f"Downloading the official NeoForge {build} installer…")
+        await self._publish(f"Descargando el instalador oficial de NeoForge {build}.")
         async with allowed_client(_INSTALLER_HOSTS, timeout=120.0) as client:
             checksum = await self._published_sha1(client, url)
             await self._download(client, url, self._settings.neoforge_installer_path, checksum)
         assert self._settings.server_directory is not None
-        await self._publish("Installing NeoForge…")
+        self._step("install")
+        await self._publish("Instalando NeoForge. Puede tardar varios minutos.")
         await self._run_java(
             "-jar", str(self._settings.neoforge_installer_path), "--install-server", str(self._settings.server_directory)
         )
 
     async def _install_fabric(self, minecraft_version: str) -> None:
-        await self._publish("Finding the Fabric installer…")
+        self._step("download")
+        await self._publish("Buscando el instalador de Fabric.")
         try:
             loader = await self._catalog.latest_fabric_loader(minecraft_version)
             version = await self._catalog.latest_fabric_installer()
@@ -214,7 +267,8 @@ class InstallerService:
             checksum = await self._published_sha1(client, url)
             await self._download(client, url, installer, checksum)
         assert self._settings.server_directory is not None
-        await self._publish(f"Installing Fabric Loader {loader}…")
+        self._step("install")
+        await self._publish(f"Instalando Fabric Loader {loader}. Puede tardar unos minutos.")
         await self._run_java(
             "-jar", str(installer), "server", "-dir", str(self._settings.server_directory),
             "-mcversion", minecraft_version, "-loader", loader, "-downloadMinecraft",
@@ -264,6 +318,7 @@ class InstallerService:
                 destination,
                 max_bytes=_MAX_DOWNLOAD_BYTES,
                 expected_hash=("sha1", sha1) if sha1 else None,
+                on_progress=self._download_progress if self._progress else None,
             )
         except UnsafeDownloadError as error:
             raise InstallerServiceError("The download was rejected (unexpected host, size or checksum) and discarded.") from error
@@ -291,6 +346,8 @@ class InstallerService:
             os.chmod(shell_path, 0o700)
 
     async def _publish(self, message: str) -> None:
+        """Show a line in the console and as the current step's sentence."""
+        report(self._progress, self._current_step, message[:300])
         await self._connections.broadcast_json({
             "type": "log",
             "line": {"timestamp": datetime.now(UTC).isoformat(), "stream": "installer", "message": f"[Installer] {message}"},

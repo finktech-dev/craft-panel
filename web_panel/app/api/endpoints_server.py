@@ -4,27 +4,41 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from app.api.endpoints_jobs import accepted, start_job
 from app.core.config import settings
 from app.core.security import get_current_admin
 from app.core.rate_limit import rate_limit
+from app.schemas.job import JobAccepted
 from app.schemas.server import ServerActionResponse, ServerMetrics
 from app.schemas.runtime import FriendConnectionInfo, TunnelStatus
-from app.services.backup_service import backup_service
+from app.services import job_service as job_service_module
+from app.services.backup_service import BACKUP_STEPS, backup_service
+from app.services.job_service import JobReporter
 from app.services.metrics_service import metrics_service
 from app.services.player_crash_service import player_crash_service
 from app.services.playit_service import PlayitServiceError, playit_service
 from app.services.external_server_service import external_server_detector
 from app.services.safety_service import SafetySummary, safety_service
-from app.services.server_process import ServerProcessError, server_manager
+from app.services.server_process import (
+    GRACEFUL_RESTART_STEPS,
+    RESTART_STEPS,
+    START_STEPS,
+    ServerBusyError,
+    ServerProcessError,
+    ServerStartTimeoutError,
+    server_manager,
+)
 from app.services.server_properties_service import server_properties_service
 from app.services.spark_service import spark_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/server",
@@ -37,15 +51,23 @@ class ConnectionInfoUpdateRequest(BaseModel):
     public_address: str = Field(min_length=1, max_length=128)
 
 
-async def _start_playit_if_required() -> bool:
-    """Start the default public connection before Minecraft, unless LAN-only was chosen."""
-    if not settings.playit_enabled:
-        return False
-    if playit_service.needs_setup:
+# Big modpacks can take minutes to load; after this the job ends with a clear note.
+READY_TIMEOUT_SECONDS = 300.0
+
+
+def _require_playit_ready() -> None:
+    """Fail fast (before any job starts) when Playit is chosen but not connected yet."""
+    if settings.playit_enabled and playit_service.needs_setup:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Conectá tu cuenta de Playit antes de iniciar, o elegí Solo red local en Preparar servidor.",
         )
+
+
+async def _connect_playit() -> bool:
+    """Start the default public connection; returns whether this call started it."""
+    if not settings.playit_enabled:
+        return False
     try:
         was_running = playit_service.is_running or playit_service.uses_external_agent
         await playit_service.start()
@@ -60,32 +82,71 @@ async def _create_first_backup_after_ready() -> None:
         await server_manager.wait_until_ready()
         if not await backup_service.list_backups():
             await backup_service.create_backup()
-    except Exception:
-        # Startup and backup failures remain visible in their own panel sections.
-        return
+    except Exception as error:  # noqa: BLE001 - startup and backup failures surface in their own sections
+        logger.warning("The first automatic backup was not created: %s", error)
 
-@router.post("/start", response_model=ServerActionResponse)
-async def start_server(dev_mode: bool = False) -> ServerActionResponse:
+
+async def _wait_until_ready(reporter: JobReporter) -> bool:
+    """Final ``ready`` step shared by start and restart jobs."""
+    reporter("ready", "Esperando a que el servidor termine de cargar el mundo.")
+    try:
+        await server_manager.wait_until_ready(timeout_seconds=READY_TIMEOUT_SECONDS)
+    except ServerStartTimeoutError:
+        reporter.done_message = (
+            "El servidor sigue cargando. Con muchos mods puede tardar más; "
+            "mirá la consola si querés ver en qué va."
+        )
+        return False
+    return True
+
+
+async def _launch_first_backup_if_missing() -> None:
+    """After the first start, make one copy of the brand-new world as its own job."""
+    if backup_service.is_busy or await backup_service.list_backups():
+        return
+    from app.api.endpoints_backups import backup_job_work
+
+    try:
+        start_job("backup", "Primera copia del mundo", BACKUP_STEPS, backup_job_work, success_message="Primera copia lista.")
+    except HTTPException as error:
+        logger.info("Skipping the first automatic backup: %s", error.detail)
+
+
+@router.post("/start", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
+async def start_server(dev_mode: bool = False) -> JobAccepted:
     if server_manager.is_running:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El servidor ya está en ejecución.")
     _raise_if_busy()
-    started_playit = await _start_playit_if_required()
-    try:
-        started = await server_manager.start(dev_mode=dev_mode)
-    except ServerProcessError as error:
-        if started_playit:
-            await playit_service.stop()
-        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
-    if not started:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El servidor ya está iniciándose o en ejecución.")
-    if dev_mode:
-        msg = "Servidor iniciado en Modo Dev (Silencioso)."
-    elif settings.playit_enabled:
-        msg = "Servidor iniciado y Playit quedó conectado para compartirlo con amigos."
-    else:
-        msg = "Servidor iniciado sólo para la red local."
-    asyncio.create_task(_create_first_backup_after_ready(), name="first-world-backup")
-    return _action_response(f"{msg} A first backup will be created when the world is ready.")
+    _require_playit_ready()
+
+    async def work(reporter: JobReporter) -> dict:
+        if settings.playit_enabled:
+            reporter("connect", "Conectando Playit para que tus amigos puedan entrar.")
+        started_playit = await _connect_playit()
+        try:
+            started = await server_manager.start(dev_mode=dev_mode, progress=reporter)
+        except ServerProcessError:
+            if started_playit:
+                await playit_service.stop()
+            raise
+        if not started:
+            raise ServerBusyError("El servidor ya está iniciándose o en ejecución.")
+        if await _wait_until_ready(reporter):
+            if dev_mode:
+                reporter.done_message = "Listo, el servidor está encendido en modo de prueba."
+            elif settings.playit_enabled:
+                reporter.done_message = "Listo, el servidor está encendido y tus amigos ya pueden entrar."
+            else:
+                reporter.done_message = "Listo, el servidor está encendido para jugar en esta casa."
+            await _launch_first_backup_if_missing()
+        else:
+            job_service_module.job_service.spawn(_create_first_backup_after_ready(), "first-world-backup")
+        return {"state": str(server_manager.state)}
+
+    job = start_job("start", "Encender el servidor", START_STEPS, work)
+    return accepted(job, "Encendiendo el servidor.")
+
+
 @router.post("/stop", response_model=ServerActionResponse)
 async def stop_server() -> ServerActionResponse:
     try:
@@ -106,39 +167,54 @@ def _raise_if_busy() -> None:
         )
 
 
-async def _run_restart(restart: Callable[[], Awaitable[bool]], success_message: str) -> ServerActionResponse:
-    started_playit = await _start_playit_if_required()
-    try:
-        restarted = await restart()
-    except ServerProcessError as error:
-        if started_playit:
-            await playit_service.stop()
-        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
-    if not restarted:
-        if started_playit:
-            await playit_service.stop()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="El reinicio se canceló porque se forzó la detención del servidor.",
-        )
-    return _action_response(success_message)
+def _restart_work(restart: Callable[[JobReporter], Awaitable[bool]]) -> Callable[[JobReporter], Awaitable[dict]]:
+    async def work(reporter: JobReporter) -> dict:
+        started_playit = await _connect_playit()
+        try:
+            restarted = await restart(reporter)
+        except ServerProcessError:
+            if started_playit:
+                await playit_service.stop()
+            raise
+        if not restarted:
+            if started_playit:
+                await playit_service.stop()
+            raise ServerBusyError("El reinicio se canceló porque se forzó el cierre del servidor.")
+        if await _wait_until_ready(reporter):
+            reporter.done_message = "Listo, el servidor se reinició y ya se puede entrar."
+        return {"state": str(server_manager.state)}
+
+    return work
 
 
-@router.post("/restart", response_model=ServerActionResponse)
-async def restart_server() -> ServerActionResponse:
+@router.post("/restart", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
+async def restart_server() -> JobAccepted:
     _raise_if_busy()
-    return await _run_restart(server_manager.restart, "Servidor reiniciado.")
+    _require_playit_ready()
+    job = start_job(
+        "restart",
+        "Reiniciar el servidor",
+        RESTART_STEPS,
+        _restart_work(lambda reporter: server_manager.restart(progress=reporter)),
+    )
+    return accepted(job, "Reiniciando el servidor.")
 
 
-@router.post("/graceful-restart", response_model=ServerActionResponse)
-async def graceful_restart_server(countdown: int = 10) -> ServerActionResponse:
+@router.post("/graceful-restart", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
+async def graceful_restart_server(countdown: int = 10) -> JobAccepted:
     if countdown < 3 or countdown > 60:
         countdown = 10
     _raise_if_busy()
-    return await _run_restart(
-        lambda: server_manager.graceful_restart(countdown_seconds=countdown),
-        f"Reinicio suave completado después del aviso de {countdown} segundos.",
+    _require_playit_ready()
+    job = start_job(
+        "graceful_restart",
+        "Reiniciar avisando a los jugadores",
+        GRACEFUL_RESTART_STEPS,
+        _restart_work(
+            lambda reporter: server_manager.graceful_restart(countdown_seconds=countdown, progress=reporter)
+        ),
     )
+    return accepted(job, f"Avisamos a los jugadores y reiniciamos en {countdown} segundos.")
 
 
 @router.post("/kill", response_model=ServerActionResponse)

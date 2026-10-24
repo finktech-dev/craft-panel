@@ -11,6 +11,7 @@ from __future__ import annotations
 import stat
 import tarfile
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
@@ -103,23 +104,40 @@ class _ByteBudget:
             target.write(chunk)
 
 
-def extract_zip(archive: zipfile.ZipFile, destination: Path, limits: ArchiveLimits = ArchiveLimits()) -> None:
+# Called after each member with (members done, total members).
+MemberProgress = Callable[[int, int], None]
+
+
+def extract_zip(
+    archive: zipfile.ZipFile,
+    destination: Path,
+    limits: ArchiveLimits = ArchiveLimits(),
+    on_member: MemberProgress | None = None,
+) -> None:
     """Extract a ZIP into an existing, empty staging directory."""
     root = destination.resolve()
     budget = _ByteBudget(limits)
-    for member, parts in check_zip(archive, limits):
+    validated = check_zip(archive, limits)
+    for index, (member, parts) in enumerate(validated, start=1):
         target = root.joinpath(*parts)
         if not target.resolve().is_relative_to(root):
             raise ArchiveSafetyError(f"Ruta insegura dentro del archivo: {member.filename!r}")
         if member.is_dir():
             target.mkdir(parents=True, exist_ok=True)
-            continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with archive.open(member) as source, target.open("xb") as output:
-            budget.copy(source, output, member.compress_size)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member) as source, target.open("xb") as output:
+                budget.copy(source, output, member.compress_size)
+        if on_member is not None:
+            on_member(index, len(validated))
 
 
-def extract_tar(archive: tarfile.TarFile, destination: Path, limits: ArchiveLimits = ArchiveLimits()) -> None:
+def extract_tar(
+    archive: tarfile.TarFile,
+    destination: Path,
+    limits: ArchiveLimits = ArchiveLimits(),
+    on_member: MemberProgress | None = None,
+) -> None:
     """Extract only regular files and folders from a TAR into a staging directory."""
     root = destination.resolve()
     members = archive.getmembers()
@@ -137,22 +155,24 @@ def extract_tar(archive: tarfile.TarFile, destination: Path, limits: ArchiveLimi
         validated.append((member, parts))
 
     budget = _ByteBudget(limits)
-    for member, parts in validated:
+    for index, (member, parts) in enumerate(validated, start=1):
         target = root.joinpath(*parts)
         if not target.resolve().is_relative_to(root):
             raise ArchiveSafetyError(f"Ruta insegura dentro del archivo: {member.name!r}")
         if member.isdir():
             target.mkdir(parents=True, exist_ok=True)
-            continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        source = archive.extractfile(member)
-        if source is None:
-            raise ArchiveSafetyError("El archivo contiene una entrada ilegible.")
-        with source, target.open("xb") as output:
-            budget.copy(source, output)
-        # Keep the executable bit for runtimes (java, jspawnhelper) on POSIX only.
-        if member.mode & 0o111:
-            target.chmod(0o755)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = archive.extractfile(member)
+            if source is None:
+                raise ArchiveSafetyError("El archivo contiene una entrada ilegible.")
+            with source, target.open("xb") as output:
+                budget.copy(source, output)
+            # Keep the executable bit for runtimes (java, jspawnhelper) on POSIX only.
+            if member.mode & 0o111:
+                target.chmod(0o755)
+        if on_member is not None:
+            on_member(index, len(validated))
 
 
 def read_member_capped(archive: zipfile.ZipFile, name: str, max_bytes: int) -> bytes | None:

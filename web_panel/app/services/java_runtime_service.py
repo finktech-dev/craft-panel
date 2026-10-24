@@ -17,11 +17,20 @@ import httpx
 from app.core.archive_safety import ArchiveLimits, ArchiveSafetyError, extract_tar, extract_zip
 from app.core.config import Settings, settings
 from app.core.net_safety import ADOPTIUM_HOSTS, allowed_client, download_to_file, is_allowed_url
+from app.services.progress import ProgressCallback, StepPlan, download_message, report
 
 _ADOPTIUM_API = "https://api.adoptium.net/v3/assets/latest/{major}/hotspot"
 # A JDK archive is ~200 MB and unpacks to ~350 MB; leave generous headroom.
 _MAX_DOWNLOAD_BYTES = 1024**3
 _RUNTIME_LIMITS = ArchiveLimits(max_members=20_000, max_total_bytes=2 * 1024**3, max_member_bytes=1024**3)
+
+# Steps announced through the ``progress`` callback, in order.
+INSTALL_JAVA_STEPS: StepPlan = (
+    ("find", "Buscando la versión de Java correcta"),
+    ("download", "Descargando Java"),
+    ("extract", "Descomprimiendo Java"),
+    ("finish", "Dejándolo listo"),
+)
 
 
 class JavaRuntimeServiceError(RuntimeError):
@@ -63,7 +72,20 @@ class JavaRuntimeService:
             return 16
         return 8
 
-    async def install_for(self, minecraft_version: str) -> str:
+    def preflight(self, minecraft_version: str) -> None:
+        """Cheap checks that let a request fail right away instead of inside a job."""
+        self.required_major(minecraft_version)
+        if self._settings.local_java_executable_path.is_file():
+            return
+        assert self._settings.tools_directory is not None
+        if (self._settings.tools_directory / "java").exists():
+            raise JavaRuntimeValidationError(
+                "tools/java ya existe, pero no contiene un ejecutable Java válido. "
+                "Corregilo o eliminá esa carpeta antes de descargar otro runtime."
+            )
+
+    async def install_for(self, minecraft_version: str, progress: ProgressCallback | None = None) -> str:
+        """Download Java into tools/java; ``progress`` receives :data:`INSTALL_JAVA_STEPS`."""
         required = self.required_major(minecraft_version)
         destination = self._settings.local_java_executable_path
         if destination.is_file():
@@ -79,9 +101,13 @@ class JavaRuntimeService:
             archive = target.parent / f".java-{uuid.uuid4().hex}.download"
             staging = target.parent / f".java-{uuid.uuid4().hex}.extract"
             try:
+                report(progress, "find", f"Buscando Java {required} para tu computadora.")
                 package = await self._find_package(required)
-                await self._download(package["link"], archive, package.get("checksum"))
-                await asyncio.to_thread(self._extract_runtime, archive, staging)
+                report(progress, "download")
+                await self._download(package["link"], archive, package.get("checksum"), progress)
+                report(progress, "extract")
+                await asyncio.to_thread(self._extract_runtime, archive, staging, progress)
+                report(progress, "finish")
                 executable = self._find_java(staging)
                 if executable is None:
                     raise JavaRuntimeServiceError("La descarga oficial no contenía un ejecutable Java utilizable.")
@@ -124,7 +150,13 @@ class JavaRuntimeService:
                     return result
         raise JavaRuntimeServiceError("Adoptium no ofreció un runtime compatible para esta computadora.")
 
-    async def _download(self, url: str, destination: Path, sha256: str | None = None) -> None:
+    async def _download(
+        self, url: str, destination: Path, sha256: str | None = None, progress: ProgressCallback | None = None
+    ) -> None:
+        def on_progress(done: int, total: int | None) -> None:
+            message, percent = download_message(done, total)
+            report(progress, "download", message, percent)
+
         async with allowed_client(ADOPTIUM_HOSTS, timeout=120.0) as client:
             await download_to_file(
                 client,
@@ -132,28 +164,35 @@ class JavaRuntimeService:
                 destination,
                 max_bytes=_MAX_DOWNLOAD_BYTES,
                 expected_hash=("sha256", sha256) if sha256 else None,
+                on_progress=on_progress if progress else None,
             )
 
-    def _extract_runtime(self, archive: Path, destination: Path) -> None:
+    def _extract_runtime(self, archive: Path, destination: Path, progress: ProgressCallback | None = None) -> None:
         destination.mkdir(parents=True, exist_ok=False)
+
+        def on_member(done: int, total: int) -> None:
+            if done == total or done % 200 == 0:
+                report(progress, "extract", f"Descomprimidos {done} de {total} archivos.", done * 100 / max(total, 1))
+
+        listener = on_member if progress else None
         if zipfile.is_zipfile(archive):
             with zipfile.ZipFile(archive) as contents:
-                self._safe_extract_zip(contents, destination)
+                self._safe_extract_zip(contents, destination, listener)
             return
         with tarfile.open(archive, "r:*") as contents:
-            self._safe_extract_tar(contents, destination)
+            self._safe_extract_tar(contents, destination, listener)
 
     @staticmethod
-    def _safe_extract_zip(contents: zipfile.ZipFile, destination: Path) -> None:
+    def _safe_extract_zip(contents: zipfile.ZipFile, destination: Path, on_member=None) -> None:
         try:
-            extract_zip(contents, destination, _RUNTIME_LIMITS)
+            extract_zip(contents, destination, _RUNTIME_LIMITS, on_member=on_member)
         except ArchiveSafetyError as error:
             raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.") from error
 
     @staticmethod
-    def _safe_extract_tar(contents: tarfile.TarFile, destination: Path) -> None:
+    def _safe_extract_tar(contents: tarfile.TarFile, destination: Path, on_member=None) -> None:
         try:
-            extract_tar(contents, destination, _RUNTIME_LIMITS)
+            extract_tar(contents, destination, _RUNTIME_LIMITS, on_member=on_member)
         except ArchiveSafetyError as error:
             raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.") from error
 
