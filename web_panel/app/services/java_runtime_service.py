@@ -8,6 +8,7 @@ import platform
 import re
 import shutil
 import tarfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -23,6 +24,9 @@ _ADOPTIUM_API = "https://api.adoptium.net/v3/assets/latest/{major}/hotspot"
 # A JDK archive is ~200 MB and unpacks to ~350 MB; leave generous headroom.
 _MAX_DOWNLOAD_BYTES = 1024**3
 _RUNTIME_LIMITS = ArchiveLimits(max_members=20_000, max_total_bytes=2 * 1024**3, max_member_bytes=1024**3)
+# Windows Defender and OneDrive briefly lock freshly extracted executables.
+_MOVE_ATTEMPTS = 8
+_MOVE_RETRY_SECONDS = 0.5
 
 # Steps announced through the ``progress`` callback, in order.
 INSTALL_JAVA_STEPS: StepPlan = (
@@ -98,8 +102,9 @@ class JavaRuntimeService:
             if destination.is_file():
                 return "Ya existe Java local en tools/java. No se reemplazó."
             await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
-            archive = target.parent / f".java-{uuid.uuid4().hex}.download"
-            staging = target.parent / f".java-{uuid.uuid4().hex}.extract"
+            # Short names keep deep JDK paths under the 260-character Windows limit.
+            archive = target.parent / f".java-{uuid.uuid4().hex[:8]}.download"
+            staging = target.parent / f".java-{uuid.uuid4().hex[:8]}.extract"
             try:
                 report(progress, "find", f"Buscando Java {required} para tu computadora.")
                 package = await self._find_package(required)
@@ -112,10 +117,15 @@ class JavaRuntimeService:
                 if executable is None:
                     raise JavaRuntimeServiceError("La descarga oficial no contenía un ejecutable Java utilizable.")
                 runtime_root = executable.parents[1]
-                await asyncio.to_thread(os.replace, runtime_root, target)
+                await asyncio.to_thread(self._replace_with_retry, runtime_root, target)
             except (httpx.HTTPError, OSError, tarfile.TarError, zipfile.BadZipFile, ArchiveSafetyError) as error:
                 if isinstance(error, JavaRuntimeServiceError):
                     raise
+                if isinstance(error, PermissionError):
+                    raise JavaRuntimeServiceError(
+                        "Java se descargó, pero Windows o el antivirus bloqueó los archivos al prepararlo. "
+                        "Esperá unos segundos e intentá de nuevo."
+                    ) from error
                 raise JavaRuntimeServiceError("No se pudo descargar o preparar Java desde Adoptium. Revisá la conexión e intentá de nuevo.") from error
             finally:
                 await asyncio.to_thread(self._remove_path, archive)
@@ -126,29 +136,52 @@ class JavaRuntimeService:
         os_name = {"Windows": "windows", "Linux": "linux", "Darwin": "mac"}.get(platform.system())
         if os_name is None:
             raise JavaRuntimeValidationError("Este sistema operativo todavía no está soportado para descarga automática de Java.")
-        machine = platform.machine().casefold()
-        architecture = "aarch64" if machine in {"arm64", "aarch64"} else "x64"
         async with allowed_client(ADOPTIUM_HOSTS, timeout=60.0) as client:
-            for image_type in ("jre", "jdk"):
-                response = await client.get(
-                    _ADOPTIUM_API.format(major=major),
-                    params={"architecture": architecture, "image_type": image_type, "os": os_name, "vendor": "eclipse"},
-                )
-                if response.status_code == 404:
-                    continue
-                response.raise_for_status()
-                releases = response.json()
-                if not isinstance(releases, list) or not releases:
-                    continue
-                package = releases[0].get("binary", {}).get("package", {})
-                link = package.get("link") if isinstance(package, dict) else None
-                checksum = package.get("checksum") if isinstance(package, dict) else None
-                if isinstance(link, str) and is_allowed_url(link, ADOPTIUM_HOSTS):
-                    result = {"link": link}
-                    if isinstance(checksum, str) and len(checksum) == 64:
-                        result["checksum"] = checksum
-                    return result
+            for architecture in self._architectures(os_name, platform.machine()):
+                for image_type in ("jre", "jdk"):
+                    response = await client.get(
+                        _ADOPTIUM_API.format(major=major),
+                        params={"architecture": architecture, "image_type": image_type, "os": os_name, "vendor": "eclipse"},
+                    )
+                    if response.status_code == 404:
+                        continue
+                    response.raise_for_status()
+                    releases = response.json()
+                    if not isinstance(releases, list) or not releases:
+                        continue
+                    package = releases[0].get("binary", {}).get("package", {})
+                    link = package.get("link") if isinstance(package, dict) else None
+                    checksum = package.get("checksum") if isinstance(package, dict) else None
+                    if isinstance(link, str) and is_allowed_url(link, ADOPTIUM_HOSTS):
+                        result = {"link": link}
+                        if isinstance(checksum, str) and len(checksum) == 64:
+                            result["checksum"] = checksum
+                        return result
         raise JavaRuntimeServiceError("Adoptium no ofreció un runtime compatible para esta computadora.")
+
+    @staticmethod
+    def _architectures(os_name: str, machine: str) -> tuple[str, ...]:
+        """Adoptium architectures to try, best match first."""
+        normalized = machine.casefold()
+        if normalized in {"arm64", "aarch64"}:
+            # Windows 11 on ARM runs x64 Java through emulation, and Adoptium
+            # publishes native Windows ARM64 builds only for recent Java versions.
+            return ("aarch64", "x64") if os_name == "windows" else ("aarch64",)
+        if normalized in {"x86", "i386", "i686"}:
+            return ("x32",)
+        return ("x64",)
+
+    @staticmethod
+    def _replace_with_retry(source: Path, target: Path) -> None:
+        """Move the extracted runtime, waiting out transient Windows file locks."""
+        for attempt in range(_MOVE_ATTEMPTS):
+            try:
+                os.replace(source, target)
+                return
+            except PermissionError:
+                if attempt == _MOVE_ATTEMPTS - 1:
+                    raise
+                time.sleep(_MOVE_RETRY_SECONDS)
 
     async def _download(
         self, url: str, destination: Path, sha256: str | None = None, progress: ProgressCallback | None = None

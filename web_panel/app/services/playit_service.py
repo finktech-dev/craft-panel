@@ -77,6 +77,8 @@ class PlayitService:
                 ("sc.exe", "query", "playitd"),
                 capture_output=True,
                 text=True,
+                # sc.exe prints localized text in the OEM code page.
+                errors="replace",
                 timeout=1,
                 check=False,
             )

@@ -105,7 +105,7 @@ class RuntimeDiscoveryService:
         for executable in candidates:
             for version_flag in ("--version", "-version"):
                 try:
-                    result = self._command_runner([str(executable), version_flag], capture_output=True, text=True, timeout=5, check=False)
+                    result = self._command_runner([str(executable), version_flag], capture_output=True, text=True, errors="replace", timeout=5, check=False)
                 except (OSError, subprocess.SubprocessError):
                     break
                 output = "\n".join(part for part in (result.stdout, result.stderr) if part)
