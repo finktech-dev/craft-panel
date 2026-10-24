@@ -86,7 +86,7 @@
     <nav id="admin-master-tabs" class="settings-list" aria-label="Secciones de ajustes">
       <a id="tab-btn-myserver" href="#myserver" data-master-tab="myserver" aria-controls="panel-master-myserver" class="master-tab-btn settings-row"><span><strong>Tu servidor</strong><small>Cómo se enciende, las copias y lo que el panel no toca.</small></span></a>
       <a id="tab-btn-ranks" href="#ranks" data-master-tab="ranks" aria-controls="panel-master-ranks" class="master-tab-btn settings-row"><span><strong>Rangos y permisos</strong><small>Qué rango tiene cada jugador y qué puede hacer.</small></span></a>
-      <a id="tab-btn-discord" href="#discord" data-master-tab="discord" aria-controls="panel-master-discord" class="master-tab-btn settings-row"><span><strong>Avisos en Discord</strong><small>Un mensaje en tu Discord cuando pasa algo en el servidor.</small></span></a>
+      <a id="tab-btn-discord" href="#discord" data-master-tab="discord" aria-controls="panel-master-discord" class="master-tab-btn settings-row"><span><strong>Avisos en Discord</strong><small>Un mensaje en tu Discord cuando pasa algo, y el cartel con el estado del servidor.</small></span></a>
       <a id="tab-btn-rules" href="#rules" data-master-tab="rules" aria-controls="panel-master-rules" class="master-tab-btn settings-row"><span><strong>Reglas del servidor</strong><small>Qué objetos, criaturas y aldeanos hay en tu mundo.</small></span></a>
       <a id="tab-btn-configs" href="#configs" data-master-tab="configs" aria-controls="panel-master-configs" class="master-tab-btn settings-row"><span><strong>Mods y mundo</strong><small>Los ajustes de cada mod, las reglas del juego y las copias automáticas.</small></span></a>
       <a id="tab-btn-access" href="#access" data-master-tab="access" aria-controls="panel-master-access" class="master-tab-btn settings-row"><span><strong>Acceso por Internet</strong><small>Cómo entran tus amigos desde otra casa.</small></span></a>
@@ -730,7 +730,7 @@
           <summary class="cursor-pointer hover:text-zinc-200">Opciones avanzadas · qué hace el botón</summary>
           <div class="mt-3 space-y-2 leading-relaxed text-zinc-500">
             <p>Al apagarlo se ejecuta <code class="font-mono text-zinc-300">/lp group default permission set worldedit.* false</code> y <code class="font-mono text-zinc-300">/lp group admin permission set worldedit.* false</code>: el hacha de madera vuelve a ser común y los comandos <code class="font-mono text-zinc-300">//</code> quedan bloqueados.</p>
-            <p>Al encenderlo se ejecuta <code class="font-mono text-zinc-300">/lp group admin permission set worldedit.* true</code>, que habilita la varita y los esquemáticos para los administradores.</p>
+            <p>Al encenderlo se ejecuta <code class="font-mono text-zinc-300">/lp group admin permission set worldedit.* true</code>, que habilita la varita y los esquemáticos de WorldEdit para los administradores.</p>
           </div>
         </details>
       </div>
@@ -827,7 +827,7 @@
       <h2 id="discord-title" class="screen-title" tabindex="-1">Avisos en Discord</h2>
       <p class="screen-lead">Recibí un mensaje en tu Discord cuando el servidor se enciende, se cae o alguien entra.</p>
 
-      <div class="mt-6">{{ subtabs('discord', 'Partes de los avisos', [('canal', 'Canal'), ('avisos', 'Qué avisos mandar'), ('textos', 'Textos de los avisos')]) }}</div>
+      <div class="mt-6">{{ subtabs('discord', 'Partes de los avisos', [('canal', 'Canal'), ('avisos', 'Qué avisos mandar'), ('textos', 'Textos de los avisos'), ('cartel', 'Cartel del servidor')]) }}</div>
 
       {#- Every sub-screen feeds the same Guardar below. -#}
       {{ subpanel('discord', 'canal', first=true, cls='pt-2') }}
@@ -922,7 +922,15 @@
         </div>
       </div>
 
-      <div class="mt-8 flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-6">
+      {{ subpanel('discord', 'cartel', cls='pt-8') }}
+        <h3 id="banner-title" class="font-semibold text-zinc-100">Cartel del servidor</h3>
+        <p class="mt-1 max-w-xl text-sm leading-relaxed text-zinc-400">Una imagen con el estado del servidor para pegar en Discord o en un foro.</p>
+        <img id="status-banner" src="/api/server/banner.png" alt="Cartel con el estado del servidor" class="mt-5 w-full max-w-xl rounded-lg bg-zinc-900" width="600" height="160" loading="lazy">
+        <button id="copy-banner-markdown" type="button" class="v2-button btn-primary mt-4">Copiar el enlace</button>
+      </div>
+
+      {#- The banner has nothing to save, so the save row hides on its sub-screen. -#}
+      <div class="mt-8 flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-6" data-hide-for-sub="discord/cartel">
         <button id="btn-discord-save" type="button" class="v2-button btn-primary">Guardar</button>
         <button id="btn-discord-test" type="button" class="v2-button btn-quiet" title="Manda un aviso de prueba al canal principal">Enviar un aviso de prueba</button>
       </div>

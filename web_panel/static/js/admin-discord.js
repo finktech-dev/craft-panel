@@ -254,6 +254,17 @@
       }
     });
 
+    // Status banner: copy a Markdown image link to paste in Discord or a forum.
+    $('#copy-banner-markdown')?.addEventListener('click', async () => {
+      const markdown = `![Estado](${window.location.origin}/api/server/banner.png)`;
+      try {
+        await navigator.clipboard.writeText(markdown);
+        Panel.toast('Enlace copiado. Pegalo en Discord o en un foro.');
+      } catch {
+        Panel.toast('No pudimos copiar el enlace. Probá de nuevo.', 'error');
+      }
+    });
+
     // 7. Carga inicial
     loadDiscordConfig();
   };

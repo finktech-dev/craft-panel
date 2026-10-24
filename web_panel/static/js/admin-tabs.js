@@ -28,6 +28,8 @@
     '#two-factor': { main: 'security' },
     '#seguridad': { main: 'security' },
     '#acceso': { main: 'access' },
+    '#cartel': { main: 'discord', sub: 'cartel' },
+    '#banner': { main: 'discord', sub: 'cartel' },
   };
 
   let currentMasterTab = null;
@@ -62,6 +64,10 @@
     panels.forEach((panel) => { panel.hidden = panel !== target; });
     document.querySelectorAll(`[data-subtabs="${group}"] [data-subtab]`).forEach((button) => {
       button.setAttribute('aria-selected', button.dataset.subtab === target.dataset.subpanelKey ? 'true' : 'false');
+    });
+    // Shared rows (such as a Guardar bar) that make no sense on one sub-screen.
+    document.querySelectorAll(`[data-hide-for-sub^="${group}/"]`).forEach((element) => {
+      element.hidden = element.dataset.hideForSub === `${group}/${target.dataset.subpanelKey}`;
     });
     return target.dataset.subpanelKey;
   }
