@@ -2,12 +2,12 @@
  * Gestor de Pestañas Maestras y Deep Linking para el Centro de Control (/administration)
  * web_panel/static/js/admin-tabs.js
  *
- * Coordina la navegación de 4 módulos principales (Rangos, Reglas, Configs, Discord),
+ * Coordina la navegación de los módulos principales (Rangos, Reglas, Configs, Discord, Tu servidor),
  * controla la visibilidad con aislamiento visual y sincroniza la URL vía Hash Routing.
  */
 
 (() => {
-  const MASTER_TABS = ['ranks', 'rules', 'configs', 'discord'];
+  const MASTER_TABS = ['ranks', 'rules', 'configs', 'discord', 'myserver'];
 
   const HASH_MAP = {
     '#ranks': { main: 'ranks' },
@@ -26,6 +26,9 @@
     '#health': { main: 'configs', scrollTarget: 'health' },
     '#backups': { main: 'configs', scrollTarget: 'health' },
     '#discord': { main: 'discord' },
+    '#myserver': { main: 'myserver' },
+    '#tu-servidor': { main: 'myserver' },
+    '#server-file': { main: 'myserver' },
   };
 
   let currentMasterTab = 'ranks';

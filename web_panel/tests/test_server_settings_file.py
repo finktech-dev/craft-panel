@@ -556,6 +556,21 @@ async def test_start_endpoint_refuses_a_broken_settings_file(tmp_path: Path, mon
     assert "craftpanel.txt" in error.value.detail
 
 
+def test_ajustes_has_a_field_for_every_key_and_list() -> None:
+    from main import templates
+
+    html = templates.env.get_template("administration.html").render(
+        request=None, current_page="administration", is_admin=True, csrf_token="x", two_factor_enabled=False,
+        public_address=None, minecraft_version="",
+    )
+    for key in module.KEYS:
+        assert f'data-file-key="{key}"' in html, key
+    for section in module.SECTIONS:
+        assert f'data-file-list="{section}"' in html, section
+    assert 'src="/static/js/admin-server-file.js"' in html
+    assert "Ver o editar el archivo" in html
+
+
 def test_settings_file_endpoints_are_admin_only() -> None:
     from starlette.testclient import TestClient
 
