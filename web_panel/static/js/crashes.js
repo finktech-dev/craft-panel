@@ -135,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       return `
         <article class="flex items-start gap-4 border-b border-zinc-800 py-4">
-          <img src="${esc(evt.avatar_url)}" alt="" class="h-10 w-10 shrink-0 rounded-lg bg-zinc-800 object-cover" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/64'">
+          <img src="${esc(evt.avatar_url)}" alt="" class="h-10 w-10 shrink-0 rounded-lg bg-zinc-800 object-cover" data-fallback-src="https://mc-heads.net/avatar/MHF_Steve/64">
           <div class="min-w-0 flex-1">
             <h3 class="font-semibold text-zinc-50">${esc(info.headline)}</h3>
             <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-zinc-500">

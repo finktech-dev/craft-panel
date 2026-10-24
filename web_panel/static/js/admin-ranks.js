@@ -349,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           chipsEl.innerHTML = onlineList.map(p => `
             <button type="button" data-online-player="${esc(p.username)}" class="flex items-center gap-2 rounded-full border border-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800">
-              <img src="${esc(p.avatar_url || `https://mc-heads.net/avatar/${encodeURIComponent(p.username)}/24`)}" alt="" class="h-5 w-5 rounded-sm object-cover" onerror="this.src='https://mc-heads.net/avatar/steve/24'">
+              <img src="${esc(p.avatar_url || `https://mc-heads.net/avatar/${encodeURIComponent(p.username)}/24`)}" alt="" class="h-5 w-5 rounded-sm object-cover" data-fallback-src="https://mc-heads.net/avatar/steve/24">
               <span>${esc(p.username)}</span>
             </button>
           `).join('');

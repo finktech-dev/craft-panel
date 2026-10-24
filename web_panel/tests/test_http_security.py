@@ -152,6 +152,9 @@ def test_oversized_bodies_are_rejected_before_parsing() -> None:
 def test_security_headers_and_no_store() -> None:
     response = _client().get("/")
     csp = response.headers["content-security-policy"]
+    directives = {part.strip().split(" ", 1)[0]: part.strip() for part in csp.split(";") if part.strip()}
+    assert directives["script-src"] == "script-src 'self'"
+    assert "'unsafe-inline'" not in directives["script-src"] and "'unsafe-eval'" not in directives["script-src"]
     assert "frame-ancestors 'none'" in csp and "object-src 'none'" in csp
     assert "img-src 'self' data: https://mc-heads.net https://cdn.modrinth.com" in csp
     assert "ws: " not in csp
