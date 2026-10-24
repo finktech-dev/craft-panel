@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
 import tomllib
 import uuid
 import zipfile
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
@@ -29,6 +30,7 @@ from app.schemas.mod import (
     ModToggleResponse,
     ModUpdateItem,
 )
+from app.services.mod_history_service import HistoryToken, ModHistoryService, is_mod_filename
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.services.server_version_service import ServerVersionService
@@ -85,12 +87,30 @@ class ModService:
         self._settings = configured_settings
         self._manager = manager
         self._versions = ServerVersionService(configured_settings)
+        self.history = ModHistoryService(configured_settings, manager)
 
     def _require_server_stopped(self, operation: str) -> None:
         try:
             require_server_stopped(self._manager, operation)
         except ServerActiveError as error:
             raise ModConflictError(str(error)) from error
+
+    @contextlib.asynccontextmanager
+    async def _history_step(self, action: str, detail: dict[str, Any] | None = None) -> AsyncIterator[HistoryToken | None]:
+        """Snapshot the mods folder before a change; history problems never block the change."""
+        token: HistoryToken | None = None
+        try:
+            token = await asyncio.to_thread(self.history.begin, action, detail)
+        except Exception as error:
+            logger.warning("No se pudo guardar el historial de mods antes de %s: %s", action, error)
+        try:
+            yield token
+        finally:
+            if token is not None:
+                try:
+                    await asyncio.to_thread(self.history.finish, token)
+                except Exception as error:
+                    logger.warning("No se pudo completar el historial de mods: %s", error)
 
     @property
     def mods_directory(self) -> Path:
@@ -103,6 +123,10 @@ class ModService:
         return self._settings.client_pack_directory / self._settings.client_pack_filename
 
     async def list_mods(self) -> list[ModItem]:
+        try:
+            await asyncio.to_thread(self.history.record_external_changes)
+        except Exception as error:
+            logger.warning("No se pudo revisar si cambiaron los mods por fuera del panel: %s", error)
         if not self.mods_directory.is_dir():
             return []
         return await asyncio.to_thread(self._list_mods_sync)
@@ -120,7 +144,8 @@ class ModService:
             raise ModConflictError("Ya existe un mod con el nombre de destino.")
 
         try:
-            await asyncio.to_thread(source.rename, target)
+            async with self._history_step("toggle", {"filename": source.name}):
+                await asyncio.to_thread(source.rename, target)
         except FileExistsError as error:
             raise ModConflictError("Ya existe un mod con el nombre de destino.") from error
         except OSError as error:
@@ -157,7 +182,8 @@ class ModService:
                     await target_file.write(chunk)
             if not await asyncio.to_thread(zipfile.is_zipfile, temporary_path):
                 raise ModServiceError("El archivo no es un .jar válido.")
-            await asyncio.to_thread(temporary_path.rename, destination)
+            async with self._history_step("upload", {"filename": destination.name}):
+                await asyncio.to_thread(temporary_path.rename, destination)
         except FileExistsError as error:
             raise ModConflictError("Ya existe un mod con ese nombre.") from error
         except OSError as error:
@@ -175,13 +201,32 @@ class ModService:
         if not target.is_file():
             raise ModNotFoundError("No existe el mod indicado.")
         try:
-            await asyncio.to_thread(target.unlink)
+            async with self._history_step("delete", {"filename": target.name}):
+                await asyncio.to_thread(target.unlink)
         except OSError as error:
             raise ModServiceError(f"No se pudo eliminar el mod: {error}") from error
 
     async def bulk_action(self, action: str, filenames: list[str]) -> ModBulkActionResponse:
         """Aplica una acción en lote (enable, disable, delete) de forma segura."""
         self._require_server_stopped(f"operación en lote: {action}")
+        async with self._history_step(f"bulk_{action}", {"count": len(filenames)}):
+            affected, errors = await self._apply_bulk_action(action, filenames)
+
+        action_labels = {"enable": "habilitados", "disable": "deshabilitados", "delete": "eliminados"}
+        label = action_labels.get(action, action)
+        message = (
+            f"{affected} mods {label} correctamente."
+            if not errors
+            else f"{affected} mods {label}, con {len(errors)} advertencias."
+        )
+        return ModBulkActionResponse(
+            action=action,
+            affected_count=affected,
+            errors=errors,
+            message=message,
+        )
+
+    async def _apply_bulk_action(self, action: str, filenames: list[str]) -> tuple[int, list[str]]:
         affected = 0
         errors: list[str] = []
 
@@ -213,20 +258,7 @@ class ModService:
                     affected += 1
             except Exception as err:
                 errors.append(f"{name}: {err}")
-
-        action_labels = {"enable": "habilitados", "disable": "deshabilitados", "delete": "eliminados"}
-        label = action_labels.get(action, action)
-        message = (
-            f"{affected} mods {label} correctamente."
-            if not errors
-            else f"{affected} mods {label}, con {len(errors)} advertencias."
-        )
-        return ModBulkActionResponse(
-            action=action,
-            affected_count=affected,
-            errors=errors,
-            message=message,
-        )
+        return affected, errors
 
     def get_environment(self) -> dict[str, str]:
         """Loader and Minecraft version of the installed server; empty strings when unknown.
@@ -297,8 +329,42 @@ class ModService:
         game_version: str | None = None,
         install_dependencies: bool = True,
         visited_projects: set[str] | None = None,
+        replace_filename: str | None = None,
     ) -> ModItem:
+        """Install a Modrinth project (and its required dependencies).
+
+        ``replace_filename`` turns the install into an update: the old jar is
+        removed once the new one is in place. The whole step is one history entry.
+        """
         self._require_server_stopped("instalar mods")
+        if visited_projects is not None:
+            return await self._install_modrinth_mod(
+                project_id, version_id, loader, game_version, install_dependencies, visited_projects
+            )
+        replaced = self._resolve_mod_path(replace_filename) if replace_filename else None
+        action = "update" if replaced is not None else "install"
+        async with self._history_step(action, {"project_id": project_id}) as token:
+            item = await self._install_modrinth_mod(
+                project_id, version_id, loader, game_version, install_dependencies, None
+            )
+            if token is not None:
+                token.detail["filename"] = item.filename
+            if replaced is not None and replaced.name != item.filename and replaced.is_file():
+                try:
+                    await asyncio.to_thread(replaced.unlink)
+                except OSError as error:
+                    logger.warning("No se pudo quitar la versión anterior %s: %s", replaced.name, error)
+        return item
+
+    async def _install_modrinth_mod(
+        self,
+        project_id: str,
+        version_id: str | None,
+        loader: str | None,
+        game_version: str | None,
+        install_dependencies: bool,
+        visited_projects: set[str] | None,
+    ) -> ModItem:
         if visited_projects is not None and len(visited_projects) > _MAX_DEPENDENCY_INSTALLS:
             raise ModServiceError("El mod tiene demasiadas dependencias para instalarlas automáticamente.")
         version = await self._get_compatible_version(project_id, version_id, loader, game_version)
@@ -346,11 +412,13 @@ class ModService:
                         if dep_proj not in visited_projects and len(visited_projects) <= _MAX_DEPENDENCY_INSTALLS:
                             visited_projects.add(dep_proj)
                             try:
-                                await self.install_modrinth_mod(
+                                await self._install_modrinth_mod(
                                     dep_proj,
-                                    version_id=dep.get("version_id"),
-                                    install_dependencies=True,
-                                    visited_projects=visited_projects,
+                                    dep.get("version_id"),
+                                    None,
+                                    None,
+                                    True,
+                                    visited_projects,
                                 )
                                 logger.info("Dependencia requerida %s instalada con éxito", dep_proj)
                             except ModConflictError:
@@ -721,7 +789,7 @@ class ModService:
     def _validate_filename(filename: str) -> str:
         if not filename or Path(filename).name != filename or not is_safe_component(filename):
             raise ModServiceError("El nombre del archivo no es válido.")
-        if not (filename.endswith(".jar") or filename.endswith(".jar.disabled")):
+        if not is_mod_filename(filename):
             raise ModServiceError("El archivo debe terminar en .jar o .jar.disabled.")
         return filename
 
