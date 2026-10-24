@@ -1,4 +1,4 @@
-"""Contratos de autenticación y configuración TOTP."""
+"""Authentication and TOTP setup contracts."""
 
 from pydantic import BaseModel, Field
 

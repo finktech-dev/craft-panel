@@ -1,4 +1,4 @@
-"""Tests de regresión para el panel de administración y sus módulos JS."""
+"""Regression tests for the admin panel and its JS modules."""
 
 import pathlib
 import pytest
@@ -24,7 +24,7 @@ def auth_client():
 
 
 def test_modular_js_files_exist():
-    """Verifica que los 5 archivos JavaScript modularizados existan en disk y no estén vacíos."""
+    """Check that the 5 modular JavaScript files exist on disk and are not empty."""
     js_dir = pathlib.Path(__file__).parent.parent / "static" / "js"
     expected_files = [
         "admin-tabs.js",
@@ -41,7 +41,7 @@ def test_modular_js_files_exist():
 
 
 def test_administration_html_contains_modular_scripts():
-    """Verifica que administration.html incluya las etiquetas <script> en orden correcto."""
+    """Check that administration.html includes the <script> tags in the right order."""
     template_path = pathlib.Path(__file__).parent.parent / "templates" / "administration.html"
     assert template_path.is_file()
     html = template_path.read_text(encoding="utf-8")
@@ -52,12 +52,12 @@ def test_administration_html_contains_modular_scripts():
     assert '<script src="/static/js/admin-ranks.js"></script>' in html
     assert '<script src="/static/js/admin-discord.js"></script>' in html
 
-    # Verificar que no quedó ningún tag <script> inline sin cerrar
+    # Check that no inline <script> tag was left unclosed
     assert html.count("<script>") == 0, "No debe haber bloques <script> inline sin modularizar en administration.html"
 
 
 def test_administration_master_tabs_structure():
-    """Verifica la existencia y estructura de las 4 pestañas maestras aisladas."""
+    """Check that the 4 isolated top-level tabs exist and are well formed."""
     template_path = pathlib.Path(__file__).parent.parent / "templates" / "administration.html"
     html = template_path.read_text(encoding="utf-8")
 
@@ -69,7 +69,7 @@ def test_administration_master_tabs_structure():
 
 
 def test_administration_template_renders_cleanly():
-    """Verifica que Jinja2 pueda compilar y renderizar administration.html sin errores de sintaxis."""
+    """Check that Jinja2 can compile and render administration.html without syntax errors."""
     dummy_request = {"type": "http", "method": "GET", "path": "/administration", "headers": []}
     from starlette.requests import Request
     req = Request(dummy_request)
@@ -92,7 +92,7 @@ def test_administration_template_renders_cleanly():
 
 
 def test_static_assets_http_delivery(client):
-    """Verifica que FastAPI sirva los 5 archivos JS a través de HTTP con código 200."""
+    """Check that FastAPI serves the 5 JS files over HTTP with status 200."""
     endpoints = [
         "/static/js/admin-tabs.js",
         "/static/js/admin-configs.js",
@@ -107,21 +107,21 @@ def test_static_assets_http_delivery(client):
 
 
 def test_administration_route_auth_redirect(client):
-    """Verifica que un usuario anónimo sea redirigido a login al intentar acceder a /administration."""
+    """Check that an anonymous user is redirected to login when opening /administration."""
     res = client.get("/administration", follow_redirects=False)
     assert res.status_code in (302, 303, 307)
     assert res.headers["location"] == "/"
 
 
 def test_healthcheck(client):
-    """Verifica que el panel responda al healthcheck del sistema."""
+    """Check that the panel answers the system health check."""
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
 
 
 def test_api_endpoints_contracts_authenticated(auth_client):
-    """Verifica que los endpoints REST consultados por los 4 módulos JS existan y respondan con datos válidos."""
+    """Check that the REST endpoints used by the 4 JS modules exist and return valid data."""
     # 1. WorldEdit status
     we_res = auth_client.get("/api/worldedit/status")
     assert we_res.status_code == 200

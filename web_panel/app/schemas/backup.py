@@ -1,4 +1,4 @@
-"""Contratos de la API para copias de seguridad."""
+"""API contracts for backups."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class BackupAuditResponse(BaseModel):
 
 
 class BackupSafetyItem(BackupItem):
-    """Metadatos de una copia para mostrarla sin ejecutar una operación."""
+    """Metadata of a backup, for display without running an operation."""
 
     provenance: Literal["panel", "simplebackups", "external"]
     integrity: Literal["verified", "corrupt"]
@@ -42,7 +42,7 @@ class BackupSafetyItem(BackupItem):
 
 
 class BackupSafetyOverview(BaseModel):
-    """Estado de lectura para una pantalla de copias entendible y segura."""
+    """Read-only state for a clear and safe backups screen."""
 
     backups: list[BackupSafetyItem]
     total_backups: int = Field(ge=0)

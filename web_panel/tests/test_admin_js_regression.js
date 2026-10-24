@@ -1,6 +1,6 @@
 /**
- * Test de regresión para los 4 módulos JavaScript del panel de administración.
- * Se ejecuta en Node.js simulando el entorno DOM y validando contratos y funciones.
+ * Regression test for the 4 JavaScript modules of the admin panel.
+ * Runs in Node.js with a simulated DOM, checking contracts and functions.
  */
 
 const fs = require('fs');
@@ -22,19 +22,19 @@ const files = [
   'admin-server-file.js'
 ];
 
-// 1. Test de Sintaxis
+// 1. Syntax test
 console.log('\n[1] Verificando compilación de sintaxis VM...');
 for (const file of files) {
   const filePath = path.join(jsDir, file);
   assert(fs.existsSync(filePath), `Archivo no encontrado: ${file}`);
   const code = fs.readFileSync(filePath, 'utf8');
   assert(code.length > 500, `Archivo ${file} parece estar incompleto (${code.length} bytes)`);
-  // Compilar con VM de Node
+  // Compile with Node's VM
   new vm.Script(code, { filename: file });
   console.log(`  ✓ ${file} compila sin errores de sintaxis.`);
 }
 
-// 2. Mock del entorno de navegador (DOM, LocalStorage, Panel)
+// 2. Browser environment mock (DOM, LocalStorage, Panel)
 function createMockEnvironment() {
   const elements = new Map();
   const listeners = new Map();
@@ -86,7 +86,7 @@ function createMockEnvironment() {
     return el;
   }
 
-  // Pre-crear elementos que los scripts buscan
+  // Pre-create the elements the scripts look for
   const knownIds = [
     'admin-master-tabs', 'tab-btn-ranks', 'tab-btn-rules', 'tab-btn-configs', 'tab-btn-discord',
     'panel-master-ranks', 'panel-master-rules', 'panel-master-configs', 'panel-master-discord',
@@ -211,7 +211,7 @@ function createMockEnvironment() {
   return { context, elements, mockStorage };
 }
 
-// 3. Test de ejecución y contratos de admin-tabs.js
+// 3. Execution and contract test for admin-tabs.js
 console.log('\n[2] Probando admin-tabs.js (Pestañas Maestras y Deep Linking)...');
 const { context: tabsEnv } = createMockEnvironment();
 const tabsCode = fs.readFileSync(path.join(jsDir, 'admin-tabs.js'), 'utf8');
@@ -224,7 +224,7 @@ tabsEnv.window.switchMasterTab('rules');
 assert.strictEqual(tabsEnv.window.AdminTabs.getCurrentTab(), 'rules', 'switchMasterTab debe cambiar pestaña a rules');
 console.log('  ✓ switchMasterTab y AdminTabs responden correctamente');
 
-// 4. Test de ejecución y contratos de admin-ranks.js
+// 4. Execution and contract test for admin-ranks.js
 console.log('\n[3] Probando admin-ranks.js (Rangos, Colores Minecraft, LuckPerms)...');
 const { context: ranksEnv } = createMockEnvironment();
 const ranksCode = fs.readFileSync(path.join(jsDir, 'admin-ranks.js'), 'utf8');
@@ -249,7 +249,7 @@ const secondaryRoles = ranksEnv.window.AdminRanks.SECONDARY_ROLES;
 assert.strictEqual(secondaryRoles.length, 0, 'Un clon nuevo no debe incluir roles de otro servidor');
 console.log('  ✓ Los rangos se cargan sólo desde la configuración local del usuario');
 
-// 5. Test de ejecución y contratos de admin-restrictions.js
+// 5. Execution and contract test for admin-restrictions.js
 console.log('\n[4] Probando admin-restrictions.js (Centro de Restricciones & WorldEdit)...');
 const { context: restrEnv } = createMockEnvironment();
 const restrCode = fs.readFileSync(path.join(jsDir, 'admin-restrictions.js'), 'utf8');
@@ -261,7 +261,7 @@ assert(restrEnv.window.loadRestrictionsSummary, 'loadRestrictionsSummary debe es
 assert(restrEnv.window.loadCatalog, 'loadCatalog debe estar definido');
 console.log('  ✓ Funciones de restricciones y hot-toggle expuestas y operativas');
 
-// 6. Test de ejecución y contratos de admin-configs.js
+// 6. Execution and contract test for admin-configs.js
 console.log('\n[5] Probando admin-configs.js (Editor TOML, Gamerules, Spark)...');
 const { context: configsEnv } = createMockEnvironment();
 const configsCode = fs.readFileSync(path.join(jsDir, 'admin-configs.js'), 'utf8');
@@ -271,7 +271,7 @@ assert(configsEnv.window.loadConfigFile, 'loadConfigFile debe estar expuesto');
 assert(configsEnv.window.world, 'world debe estar expuesto');
 console.log('  ✓ Funciones de configs, gamerules y spark expuestas y operativas');
 
-// 7. Test de ejecución y contratos de admin-discord.js
+// 7. Execution and contract test for admin-discord.js
 console.log('\n[6] Probando admin-discord.js (Webhooks de Discord)...');
 const { context: discordEnv } = createMockEnvironment();
 const discordCode = fs.readFileSync(path.join(jsDir, 'admin-discord.js'), 'utf8');

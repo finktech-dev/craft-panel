@@ -1,4 +1,4 @@
-"""Operaciones seguras sobre mods locales y la API pública de Modrinth."""
+"""Safe operations on local mods and the public Modrinth API."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def matches_server_only_rule(filename: str, mod_id: str | None, rules: Iterable[
 
 
 class ModService:
-    """Servicio de archivos de mods; no ejecuta cambios sobre el servidor vivo."""
+    """Mod file service; never changes the running server."""
 
     def __init__(
         self,
@@ -240,7 +240,7 @@ class ModService:
             raise ModServiceError(f"No se pudo eliminar el mod: {error}") from error
 
     async def bulk_action(self, action: str, filenames: list[str]) -> ModBulkActionResponse:
-        """Aplica una acción en lote (enable, disable, delete) de forma segura."""
+        """Safely apply a bulk action (enable, disable, delete)."""
         self._require_server_stopped(f"operación en lote: {action}")
         async with self._history_step(f"bulk_{action}", {"count": len(filenames)}):
             affected, errors = await self._apply_bulk_action(action, filenames)
@@ -439,7 +439,7 @@ class ModService:
             logger.warning("Falló la descarga de %s: %s", project_id, error)
             raise ModrinthServiceError("No se pudo descargar el mod desde Modrinth.") from error
 
-        # Resolución automática de dependencias requeridas
+        # Automatic resolution of required dependencies
         if install_dependencies:
             if visited_projects is None:
                 visited_projects = set()
@@ -463,7 +463,7 @@ class ModService:
                                 )
                                 logger.info("Dependencia requerida %s instalada con éxito", dep_proj)
                             except ModConflictError:
-                                pass  # Ya existía en disco
+                                pass  # Already on disk
                             except Exception as dep_err:
                                 logger.warning("No se pudo autoinstalar dependencia requerida %s: %s", dep_proj, dep_err)
 
@@ -560,7 +560,7 @@ class ModService:
         return digests
 
     async def export_client_pack(self) -> Path:
-        """Empaqueta mods activos y configuraciones presentes sin bloquear FastAPI."""
+        """Pack enabled mods and existing configs without blocking FastAPI."""
         await asyncio.to_thread(self.client_pack_path.parent.mkdir, parents=True, exist_ok=True)
         temporary_path = self.client_pack_path.with_suffix(".zip.part")
         try:

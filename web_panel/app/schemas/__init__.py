@@ -1,1 +1,1 @@
-"""Modelos Pydantic para contratos de entrada y salida."""
+"""Pydantic models for input and output contracts."""

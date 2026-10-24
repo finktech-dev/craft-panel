@@ -1,4 +1,4 @@
-"""Métricas no bloqueantes del proceso de Minecraft mediante psutil."""
+"""Non-blocking Minecraft process metrics via psutil."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ _MEBIBYTE = 1024 * 1024
 
 
 class MetricsService:
-    """Obtiene CPU, RSS y uptime sin esperar un intervalo de muestreo."""
+    """Get CPU, RSS and uptime without waiting for a sampling interval."""
 
     def __init__(
         self,
@@ -27,7 +27,7 @@ class MetricsService:
         self._settings = configured_settings
 
     def get_server_metrics(self) -> ServerMetrics:
-        """Devuelve ceros si no hay proceso accesible, conservando el estado real."""
+        """Return zeros when no process is reachable, keeping the real status."""
         state = str(self._manager.state)
         if not self._manager.is_running or self._manager.process_pid is None:
             return self._empty_metrics(state)

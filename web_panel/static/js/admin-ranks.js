@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const next = text[i + 1];
       const isMarker = (c === '&' || c === '§');
 
-      // Formato Hexadecimal 1.16+: &#RRGGBB o §#RRGGBB
+      // 1.16+ hex format: &#RRGGBB or §#RRGGBB
       if (isMarker && next === '#' && i + 7 < text.length) {
         const hexCandidate = text.slice(i + 2, i + 8);
         if (/^[0-9a-fA-F]{6}$/.test(hexCandidate)) {
@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
           i += 8; continue;
         }
       }
-      // Formato Hexadecimal Spigot/Bungee: &x&r&r&g&g&b&b o §x§r§r§g§g§b§b
+      // Spigot/Bungee hex format: &x&r&r&g&g&b&b or §x§r§r§g§g§b§b
       if (isMarker && next && next.toLowerCase() === 'x' && i + 13 < text.length) {
         const m = text.slice(i, i + 14).match(/^[&§]x[&§]([0-9a-fA-F])[&§]([0-9a-fA-F])[&§]([0-9a-fA-F])[&§]([0-9a-fA-F])[&§]([0-9a-fA-F])$/i);
         if (m) {
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
           i += 14; continue;
         }
       }
-      // Formato estándar de 2 caracteres: &0-f, &k-o, &r
+      // Standard 2-character format: &0-f, &k-o, &r
       if (isMarker && next) {
         const code = next.toLowerCase();
         if (MC_COLORS[code] !== undefined) {
@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return html || esc(text);
   }
 
-  // Ticker de animación en vivo para letras que se mueven (&k Mágico / Obfuscated)
+  // Live animation ticker for scrambling letters (&k magic / obfuscated)
   const OBFUSCATED_GLYPHS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!@#$%&*?+-=';
   function scrambleObfuscatedNodes() {
     const nodes = document.querySelectorAll('.mc-obfuscated');
@@ -360,7 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sel.innerHTML = '<option value="">Elegí entre los ' + allPlayers.length + ' que ya entraron</option>' +
           allPlayers.map(p => `<option value="${esc(p.username)}">${esc(p.username)}${p.is_op ? ' · admin' : p.is_whitelisted ? ' · invitado' : ''}</option>`).join('');
       }
-      // Pre-seleccionar al primer jugador conectado si el campo está vacío
+      // Preselect the first online player if the field is empty
       const targetInput = $('#lp-target-player');
       if (onlineList.length > 0 && targetInput && !targetInput.value.trim()) {
         selectPlayer(onlineList[0].username, true);
@@ -519,7 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
           await runLP(`group ${rawId} permission set ${p} true`, `Concediendo ${p} a ${rawId}`);
         }
 
-        // Guardar en custom ranks
+        // Save to custom ranks
         const newRank = {
           id: rawId,
           name,

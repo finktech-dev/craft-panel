@@ -1,4 +1,4 @@
-"""Gestor de Whitelist (Lista blanca) con avatares e interacción en vivo."""
+"""Whitelist manager with avatars and live interaction."""
 
 from __future__ import annotations
 
@@ -182,7 +182,7 @@ class WhitelistService:
             if any(item.get("name", "").lower() == cleaned.lower() for item in current):
                 return {"success": True, "message": f"{cleaned} ya está en la lista blanca."}
 
-            # Enviar comando si el servidor está en ejecución
+            # Send the command if the server is running
             if self._manager.is_running:
                 await self._confirm_live_command(
                     f"/whitelist add {cleaned}",

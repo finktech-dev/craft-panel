@@ -1,8 +1,8 @@
-"""Perfil de capacidades de la sesión administrativa.
+"""Capability profile of the admin session.
 
-Este endpoint es deliberadamente de sólo lectura. La autorización sigue siendo
-la sesión firmada existente hasta que una futura migración introduzca cuentas y
-roles persistentes de forma explícita.
+This endpoint is deliberately read-only. Authorization is still the existing
+signed session until a future migration explicitly introduces persistent
+accounts and roles.
 """
 
 from fastapi import APIRouter, Depends
@@ -16,5 +16,5 @@ router = APIRouter(prefix="/access", tags=["access"], dependencies=[Depends(get_
 
 @router.get("/me", response_model=PanelAccessProfile)
 async def current_access_profile() -> PanelAccessProfile:
-    """Expone las capacidades del dueño autenticado, sin efecto lateral."""
+    """Expose the authenticated owner's capabilities, with no side effects."""
     return access_service.owner_profile()

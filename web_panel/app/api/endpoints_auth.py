@@ -1,4 +1,4 @@
-"""Inicio de sesión, 2FA y limitación de intentos del administrador."""
+"""Administrator login, 2FA and attempt rate limiting."""
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from starlette.concurrency import run_in_threadpool
@@ -34,7 +34,7 @@ def _too_many_attempts(retry_after: int) -> HTTPException:
 
 @router.post("/login", response_model=LoginResponse)
 async def login(payload: LoginRequest, request: Request) -> LoginResponse:
-    """Valida el PIN y deja una cookie de sesión firmada y HttpOnly."""
+    """Validate the PIN and set a signed, HttpOnly session cookie."""
     remote_ip = client_ip(request)
     # The owner sitting at the PC is never locked out by remote brute force.
     count_globally = not request_is_direct_loopback(request)
@@ -73,13 +73,13 @@ async def login(payload: LoginRequest, request: Request) -> LoginResponse:
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(request: Request) -> None:
-    """Cierra sólo la sesión de este navegador."""
+    """Log out this browser's session only."""
     clear_admin_session(request)
 
 
 @router.get("/2fa/status", response_model=TwoFactorStatus)
 async def two_factor_status() -> TwoFactorStatus:
-    """Expone sólo si el segundo factor está activo, nunca el secreto."""
+    """Expose only whether the second factor is on, never the secret."""
     try:
         return TwoFactorStatus(enabled=totp_manager.is_enabled)
     except TwoFactorError as error:
@@ -125,7 +125,7 @@ def _require_current_code(request: Request, payload: TOTPCurrentCodeRequest | No
 async def setup_two_factor(
     request: Request, payload: TOTPCurrentCodeRequest | None = Body(default=None)
 ) -> TOTPSetupResponse:
-    """Crea una configuración pendiente; se activa al verificar un código.
+    """Create a pending setup; it becomes active once a code is verified.
 
     Re-enrolling while 2FA is on requires a current code; the active factor
     keeps working until the new one is verified.
@@ -169,7 +169,7 @@ async def verify_two_factor(payload: TOTPVerifyRequest, request: Request) -> Two
 async def disable_two_factor(
     request: Request, payload: TOTPCurrentCodeRequest | None = Body(default=None)
 ) -> TwoFactorStatus:
-    """Apaga el segundo factor (o descarta una configuración a medias).
+    """Turn off the second factor (or discard a half-finished setup).
 
     When 2FA is on, a current code is required.
     """

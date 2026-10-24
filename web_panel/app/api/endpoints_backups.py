@@ -1,4 +1,4 @@
-"""Endpoints protegidos de backups y consulta del Crash Doctor."""
+"""Protected endpoints for backups and Crash Doctor queries."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ async def list_backups() -> list[BackupItem]:
 
 @router.get("/overview", response_model=BackupSafetyOverview)
 async def backup_safety_overview() -> BackupSafetyOverview:
-    """Devuelve integridad, procedencia y preparación; no modifica copias ni mundos."""
+    """Return integrity, origin and readiness; never modifies backups or worlds."""
     return await backup_service.safety_overview()
 
 

@@ -1,4 +1,4 @@
-"""Tareas simples persistentes del panel, sin requerir scripts de Windows.
+"""Simple persistent panel tasks, with no Windows scripts required.
 
 ``backup_interval`` and ``daily_restart`` from craftpanel.txt take priority
 over the interval saved from Ajustes; the file is re-read every minute so

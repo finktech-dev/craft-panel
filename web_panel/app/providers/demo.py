@@ -1,10 +1,10 @@
-"""Provider estático para demostraciones sin host, mundo ni credenciales."""
+"""Static provider for demos with no host, world or credentials."""
 
 from app.schemas.providers import ProviderDescriptor, ProviderStatus
 
 
 class DemoProvider:
-    """Ejemplo no registrable automáticamente y sin efectos laterales."""
+    """Example that is never registered automatically and has no side effects."""
 
     @property
     def descriptor(self) -> ProviderDescriptor:

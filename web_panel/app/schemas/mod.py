@@ -1,4 +1,4 @@
-"""Contratos para el gestor de mods y el catálogo Modrinth."""
+"""Contracts for the mod manager and the Modrinth catalog."""
 
 from __future__ import annotations
 

@@ -1,1 +1,1 @@
-"""Configuración, seguridad y observabilidad compartidas."""
+"""Shared configuration, security and observability."""

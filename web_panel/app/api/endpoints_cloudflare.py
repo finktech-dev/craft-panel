@@ -1,4 +1,4 @@
-"""Controles administrativos del Quick Tunnel de Cloudflare."""
+"""Admin controls for the Cloudflare Quick Tunnel."""
 
 from fastapi import APIRouter, Depends, HTTPException
 

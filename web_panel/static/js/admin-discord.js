@@ -1,18 +1,18 @@
 /**
- * Gestor de Integración y Alertas de Discord para el Panel de Administración.
- * Maneja la carga y guardado de configuración de Webhooks (/api/discord/config),
- * pruebas de webhooks y menciones (/api/discord/test), y toggles de visibilidad de contraseñas.
+ * Discord integration and alerts manager for the admin panel.
+ * Handles loading and saving webhook settings (/api/discord/config),
+ * webhook and mention tests (/api/discord/test), and password visibility toggles.
  */
 (() => {
   const initDiscordAdmin = () => {
     const $ = (s) => document.querySelector(s);
 
-    // Si la sección de Discord no está presente en la página, no ejecutar
+    // Do nothing if the Discord section is not on the page
     if (!$('#discord-webhook-url') && !$('#btn-save-discord-config') && !$('#btn-discord-save')) {
       return;
     }
 
-    // 1. Cargar configuración actual desde el backend
+    // 1. Load the current settings from the backend
     const loadDiscordConfig = async () => {
       try {
         const cfg = await Panel.api('/api/discord/config');
@@ -82,10 +82,10 @@
       }
     };
 
-    // Exponer loadDiscordConfig globalmente para compatibilidad con llamadas externas
+    // Expose loadDiscordConfig globally for external callers
     window.loadDiscordConfig = loadDiscordConfig;
 
-    // 2. Guardar configuración de Discord
+    // 2. Save the Discord settings
     const handleSaveDiscordConfig = async (btn) => {
       if (!btn) return;
       btn.disabled = true;
@@ -132,7 +132,7 @@
       }
     };
 
-    // Soporta tanto #btn-save-discord-config como #btn-discord-save
+    // Supports both #btn-save-discord-config and #btn-discord-save
     ['#btn-save-discord-config', '#btn-discord-save'].forEach((selector) => {
       const btn = $(selector);
       if (btn) {
@@ -172,7 +172,7 @@
       }
     });
 
-    // 4. Probar Webhook de Jugadores y Muertes (Feed con avatar 3D)
+    // 4. Test the players and deaths webhook (feed with 3D avatar)
     $('#btn-test-events-webhook')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
@@ -197,7 +197,7 @@
       }
     });
 
-    // 5. Probar Mención de Rol
+    // 5. Test the role mention
     $('#btn-test-mention')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
@@ -227,7 +227,7 @@
       }
     });
 
-    // 6. Conmutadores de visibilidad (Mostrar / Ocultar webhook token)
+    // 6. Visibility toggles (show / hide the webhook token)
     $('#btn-toggle-webhook-view')?.addEventListener('click', () => {
       const inp = $('#discord-webhook-url');
       const btn = $('#btn-toggle-webhook-view');

@@ -1,4 +1,4 @@
-"""Respuestas del instalador y del túnel Playit."""
+"""Installer and Playit tunnel responses."""
 
 from datetime import datetime
 from typing import Literal
@@ -38,11 +38,11 @@ class FriendAddressResponse(BaseModel):
 
 
 class FriendConnectionInfo(BaseModel):
-    """Información para compartir el servidor, sin controlar ningún túnel.
+    """Information for sharing the server, without controlling any tunnel.
 
-    La dirección puede provenir de Playit, una configuración manual o el
-    fallback local. El panel nunca promete que una dirección manual sea
-    alcanzable desde Internet: sólo comunica de dónde la obtuvo.
+    The address may come from Playit, a manual setting or the local fallback.
+    The panel never promises that a manual address is reachable from the
+    Internet: it only reports where it got it from.
     """
 
     public_address: str
@@ -56,13 +56,13 @@ class FriendConnectionInfo(BaseModel):
 
 
 class TunnelSetupRequest(BaseModel):
-    """Clave privada del agente, recibida solamente por una sesión de administrador."""
+    """Private agent key, accepted only from an admin session."""
 
     agent_secret: str = Field(min_length=16, max_length=4_096)
 
 
 class TunnelLogLine(BaseModel):
-    """Una línea observable del agente Playit, apta para la consola web."""
+    """One observable Playit agent line, safe for the web console."""
 
     timestamp: datetime
     level: str
@@ -70,7 +70,7 @@ class TunnelLogLine(BaseModel):
 
 
 class CloudflareQuickTunnelStatus(BaseModel):
-    """Estado del enlace temporal HTTPS del panel."""
+    """Status of the panel's temporary HTTPS link."""
 
     is_running: bool
     public_url: str | None
@@ -80,7 +80,7 @@ class CloudflareQuickTunnelStatus(BaseModel):
 
 
 class JavaRuntimeStatus(BaseModel):
-    """Un Java encontrado en el host, sin modificar su instalación."""
+    """A Java found on the host, without modifying its installation."""
 
     state: Literal["available", "missing", "unusable"]
     # Absolute path, used by the panel to run Java; never sent to the browser.
@@ -94,7 +94,7 @@ class JavaRuntimeStatus(BaseModel):
 
 
 class MinecraftInstallationStatus(BaseModel):
-    """Huella de un servidor Minecraft local; no enumera mundos ni mods."""
+    """Fingerprint of a local Minecraft server; does not list worlds or mods."""
 
     state: Literal["detected", "not_detected"]
     # Absolute paths stay inside the panel; the browser only gets the script's file name.
@@ -108,7 +108,7 @@ class MinecraftInstallationStatus(BaseModel):
 
 
 class AccountProtectionStatus(BaseModel):
-    """Configuración de acceso del servidor, sin leer cuentas ni credenciales locales."""
+    """Server access settings, without reading local accounts or credentials."""
 
     state: Literal["online_accounts", "whitelist", "unrestricted", "unknown"]
     online_mode: bool | None = None
@@ -117,7 +117,7 @@ class AccountProtectionStatus(BaseModel):
 
 
 class HostRuntimeDiscovery(BaseModel):
-    """Contrato de descubrimiento portable y estrictamente de sólo lectura."""
+    """Portable, strictly read-only discovery contract."""
 
     operating_system: Literal["windows", "linux", "macos", "other"]
     java: JavaRuntimeStatus

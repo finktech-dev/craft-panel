@@ -1,4 +1,4 @@
-"""Servicio de marcadores de coordenadas y teletransporte rápido."""
+"""Coordinate waypoint and quick teleport service."""
 
 from __future__ import annotations
 

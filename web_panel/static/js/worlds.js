@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const $$ = (s) => document.querySelectorAll(s);
   const esc = Panel.escapeHtml;
 
-  // Manejo de pestañas principales
+  // Main tab handling
   const tabs = {
     worlds: { btn: $('#tab-btn-worlds'), content: $('#tab-content-worlds') },
     props: { btn: $('#tab-btn-props'), content: $('#tab-content-props') },
@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ==========================================
-  // 1. GESTOR DE MUNDOS
+  // 1. WORLD MANAGER
   // ==========================================
   const loadWorlds = async () => {
     const grid = $('#worlds-grid');
@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Switch y Delete de mundos
+  // World switch and delete
   $('#worlds-grid').addEventListener('click', async (e) => {
     const switchBtn = e.target.closest('[data-switch-world]');
     if (switchBtn) {
@@ -181,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ==========================================
-  // 2. EDITOR DE SERVER.PROPERTIES
+  // 2. SERVER.PROPERTIES EDITOR
   // ==========================================
   let propertiesData = null;
   let currentCategory = 'Jugabilidad y Dificultad';
@@ -189,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderMotdPreview = (rawMotd) => {
     const preview = $('#motd-preview');
-    // Mini parseador cliente de códigos §
+    // Small client-side parser for § codes
     const map = {
       '0':'#000000','1':'#0000AA','2':'#00AA00','3':'#00AAAA',
       '4':'#AA0000','5':'#AA00AA','6':'#FFAA00','7':'#AAAAAA',
@@ -398,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ==========================================
-  // 3. WHITELIST Y WAYPOINTS
+  // 3. WHITELIST AND WAYPOINTS
   // ==========================================
   const setWhitelistLabel = (enabled) => {
     const label = $('#whitelist-toggle-label');
@@ -624,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ==========================================
-  // 5. GESTOR DE LOGROS Y PROGRESOS
+  // 5. ADVANCEMENTS AND PROGRESS MANAGER
   // ==========================================
   let currentAdvancements = [];
   let currentAdvPlayer = '';
@@ -745,7 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAdvancementsList();
   });
 
-  // Reiniciar TODOS los logros
+  // Reset ALL advancements
   $('#btn-adv-revoke-all')?.addEventListener('click', async () => {
     if (!currentAdvPlayer) return;
     const worldMsg = currentAdvWorld ? ` en el mundo "${currentAdvWorld}"` : '';
@@ -764,7 +764,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Botones con comandos prellenados
+  // Buttons with prefilled commands
   document.addEventListener('click', async (e) => {
     const quickBtn = e.target.closest('[data-adv-quick]');
     if (!quickBtn || !currentAdvPlayer) return;
@@ -790,7 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Botón para revocar rama personalizada
+  // Button to revoke a custom branch
   $('#btn-adv-quick-revoke-root')?.addEventListener('click', async (e) => {
     const btn = e.target;
     if (!currentAdvPlayer) {
@@ -819,7 +819,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Quitar logro individual de la lista
+  // Remove a single advancement from the list
   $('#adv-list-container')?.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-revoke-adv]');
     if (!btn || !currentAdvPlayer) return;
@@ -842,7 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Acciones manuales por ID
+  // Manual actions by ID
   $('#btn-adv-custom-revoke')?.addEventListener('click', async () => {
     const id = $('#adv-custom-id').value.trim();
     if (!id || !currentAdvPlayer) {

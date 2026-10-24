@@ -1,4 +1,4 @@
-"""Autenticación del administrador para HTTP y WebSockets."""
+"""Administrator authentication for HTTP and WebSockets."""
 
 from __future__ import annotations
 
@@ -42,11 +42,11 @@ _QUICK_TUNNEL_SUFFIX: Final = ".trycloudflare.com"
 
 
 class TwoFactorError(RuntimeError):
-    """Error de configuración o verificación TOTP."""
+    """TOTP setup or verification error."""
 
 
 class TOTPManager:
-    """Almacena localmente el secreto TOTP fuera del control de versiones.
+    """Store the TOTP secret locally, outside version control.
 
     A new setup is kept as ``pending_secret`` so starting a re-enrollment never
     disables an active second factor until the new code is verified.
@@ -156,7 +156,7 @@ class _AttemptState:
 
 
 class LoginAttemptTracker:
-    """Límite local en memoria por IP para reducir intentos de PIN/TOTP."""
+    """Local in-memory per-IP limit to slow down PIN/TOTP attempts."""
 
     def __init__(self, max_attempts: int = _MAX_FAILED_ATTEMPTS) -> None:
         self._max_attempts = max_attempts
@@ -373,7 +373,7 @@ def _has_admin_session(session: Mapping[str, object]) -> bool:
 
 
 def request_has_admin_session(request: Request) -> bool:
-    """Indica si una petición HTML tiene una sesión de administrador válida."""
+    """Tell whether an HTML request has a valid admin session."""
     return _has_admin_session(request.session)
 
 
@@ -395,10 +395,10 @@ def has_valid_csrf_token(request: Request) -> bool:
 async def get_current_admin(
     request: Request,
 ) -> str:
-    """Dependencia para rutas REST administrativas.
+    """Dependency for admin REST routes.
 
-    Sólo acepta la sesión firmada del navegador. El PIN nunca funciona como
-    token reutilizable en rutas administrativas.
+    Only the browser's signed session is accepted. The PIN never works as a
+    reusable token on admin routes.
     """
     if _has_admin_session(request.session):
         return "session"
@@ -409,7 +409,7 @@ async def get_current_admin(
 
 
 async def websocket_is_admin(websocket: WebSocket) -> bool:
-    """Equivalente WebSocket de la dependencia REST para proteger la consola."""
+    """WebSocket counterpart of the REST dependency, protecting the console."""
     if not is_same_origin(websocket):
         return False
     session = websocket.scope.get("session", {})
@@ -425,7 +425,7 @@ async def websocket_is_admin(websocket: WebSocket) -> bool:
 
 
 def mark_session_as_admin(request: Request) -> None:
-    """Marca la sesión actual; SessionMiddleware firma la cookie resultante.
+    """Mark the current session; SessionMiddleware signs the resulting cookie.
 
     The session is rebuilt from scratch with a new id and CSRF token so no
     value set before login survives (session fixation).
@@ -438,7 +438,7 @@ def mark_session_as_admin(request: Request) -> None:
 
 
 def clear_admin_session(request: Request) -> None:
-    """Invalida la sesión del navegador actual, también si alguien copió la cookie."""
+    """Invalidate the current browser session, even if someone copied the cookie."""
     session_id = request.session.get(_SESSION_ID_KEY)
     if isinstance(session_id, str):
         _revoked_sessions.revoke(session_id)

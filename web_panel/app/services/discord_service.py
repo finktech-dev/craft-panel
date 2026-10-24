@@ -1,4 +1,4 @@
-"""Servicio ampliado de Discord: webhooks, alertas en tiempo real y eventos."""
+"""Extended Discord service: webhooks, real-time alerts and events."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def is_discord_webhook_url(url: str) -> bool:
 
 
 class DiscordService:
-    """Cliente de webhook tolerante a fallos para alertas operativas y eventos del juego."""
+    """Fault-tolerant webhook client for operational alerts and game events."""
 
     def __init__(self, configured_settings: Settings = settings) -> None:
         self._settings = configured_settings
@@ -47,7 +47,7 @@ class DiscordService:
         return None
 
     def get_config(self) -> DiscordConfig:
-        """Carga la configuración persistente desde .discord_config.json."""
+        """Load the persistent settings from .discord_config.json."""
         if self._cached_config is not None:
             return self._cached_config
 
@@ -99,7 +99,7 @@ class DiscordService:
             return raw
 
     def save_config(self, new_config: DiscordConfig) -> DiscordConfig:
-        """Guarda la configuración persistente en .discord_config.json."""
+        """Save the persistent settings to .discord_config.json."""
         for url in (new_config.webhook_url, new_config.events_webhook_url):
             if url.strip() and not is_discord_webhook_url(url):
                 raise ValueError("La URL del webhook debe ser de Discord (https://discord.com/api/webhooks/...).")
@@ -187,7 +187,7 @@ class DiscordService:
         test_type: str = "status",
         mention_role: str = "",
     ) -> tuple[bool, str]:
-        """Envía una alerta de prueba inmediata para validar la URL del webhook."""
+        """Send an immediate test alert to validate the webhook URL."""
         cfg = self.get_config()
         if test_type == "events":
             player_name = self._display_value(cfg.test_player_name, "discord_test_player_name", "Jugador de prueba")

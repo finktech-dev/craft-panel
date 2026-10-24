@@ -1,4 +1,4 @@
-"""Entrypoint ASGI del panel de administración."""
+"""ASGI entry point of the admin panel."""
 
 from __future__ import annotations
 
@@ -42,15 +42,15 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Conserva el proceso de Minecraft consistente al apagar el panel."""
+    """Keep the Minecraft process consistent when the panel shuts down."""
     server_automation.install()
     scheduler_service.start()
     asyncio.create_task(server_automation.start_with_panel(), name="start-with-panel")
     try:
         yield
     except asyncio.CancelledError:
-        # Uvicorn cancela el lifespan al recibir Ctrl+C en Windows. Consumir
-        # esta cancelación evita una traza falsa tras un apagado correcto.
+        # Uvicorn cancels the lifespan on Ctrl+C on Windows. Swallowing the
+        # cancellation avoids a bogus traceback after a clean shutdown.
         logging.getLogger("panel").info("Se recibió una interrupción; apagando el panel ordenadamente.")
     finally:
         # Record jobs that this shutdown interrupts before anything else stops.
@@ -81,8 +81,8 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
-# SessionMiddleware queda por fuera del control CSRF para que este último pueda
-# leer la sesión firmada antes de procesar una acción administrativa.
+# SessionMiddleware wraps the CSRF check so the latter can read the signed
+# session before handling an admin action.
 app.add_middleware(SecurityHeadersAndCsrfMiddleware)
 app.add_middleware(
     SessionMiddleware,
@@ -113,7 +113,7 @@ async def protected_path_handler(_: Request, error: ProtectedPathError) -> JSONR
 
 @app.get("/health", tags=["system"])
 async def healthcheck() -> dict[str, str]:
-    """Sonda mínima que no intenta iniciar ni inspeccionar el servidor."""
+    """Minimal probe that never starts or inspects the server."""
     return {"status": "ok", "server_state": server_manager.state}
 
 

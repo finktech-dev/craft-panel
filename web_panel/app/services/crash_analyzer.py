@@ -1,4 +1,4 @@
-"""Lectura y explicación sencilla de crash-reports de NeoForge."""
+"""Reads NeoForge crash reports and explains them simply."""
 
 from __future__ import annotations
 

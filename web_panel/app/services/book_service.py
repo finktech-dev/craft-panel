@@ -1,4 +1,4 @@
-"""Libro NBT de bienvenida que puede copiarse a la configuración del servidor."""
+"""Welcome NBT book that can be copied into the server config."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class BookService:
         return _DEFAULT_TITLE, _DEFAULT_AUTHOR, _DEFAULT_PAGES
 
     def generate_guide_book(self) -> Path:
-        """Escribe un item stack con el componente moderno de libro escrito."""
+        """Write an item stack with the modern written-book component."""
         self.guide_book_path.parent.mkdir(parents=True, exist_ok=True)
         title, author, pages = self._load_guide_content()
         root = Compound(

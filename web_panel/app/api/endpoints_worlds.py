@@ -1,4 +1,4 @@
-"""Endpoints protegidos para el gestor de mundos y editor de server.properties."""
+"""Protected endpoints for the world manager and the server.properties editor."""
 
 from __future__ import annotations
 

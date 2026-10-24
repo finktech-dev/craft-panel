@@ -1,4 +1,4 @@
-"""Servicio para lectura, modificación y documentación con tooltips de server.properties."""
+"""Service to read, edit and document server.properties with tooltips."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ _PROPERTY_KEY = re.compile(r"^[a-z0-9][a-z0-9.\-]{0,63}$")
 _MAX_PROPERTY_VALUE_LENGTH = 1024
 
 _PROPERTY_METADATA: dict[str, dict[str, Any]] = {
-    # 🎮 Jugabilidad y Dificultad
+    # 🎮 Gameplay and difficulty
     "difficulty": {
         "label": "Dificultad del juego",
         "category": "Jugabilidad y Dificultad",
@@ -128,7 +128,7 @@ _PROPERTY_METADATA: dict[str, dict[str, Any]] = {
         "impact": "Por seguridad se deja en false a menos que uses mecánicas con bloques de comandos.",
     },
 
-    # 🚀 Rendimiento y Chunks
+    # 🚀 Performance and chunks
     "view-distance": {
         "label": "Distancia de visión (View Distance)",
         "category": "Rendimiento y Chunks",
@@ -205,7 +205,7 @@ _PROPERTY_METADATA: dict[str, dict[str, Any]] = {
         "impact": "256 es el estándar de Minecraft. Ahorra ancho de banda en conexiones residenciales.",
     },
 
-    # 🛡️ Seguridad y Red
+    # 🛡️ Security and network
     "online-mode": {
         "label": "Modo Online (Verificación Mojang/Microsoft)",
         "category": "Seguridad y Red",
@@ -274,7 +274,7 @@ _PROPERTY_METADATA: dict[str, dict[str, Any]] = {
         "impact": "Debe coincidir con el puerto configurado en el túnel Playit (por defecto 25565).",
     },
 
-    # 🎨 Mensaje y Apariencia
+    # 🎨 Message and appearance
     "motd": {
         "label": "Mensaje del Día (MOTD)",
         "category": "Mensaje y Apariencia",
@@ -307,7 +307,7 @@ _MC_COLOR_MAP = {
 
 
 def motd_to_html(motd: str) -> str:
-    """Convierte códigos de color § de Minecraft a HTML seguro para preview."""
+    """Convert Minecraft § color codes to safe HTML for the preview."""
     import html
 
     cleaned = html.escape(motd)
@@ -396,7 +396,7 @@ class ServerPropertiesService:
             "Otras opciones avanzadas",
         ]
 
-        # Primero agregamos las propiedades documentadas con metadatos
+        # First add the documented properties with their metadata
         for key, meta in _PROPERTY_METADATA.items():
             curr_val = current_props.get(key, meta.get("default", ""))
             opts = None
@@ -427,11 +427,11 @@ class ServerPropertiesService:
                 )
             )
 
-        # Agregamos las propiedades restantes que existan en el archivo
+        # Then add the remaining properties found in the file
         for key, val in current_props.items():
             if key in _PROPERTY_METADATA:
                 continue
-            # Tipo automático
+            # Automatic type
             val_lower = val.lower()
             val_type = "boolean" if val_lower in {"true", "false"} else "number" if val.lstrip("-").isdigit() else "text"
             definitions.append(
@@ -488,7 +488,7 @@ class ServerPropertiesService:
         self._validate_updates(updates)
         require_not_protected(self.file_path, configured=self._settings)
         if not self.file_path.is_file():
-            # Crear desde cero si no existiera
+            # Create from scratch if it does not exist
             lines = [f"{k}={v}" for k, v in updates.items()]
             self.file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
             return
@@ -513,7 +513,7 @@ class ServerPropertiesService:
             else:
                 new_lines.append(line)
 
-        # Agregar claves nuevas que no estaban en el archivo original
+        # Add new keys that were not in the original file
         for key, val in updates.items():
             if key not in written_keys:
                 new_lines.append(f"{key}={val}")

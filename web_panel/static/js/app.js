@@ -125,7 +125,7 @@
               navDev.classList.remove('inline-flex');
             }
           }
-        } catch { /* La página conserva su último estado visible. */ }
+        } catch { /* The page keeps its last visible state. */ }
       };
       refreshHeaderStatus();
       window.setInterval(refreshHeaderStatus, 5000);
@@ -140,7 +140,7 @@
             publicAddress.textContent = tunnel.public_address;
             copyAddress?.classList.remove('hidden');
           }
-        } catch { /* Playit puede no estar configurado todavía. */ }
+        } catch { /* Playit may not be set up yet. */ }
       };
       refreshTunnel();
       window.setInterval(refreshTunnel, 10000);

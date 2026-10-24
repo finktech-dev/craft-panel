@@ -1,4 +1,4 @@
-"""API protegida para administrar mods locales y el catálogo Modrinth."""
+"""Protected API to manage local mods and the Modrinth catalog."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from app.services.mod_service import ModServiceError, mod_service
 router = APIRouter(prefix="/mods", tags=["mods"], dependencies=[Depends(get_current_admin)])
 
 
-# 1. RUTAS ESTÁTICAS PRIMERO (Previene sombras con /{filename})
+# 1. STATIC ROUTES FIRST (prevents shadowing by /{filename})
 @router.get("", response_model=list[ModItem])
 async def list_mods() -> list[ModItem]:
     return await mod_service.list_mods()
@@ -169,7 +169,7 @@ async def restore_mod_history(snapshot_id: str, payload: ModHistoryRestoreReques
     return ModHistoryRestoreResponse(**result)
 
 
-# 2. RUTAS PARAMETRIZADAS DINÁMICAS AL FINAL
+# 2. DYNAMIC PARAMETERIZED ROUTES LAST
 @router.post("/{filename}/toggle", response_model=ModToggleResponse)
 async def toggle_mod(filename: str) -> ModToggleResponse:
     try:

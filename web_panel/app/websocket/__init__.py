@@ -1,1 +1,1 @@
-"""Canales WebSocket para eventos y consola en vivo."""
+"""WebSocket channels for live events and console."""

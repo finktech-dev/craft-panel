@@ -1,4 +1,4 @@
-"""Endpoints protegidos del túnel Playit."""
+"""Protected endpoints for the Playit tunnel."""
 
 import asyncio
 import logging
@@ -32,7 +32,7 @@ async def tunnel_status() -> TunnelStatus:
 
 @router.get("/logs", response_model=list[TunnelLogLine])
 async def tunnel_logs() -> tuple[TunnelLogLine, ...]:
-    """Historial acotado del agente para diagnóstico sin exponerlo públicamente."""
+    """Bounded agent history for diagnostics, never exposed publicly."""
     return playit_service.history
 
 

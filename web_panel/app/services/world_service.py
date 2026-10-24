@@ -1,4 +1,4 @@
-"""Gestor de mundos de Minecraft en server/."""
+"""Manager for the Minecraft worlds in server/."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ class WorldService:
         for entry in self.server_dir.iterdir():
             if not entry.is_dir():
                 continue
-            # Verificamos si contiene level.dat o es el mundo activo
+            # Check whether it has a level.dat or is the active world
             is_world = (entry / "level.dat").is_file() or entry.name == active_world
             if not is_world:
                 continue
@@ -90,7 +90,7 @@ class WorldService:
                 )
             )
 
-        # Ordenar primero el activo, luego alfabéticamente
+        # Active world first, then alphabetically
         worlds.sort(key=lambda w: (not w.is_active, w.name.lower()))
         return worlds
 
@@ -117,10 +117,10 @@ class WorldService:
             if target_path.exists():
                 raise ValueError(f"Ya existe una carpeta o mundo con el nombre '{name}'.")
 
-            # Crear directorio base para el mundo
+            # Create the base directory for the world
             target_path.mkdir(parents=True, exist_ok=True)
 
-            # Actualizar server.properties para que al iniciar cree el mundo con estas propiedades
+            # Update server.properties so the world is created with these properties on startup
             updates: dict[str, str] = {
                 "level-name": name,
                 "gamemode": req.gamemode,

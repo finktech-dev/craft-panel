@@ -1,8 +1,8 @@
-"""Contratos declarativos para las capacidades del panel.
+"""Declarative contracts for the panel's capabilities.
 
-No representan usuarios persistidos ni cambian la sesión actual. Sirven como
-base estable para que la UI y futuros adaptadores hablen de permisos por
-capacidad, en vez de asumir rutas, sistemas operativos o un único servidor.
+They do not represent stored users and do not change the current session. They
+are a stable base so the UI and future adapters can talk about permissions per
+capability instead of assuming paths, operating systems or a single server.
 """
 
 from typing import Literal
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 
 class PanelCapability(BaseModel):
-    """Una acción o área que una interfaz puede mostrar al anfitrión."""
+    """An action or area that an interface can show to the host."""
 
     id: str = Field(pattern=r"^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$")
     label: str
@@ -20,12 +20,12 @@ class PanelCapability(BaseModel):
 
 
 class PanelAccessProfile(BaseModel):
-    """Perfil efectivo de la sesión administrativa actual.
+    """Effective profile of the current admin session.
 
-    Por ahora el panel conserva exactamente su modelo de una única sesión de
-    administrador. ``role`` no se almacena ni se usa para autorizar acciones:
-    la respuesta permite que clientes nuevos preparen una UI basada en
-    capacidades sin introducir cuentas, secretos o migraciones.
+    For now the panel keeps exactly its single-admin-session model. ``role`` is
+    neither stored nor used to authorize actions: the response lets new
+    clients prepare a capability-based UI without introducing accounts,
+    secrets or migrations.
     """
 
     role: Literal["owner"] = "owner"

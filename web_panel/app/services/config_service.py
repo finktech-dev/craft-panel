@@ -1,4 +1,4 @@
-"""Editor de configuración limitado a server/config y sin rutas arbitrarias."""
+"""Config editor limited to server/config, with no arbitrary paths."""
 from __future__ import annotations
 import asyncio, json, os, re, shutil, subprocess, sys, uuid
 from pathlib import Path

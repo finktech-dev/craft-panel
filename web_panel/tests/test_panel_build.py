@@ -1,4 +1,4 @@
-"""Verificación de build y montaje completo del panel FastAPI."""
+"""Build and full mount checks for the FastAPI panel."""
 
 import pathlib
 
@@ -8,12 +8,12 @@ from app.core.config import settings
 
 
 def test_openapi_schema_build():
-    """Valida que FastAPI compile su esquema OpenAPI completo sin errores de tipado en schemas."""
+    """Check that FastAPI builds its full OpenAPI schema without typing errors in the schemas."""
     schema = app.openapi()
     assert schema is not None
     assert schema["openapi"].startswith("3.")
     assert "paths" in schema
-    # Verificar que existan las rutas esenciales en el build
+    # Check that the essential routes exist in the build
     paths = schema["paths"]
     assert "/health" in paths
     assert "/api/worldedit/status" in paths
@@ -29,7 +29,7 @@ def test_openapi_schema_build():
 
 
 def test_static_and_templates_configuration():
-    """Valida la configuración de directorios de assets estáticos y plantillas Jinja2."""
+    """Check the static asset and Jinja2 template directory setup."""
     assert settings.static_directory.is_dir()
     assert settings.panel_directory.is_dir()
 
@@ -49,13 +49,13 @@ def test_static_and_templates_configuration():
     for tmpl in expected_templates:
         tpl_path = settings.panel_directory / "templates" / tmpl
         assert tpl_path.is_file(), f"Falta la plantilla requerida: {tmpl}"
-        # Verificar que Jinja2 pueda parsear la plantilla
+        # Check that Jinja2 can parse the template
         compiled = templates.get_template(tmpl)
         assert compiled is not None
 
 
 def test_dashboard_v2_is_read_only_and_uses_a_separate_asset():
-    """El inicio no debe disparar operaciones del servidor al cargar."""
+    """Startup must not trigger server operations on load."""
     panel_root = pathlib.Path(__file__).parent.parent
     template = (panel_root / "templates" / "dashboard.html").read_text(encoding="utf-8")
     script = (panel_root / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
@@ -70,10 +70,10 @@ def test_dashboard_v2_is_read_only_and_uses_a_separate_asset():
 
 @pytest.mark.asyncio
 async def test_lifespan_build():
-    """Valida que el manejador de ciclo de vida (lifespan) inicialice y libere recursos sin errores."""
+    """Check that the lifespan handler sets up and releases resources without errors."""
     from main import lifespan
     async with lifespan(app):
-        # Durante el ciclo de vida, la app está activa
+        # The app is up during the lifespan
         assert app.title == "Panel del servidor Minecraft"
 
 
@@ -95,7 +95,7 @@ def test_mod_item_schema_and_server_only_classification(tmp_path):
 
 
 def test_mods_template_and_asset_integrity():
-    """Valida que la vista /mods referencie su controlador mods.js y contenga los componentes UX clave."""
+    """Check that the /mods view references its mods.js controller and has the key UX components."""
     panel_root = pathlib.Path(__file__).parent.parent
     template = (panel_root / "templates" / "mods.html").read_text(encoding="utf-8")
     script = (panel_root / "static" / "js" / "mods.js").read_text(encoding="utf-8")
@@ -111,7 +111,7 @@ def test_mods_template_and_asset_integrity():
     assert 'id="btn-check-updates"' in template
     assert 'kpi-active-mods' in template and 'tab-badge-installed' in template
 
-    # Validar que mods.js consuma las APIs de mods
+    # Check that mods.js calls the mods APIs
     assert '/api/mods' in script
     assert '/api/mods/upload' in script
     assert '/api/mods/export-client-pack' in script
@@ -121,7 +121,7 @@ def test_mods_template_and_asset_integrity():
 
 
 def test_mod_metadata_extraction_and_config_linking(tmp_path):
-    """Valida la extracción de metadatos de neoforge.mods.toml y detección de archivos de configuración."""
+    """Check metadata extraction from neoforge.mods.toml and config file detection."""
     import zipfile
     from app.core.config import Settings
     from app.services.mod_service import ModService
@@ -141,7 +141,7 @@ authors = "DevTeam"
     with zipfile.ZipFile(jar_file, "w") as zf:
         zf.writestr("META-INF/neoforge.mods.toml", toml_content)
 
-    # 2. Configurar directorio simulado de servidor con config/
+    # 2. Set up a fake server directory with config/
     config_dir = server_dir / "config"
     config_dir.mkdir(parents=True)
     (config_dir / "customguns-common.toml").write_text("# config", encoding="utf-8")
@@ -160,7 +160,7 @@ authors = "DevTeam"
 
 @pytest.mark.asyncio
 async def test_mod_bulk_actions(tmp_path):
-    """Valida operaciones en lote (enable, disable, delete) con ModService."""
+    """Check bulk operations (enable, disable, delete) with ModService."""
     from app.core.config import Settings
     from app.services.mod_service import ModService
 
@@ -179,20 +179,20 @@ async def test_mod_bulk_actions(tmp_path):
     mock_settings = Settings(project_root=tmp_path, server_directory=server_dir, mods_directory=mods_dir)
     service = ModService(configured_settings=mock_settings)
 
-    # Desactivar en lote mod1 y mod2
+    # Bulk-disable mod1 and mod2
     res_disable = await service.bulk_action("disable", ["mod1.jar", "mod2.jar"])
     assert res_disable.affected_count == 2
     assert (mods_dir / "mod1.jar.disabled").is_file()
     assert (mods_dir / "mod2.jar.disabled").is_file()
 
-    # Habilitar en lote mod1, mod2, mod3
+    # Bulk-enable mod1, mod2, mod3
     res_enable = await service.bulk_action("enable", ["mod1.jar.disabled", "mod2.jar.disabled", "mod3.jar.disabled"])
     assert res_enable.affected_count == 3
     assert (mods_dir / "mod1.jar").is_file()
     assert (mods_dir / "mod3.jar").is_file()
 
 
-    # Eliminar en lote mod1 y mod2
+    # Bulk-delete mod1 and mod2
     res_delete = await service.bulk_action("delete", ["mod1.jar", "mod2.jar"])
     assert res_delete.affected_count == 2
     assert not (mods_dir / "mod1.jar").exists()
@@ -201,7 +201,7 @@ async def test_mod_bulk_actions(tmp_path):
 
 
 def test_mod_environment_detection_and_dynamic_loader(tmp_path):
-    """Valida la detección dinámica del cargador de mods (loader) y versión de Minecraft."""
+    """Check dynamic detection of the mod loader and Minecraft version."""
     from app.core.config import Settings
     from app.services.mod_service import ModService
 
@@ -215,14 +215,14 @@ def test_mod_environment_detection_and_dynamic_loader(tmp_path):
     assert env_default["loader"] == ""
     assert env_default["minecraft_version"] == ""
 
-    # 2. Con marcador NeoForge 21.1.84 -> Detecta neoforge y 1.21.1
+    # 2. With a NeoForge 21.1.84 marker -> detects neoforge and 1.21.1
     neoforge_ver_dir = server_dir / "libraries" / "net" / "neoforged" / "neoforge" / "21.1.84"
     neoforge_ver_dir.mkdir(parents=True)
     env_neoforge = service_default.get_environment()
     assert env_neoforge["loader"] == "neoforge"
     assert env_neoforge["minecraft_version"] == "1.21.1"
 
-    # 3. Con marcador Fabric
+    # 3. With a Fabric marker
     fabric_server = tmp_path / "fabric_server"
     fabric_server.mkdir()
     (fabric_server / "fabric-server-launch.jar").write_bytes(b"dummy")
@@ -234,18 +234,18 @@ def test_mod_environment_detection_and_dynamic_loader(tmp_path):
 
 
 def test_mods_template_scrollbar_and_filter_pill_integrity():
-    """Valida que la vista /mods no contenga scrollbars horizontales forzados en los filtros y soporte entorno dinámico."""
+    """Check that the /mods view has no forced horizontal scrollbars in the filters and supports a dynamic environment."""
     panel_root = pathlib.Path(__file__).parent.parent
     template = (panel_root / "templates" / "mods.html").read_text(encoding="utf-8")
     script = (panel_root / "static" / "js" / "mods.js").read_text(encoding="utf-8")
 
-    # No debe haber overflow-x-auto en los filtros
+    # The filters must not use overflow-x-auto
     assert 'overflow-x-auto' not in template
-    # Debe existir el badge dinámico y los controles de Modrinth
+    # The dynamic badge and the Modrinth controls must exist
     assert 'id="env-badge-text"' in template
     assert 'id="modrinth-loader-select"' in template
     assert 'id="modrinth-version-input"' in template
-    # mods.js debe consumir /api/mods/environment
+    # mods.js must call /api/mods/environment
     assert '/api/mods/environment' in script
 
 

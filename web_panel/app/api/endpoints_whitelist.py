@@ -1,4 +1,4 @@
-"""Endpoints protegidos para la gestión visual de la Whitelist."""
+"""Protected endpoints for visual whitelist management."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Quick Tunnel temporal para acceder al panel desde fuera de la red local."""
+"""Temporary Quick Tunnel to reach the panel from outside the local network."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class CloudflareQuickTunnelError(RuntimeError):
 
 
 class CloudflareQuickTunnelService:
-    """Controla una única instancia local de ``cloudflared tunnel --url``."""
+    """Control a single local instance of ``cloudflared tunnel --url``."""
 
     def __init__(self, configured_settings: Settings = settings) -> None:
         self._settings = configured_settings

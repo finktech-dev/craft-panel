@@ -1,4 +1,4 @@
-"""Endpoint WebSocket de la terminal administrativa en vivo."""
+"""WebSocket endpoint for the live admin terminal."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/ws", tags=["terminal"])
 
 @router.websocket("/terminal")
 async def terminal_socket(websocket: WebSocket) -> None:
-    """Entrega historial, retransmite logs y reenvía comandos a STDIN."""
+    """Send history, relay logs and forward commands to STDIN."""
     if not await websocket_is_admin(websocket):
         await websocket.close(code=1008, reason="Autenticación de administrador requerida.")
         return
@@ -51,7 +51,7 @@ async def terminal_socket(websocket: WebSocket) -> None:
 
 
 def _extract_command(payload: str) -> str:
-    """Acepta texto plano o ``{\"type\": \"command\", \"command\": \"...\"}``."""
+    """Accept plain text or ``{\"type\": \"command\", \"command\": \"...\"}``."""
     try:
         decoded: Any = json.loads(payload)
     except json.JSONDecodeError:

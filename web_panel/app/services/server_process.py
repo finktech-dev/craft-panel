@@ -1,4 +1,4 @@
-"""Ciclo de vida asíncrono del proceso de Minecraft y su consola."""
+"""Async lifecycle of the Minecraft process and its console."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ class ServerState(StrEnum):
 
 
 class ServerProcessError(RuntimeError):
-    """Error de operación del proceso Java."""
+    """Java process operation error."""
 
     status_code = 503
 
@@ -153,10 +153,10 @@ class TerminalLine:
 
 
 class MinecraftServerManager:
-    """Única autoridad sobre el proceso del servidor en el host.
+    """Sole authority over the server process on the host.
 
-    Todas las operaciones de proceso y E/S usan APIs ``asyncio``: nunca se
-    bloquea el event loop del panel mientras Java está corriendo.
+    All process and I/O operations use ``asyncio`` APIs: the panel's event
+    loop is never blocked while Java is running.
     """
 
     _instance: "MinecraftServerManager | None" = None
@@ -235,7 +235,7 @@ class MinecraftServerManager:
 
     @property
     def process_pid(self) -> int | None:
-        """PID del lanzador; MetricsService resuelve Java cuando es un hijo."""
+        """Launcher PID; MetricsService resolves Java when it is a child process."""
         return self._process.pid if self.is_running and self._process is not None else None
 
     def add_crash_listener(self, listener: Callable[[], Coroutine[Any, Any, None]]) -> None:
@@ -265,7 +265,7 @@ class MinecraftServerManager:
         ]
 
     async def start(self, dev_mode: bool = False, progress: ProgressCallback | None = None) -> bool:
-        """Inicia el servidor y retorna ``False`` si ya había un proceso vivo."""
+        """Start the server; return ``False`` if a process was already running."""
         async with self._exclusive_lifecycle("inicio"):
             report(progress, "start", "Abriendo el servidor de Minecraft.")
             return await self._start_process(dev_mode)
@@ -349,7 +349,7 @@ class MinecraftServerManager:
             raise ServerProcessError(f"No se pudo poner la memoria en user_jvm_args.txt: {error}") from error
 
     async def stop(self) -> bool:
-        """Solicita una detención limpia mediante la consola de Minecraft."""
+        """Request a clean stop through the Minecraft console."""
         async with self._exclusive_lifecycle("detención"):
             return await self._request_stop()
 
@@ -375,7 +375,7 @@ class MinecraftServerManager:
         dev_mode: bool | None = None,
         progress: ProgressCallback | None = None,
     ) -> bool:
-        """Reinicia el servidor avisando a los jugadores en el chat y guardando el mundo.
+        """Restart the server, warning players in chat and saving the world.
 
         ``progress`` receives the steps of :data:`GRACEFUL_RESTART_STEPS` except ``ready``.
         """
@@ -431,7 +431,7 @@ class MinecraftServerManager:
         return True
 
     async def kill(self) -> bool:
-        """Finaliza el árbol de procesos cuando el cierre limpio no responde.
+        """Kill the process tree when a clean shutdown does not respond.
 
         Deliberately bypasses the lifecycle lock so it always works as an emergency
         stop; if a restart is in progress, its pending start is cancelled.
@@ -468,7 +468,7 @@ class MinecraftServerManager:
         return True
 
     async def send_command(self, command: str) -> None:
-        """Escribe un único comando en STDIN sin usar una shell."""
+        """Write a single command to STDIN without using a shell."""
         normalized_command = command.strip()
         if not normalized_command:
             raise ServerProcessError("El comando no puede estar vacío.")
@@ -493,10 +493,10 @@ class MinecraftServerManager:
         expected_text: str,
         timeout_seconds: float = 30.0,
     ) -> None:
-        """Ejecuta un comando y espera su confirmación en la consola.
+        """Run a command and wait for its confirmation in the console.
 
-        Se usa para que una copia no comprima archivos mientras Minecraft aún
-        está vaciando los cambios pendientes del mundo al disco.
+        Used so a backup does not compress files while Minecraft is still
+        flushing pending world changes to disk.
         """
         sent_at = datetime.now(UTC).isoformat()
         await self.send_command(command)
@@ -515,7 +515,7 @@ class MinecraftServerManager:
         )
 
     async def shutdown(self) -> None:
-        """Cierra ordenadamente el proceso al apagar FastAPI."""
+        """Shut the process down cleanly when FastAPI stops."""
         # The panel is going away: never let an in-flight restart start a new process.
         self._restart_cancelled = True
         if not self.is_running:
@@ -543,7 +543,7 @@ class MinecraftServerManager:
         raise ServerStartTimeoutError("El servidor todavía no terminó de encender.")
 
     async def wait_until_stopped(self) -> None:
-        """Espera de forma cooperativa a que el proceso actual finalice."""
+        """Cooperatively wait for the current process to exit."""
         process = self._process
         if process is not None and process.returncode is None:
             await process.wait()
@@ -602,7 +602,7 @@ class MinecraftServerManager:
         )
         self._log_buffer.append(line)
 
-        # Rastrear cuando el servidor termina de inicializarse ("Done (X.XXs)!")
+        # Detect when the server finishes starting up ("Done (X.XXs)!")
         if not self._ready_notified and _SERVER_READY_RE.search(message):
             self._ready_notified = True
             self._state = ServerState.RUNNING
@@ -625,7 +625,7 @@ class MinecraftServerManager:
                     name="discord-server-started",
                 )
 
-        # Rastrear eventos de conexión y desconexión de jugadores (con debouncer anti-duplicados)
+        # Track player join and leave events (debounced against duplicates)
         join_m = _PLAYER_JOIN_RE.search(message)
         if join_m:
             player_name = join_m.group(1)

@@ -1,4 +1,4 @@
-"""Endpoints protegidos para marcadores de coordenadas y teletransporte."""
+"""Protected endpoints for coordinate waypoints and teleporting."""
 
 from __future__ import annotations
 

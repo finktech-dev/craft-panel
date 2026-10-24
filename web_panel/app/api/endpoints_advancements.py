@@ -1,4 +1,4 @@
-"""Endpoints protegidos para la inspección y reinicio de logros de jugadores en cualquier mundo."""
+"""Protected endpoints to inspect and reset player advancements in any world."""
 
 from __future__ import annotations
 
