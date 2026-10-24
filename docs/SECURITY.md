@@ -32,11 +32,16 @@ The panel has a single administrator. There are no user roles.
 
 **Passwords and sessions**
 
-- The first-run password is random: 24 characters, generated with Python's `secrets`. It is shown only to a browser on the same PC, never through a tunnel, proxy or LAN address. You can replace it with `restablecer_contrasena_panel.bat` (at least 12 characters). Resetting it also signs out every open session.
-- Passwords are compared in constant time.
+- The first-run password is random: 24 characters, generated with Python's `secrets`. It is shown only to a browser on the same PC, never through a tunnel, proxy or LAN address.
+- The password is never stored in plain text. `web_panel/.panel_secrets.json` keeps only a salted scrypt hash (`admin_password_hash`, format `scrypt$<log2 N>$<r>$<p>$<salt>$<key>`, currently N = 2^15, r = 8, p = 1, a 16-byte random salt and a 32-byte key). The final comparison is constant-time.
+- The generated first-run password lives only in the panel's memory, so the login page can show it. It is forgotten after the first successful login. If the panel is closed before anyone signs in with it, the next start generates and shows a new one (the file marks it with `admin_password_unclaimed`), so nobody gets locked out.
+- Older versions stored the password in plain text (`admin_pin`). On startup the panel hashes it, removes the plain value and keeps the same password and open sessions.
+- `MINECRAFT_ADMIN_PIN` still overrides the stored password. It is hashed in memory at startup and never written to disk.
+- `restablecer_contrasena_panel.bat` replaces the password. Type one (at least 12 characters) or leave it empty to get a random one, which is printed once in that window. Only the hash is saved, and every open session is signed out.
 - After 5 wrong attempts, an IP is locked out for 15 minutes.
 - A global limit pauses remote logins if many IPs fail at once. The owner on the PC itself is never locked out.
-- Optional TOTP 2FA works with any authenticator app. Each code is accepted only once.
+- Optional TOTP 2FA works with any authenticator app. Turn it on in **Ajustes → Verificación en dos pasos**: scan the QR code (or type the key by hand) and confirm with a 6-digit code. Each code is accepted only once, including the one used to confirm.
+- Moving 2FA to another phone or turning it off needs a current code from the app, not just a session, so a stolen cookie cannot remove the second factor. Wrong codes count toward a lockout. If you lose the phone, delete `web_panel/.totp_secret` on the PC to turn 2FA off.
 - Sessions are signed `HttpOnly`, `SameSite=Strict` cookies. Each session gets a new id at login and expires after a fixed lifetime (8 hours by default).
 - Logging out revokes the session, so a copied cookie stops working.
 - Cookies get the `Secure` flag and responses get HSTS automatically whenever the panel is reached over HTTPS (Cloudflare tunnel or a reverse proxy).
@@ -45,7 +50,7 @@ The panel has a single administrator. There are no user roles.
 
 - Every state-changing request needs a per-session CSRF token and a same-origin `Origin`. The console WebSocket checks both as well.
 - The `Host` header must be an IP address, `localhost`, a `*.trycloudflare.com` Quick Tunnel or a domain you list in `MINECRAFT_ALLOWED_HOSTS`. This blocks DNS rebinding.
-- A strict Content Security Policy is sent. No external scripts are allowed, and the only external images are player heads (`mc-heads.net`) and Modrinth icons. The policy also sets `frame-ancestors 'none'` and `object-src 'none'`.
+- A strict Content Security Policy is sent. Scripts only load from the panel's own `/static/js` files (`script-src 'self'`, without `'unsafe-inline'`): pages contain no inline scripts or `on…=` handlers, so injected markup cannot run code. No external scripts are allowed, and the only external images are player heads (`mc-heads.net`) and Modrinth icons. The policy also sets `frame-ancestors 'none'` and `object-src 'none'`.
 - Every non-static response is sent with `Cache-Control: no-store`.
 
 **Files and archives**
@@ -70,7 +75,7 @@ The panel has a single administrator. There are no user roles.
 
 **Secrets**
 
-- The password, session key, 2FA secret, Playit key and Discord config are stored in `web_panel/` and are ignored by Git.
+- The password hash, session key, 2FA secret, Playit key and Discord config are stored in `web_panel/` and are ignored by Git.
 - They are written atomically, with owner-only permissions where the operating system supports it.
 - They are never returned by the API, except the Discord webhook, which only the logged-in administrator can see in its own settings page.
 
@@ -88,7 +93,7 @@ You usually don't need to: friends join the **Minecraft server** through Playit,
      ```
 
      The proxy must keep the original `Host` header, or send it in `X-Forwarded-Host`, and it must set `X-Forwarded-Proto: https`.
-2. **Turn on 2FA** before publishing the panel, and keep the authenticator on your phone. If your version of the panel does not show a 2FA option yet, keep the panel local.
+2. **Turn on 2FA** (**Ajustes → Verificación en dos pasos**) before publishing the panel, and keep the authenticator on your phone.
 3. **Use a strong, unique password.** The generated one is fine. If you change it, use a password manager and at least 16 characters, and don't reuse a password from another site.
 4. **Keep the panel and Minecraft separate.** Minecraft uses its own port (25565, or the Playit address). The panel must never be published on the same address or port as the game. Players don't need the panel.
 5. **Protect the Minecraft server itself:**
