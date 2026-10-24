@@ -343,6 +343,8 @@ class Settings(BaseSettings):
     def server_start_command(self) -> tuple[str, ...]:
         """Run the native generated script without relying on a Windows-only shell."""
         if self.server_start_script.suffix.casefold() == ".bat":
-            return ("cmd.exe", "/d", "/s", "/c", "call run.bat nogui")
+            # An explicit .\ path works even when NoDefaultCurrentDirectoryInExePath stops
+            # cmd.exe from looking for commands in the current folder.
+            return ("cmd.exe", "/d", "/s", "/c", "call .\\run.bat nogui")
         return ("sh", "./run.sh", "nogui")
 settings = Settings()

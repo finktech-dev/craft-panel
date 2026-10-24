@@ -31,6 +31,11 @@ class ExternalServer:
     port: int
 
     @property
+    def can_terminate(self) -> bool:
+        """Only a Java process may be force-closed; anything else just holds the port."""
+        return self.name.lower() in _JAVA_NAMES
+
+    @property
     def message(self) -> str:
         if self.reason == "previous_panel_session":
             origin = "Quedó abierto de una vez anterior que usaste el panel."
@@ -103,7 +108,7 @@ class ExternalServerDetector:
         if detected is None or detected.pid != pid:
             return False
         # Never kill an unrelated program that merely holds the server port.
-        if detected.name.lower() not in _JAVA_NAMES:
+        if not detected.can_terminate:
             return False
         try:
             process = psutil.Process(pid)

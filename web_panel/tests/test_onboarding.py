@@ -109,7 +109,7 @@ def test_server_start_command_is_native_to_the_host(monkeypatch, tmp_path):
 
     monkeypatch.setattr("app.core.config.sys.platform", "win32")
     (configured.server_directory / "run.bat").write_text("@echo off\n", encoding="utf-8")
-    assert configured.server_start_command == ("cmd.exe", "/d", "/s", "/c", "call run.bat nogui")
+    assert configured.server_start_command == ("cmd.exe", "/d", "/s", "/c", "call .\\run.bat nogui")
 
     monkeypatch.setattr("app.core.config.sys.platform", "linux")
     (configured.server_directory / "run.sh").write_text("#!/usr/bin/env sh\n", encoding="utf-8")

@@ -16,7 +16,7 @@ import pytest
 
 from app.core.config import Settings
 from app.services import external_server_service
-from app.services.external_server_service import ExternalServerDetector
+from app.services.external_server_service import ExternalServer, ExternalServerDetector
 from app.services.server_process import ExternalServerRunningError, MinecraftServerManager
 
 _LISTENER = (
@@ -164,6 +164,61 @@ def test_detects_java_running_in_server_directory(tmp_path: Path, monkeypatch) -
     assert found is not None
     assert (found.pid, found.reason) == (999_991, "server_directory")
     assert "run.bat" in found.message
+
+
+class _StoppedManager:
+    is_running = False
+    lifecycle_operation = None
+    process_pid = None
+
+
+class _Detector:
+    def __init__(self, found: ExternalServer) -> None:
+        self.found = found
+        self.terminated = False
+
+    def detect(self, own_pid=None):
+        return self.found
+
+    def terminate(self, pid, own_pid=None):
+        self.terminated = True
+        return True
+
+
+@pytest.mark.asyncio
+async def test_start_endpoint_refuses_before_creating_a_job(monkeypatch) -> None:
+    from fastapi import HTTPException
+
+    from app.api import endpoints_server
+
+    found = ExternalServer(pid=4321, name="java.exe", reason="server_directory", port=25565)
+    monkeypatch.setattr(endpoints_server, "server_manager", _StoppedManager())
+    monkeypatch.setattr(endpoints_server, "external_server_detector", _Detector(found))
+    monkeypatch.setattr(endpoints_server, "start_job", lambda *a, **k: pytest.fail("no job may start"))
+
+    with pytest.raises(HTTPException) as error:
+        await endpoints_server.start_server()
+
+    assert error.value.status_code == 409
+    assert "run.bat" in error.value.detail
+
+
+@pytest.mark.asyncio
+async def test_terminate_endpoint_explains_non_java_port_holders(monkeypatch) -> None:
+    from fastapi import HTTPException
+
+    from app.api import endpoints_server
+
+    detector = _Detector(ExternalServer(pid=777, name="python.exe", reason="port", port=25565))
+    monkeypatch.setattr(endpoints_server, "server_manager", _StoppedManager())
+    monkeypatch.setattr(endpoints_server, "external_server_detector", detector)
+
+    with pytest.raises(HTTPException) as error:
+        await endpoints_server.terminate_external_server(endpoints_server.ExternalServerTerminateRequest(pid=777, confirm=True))
+
+    assert error.value.status_code == 409
+    assert "no es un servidor de Minecraft" in error.value.detail
+    assert detector.terminated is False
 
 
 @pytest.mark.asyncio

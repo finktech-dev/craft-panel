@@ -29,6 +29,17 @@ from app.services.server_process import ServerStartTimeoutError
 STEPS = (("first", "Primer paso"), ("second", "Segundo paso"), ("third", "Tercer paso"))
 
 
+class _NoExternalServer:
+    def detect(self, own_pid=None):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _no_external_server(monkeypatch):
+    """Lifecycle endpoints check the host for other servers; keep these tests independent of it."""
+    monkeypatch.setattr(endpoints_server, "external_server_detector", _NoExternalServer())
+
+
 class RecordingSocket:
     def __init__(self) -> None:
         self.messages: list[dict] = []

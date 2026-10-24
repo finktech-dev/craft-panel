@@ -116,6 +116,9 @@
     externalPid = external?.detected ? external.pid : null;
     $('#external-server')?.classList.toggle('hidden', !externalPid);
     if (externalPid) text('#external-message', external.message);
+    // Only a Minecraft (Java) process can be closed from here; anything else just holds the port.
+    const terminate = $('#external-terminate');
+    if (terminate) terminate.hidden = !external?.can_terminate;
   };
 
   const query = async (path) => { try { return await Panel.api(path); } catch { return null; } };

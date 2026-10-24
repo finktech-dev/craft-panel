@@ -117,6 +117,7 @@ async def start_server(dev_mode: bool = False) -> JobAccepted:
     if server_manager.is_running:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El servidor ya está en ejecución.")
     _raise_if_busy()
+    await _raise_if_external_server()
     _require_playit_ready()
 
     async def work(reporter: JobReporter) -> dict:
@@ -158,6 +159,14 @@ async def stop_server() -> ServerActionResponse:
     return _action_response("Se envió /stop al servidor.")
 
 
+async def _raise_if_external_server() -> None:
+    """Refuse right away, before any job starts, when another server already holds the world."""
+    own_pid = getattr(server_manager, "process_pid", None)
+    found = await asyncio.to_thread(external_server_detector.detect, own_pid)
+    if found is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=found.message)
+
+
 def _raise_if_busy() -> None:
     """Fail fast before side effects such as starting Playit."""
     if operation := server_manager.lifecycle_operation:
@@ -190,6 +199,7 @@ def _restart_work(restart: Callable[[JobReporter], Awaitable[bool]]) -> Callable
 @router.post("/restart", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
 async def restart_server() -> JobAccepted:
     _raise_if_busy()
+    await _raise_if_external_server()
     _require_playit_ready()
     job = start_job(
         "restart",
@@ -205,6 +215,7 @@ async def graceful_restart_server(countdown: int = 10) -> JobAccepted:
     if countdown < 3 or countdown > 60:
         countdown = 10
     _raise_if_busy()
+    await _raise_if_external_server()
     _require_playit_ready()
     job = start_job(
         "graceful_restart",
@@ -231,6 +242,7 @@ class ExternalServerInfo(BaseModel):
     reason: str | None = None
     port: int | None = None
     message: str | None = None
+    can_terminate: bool = False
 
 
 class ExternalServerTerminateRequest(BaseModel):
@@ -260,6 +272,7 @@ async def external_server() -> ExternalServerInfo:
         reason=found.reason,
         port=found.port,
         message=found.message,
+        can_terminate=found.can_terminate,
     )
 
 
@@ -270,12 +283,26 @@ async def terminate_external_server(request: ExternalServerTerminateRequest) -> 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Confirmá explícitamente el cierre: se perderá lo que no se haya guardado.",
         )
+    found = await asyncio.to_thread(external_server_detector.detect, server_manager.process_pid)
+    if found is None or found.pid != request.pid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese programa ya se cerró o ya no está ocupando el servidor. Actualizá la página.",
+        )
+    if not found.can_terminate:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Lo que ocupa el puerto {found.port} no es un servidor de Minecraft ({found.name}), "
+                "así que el panel no lo cierra. Cerralo desde su propia ventana."
+            ),
+        )
     if not await asyncio.to_thread(
         external_server_detector.terminate, request.pid, server_manager.process_pid
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Ese proceso ya no se detecta como servidor externo o no se pudo cerrar.",
+            detail="No se pudo cerrar ese servidor. Cerralo desde su propia ventana.",
         )
     return _action_response("Se cerró el servidor que estaba corriendo fuera del panel.")
 
