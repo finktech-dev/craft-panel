@@ -70,7 +70,8 @@ class Settings(BaseSettings):
     discord_world_name: str = ""
     discord_test_player_name: str = "Jugador de prueba"
     discord_player_avatar_url_template: str = "https://mc-heads.net/avatar/{player_name}/100.png"
-    banner_title: str = "Minecraft server status"
+    # Empty means the server's name, or "Servidor de Minecraft".
+    banner_title: str = ""
     banner_subtitle: str = ""
     server_public_address: str | None = None
     # Optional overrides; by default the panel reads both from the installed server.

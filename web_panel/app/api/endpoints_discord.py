@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.security import get_current_admin
 from app.core.rate_limit import rate_limit
-from app.schemas.discord import DiscordActionResponse, DiscordConfig, DiscordTestRequest
+from app.schemas.discord import DiscordActionResponse, DiscordBridgeStatus, DiscordConfig, DiscordTestRequest
+from app.services.discord_bridge import discord_bridge_service
 from app.services.discord_service import discord_service
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,12 @@ router = APIRouter(
 async def get_discord_config() -> DiscordConfig:
     """Return the current Discord webhook and alert settings."""
     return discord_service.get_config()
+
+
+@router.get("/bridge", response_model=DiscordBridgeStatus)
+async def get_discord_bridge() -> DiscordBridgeStatus:
+    """Whether a mod links the game chat with Discord (the panel's own notices need none)."""
+    return await discord_bridge_service.status()
 
 
 @router.post("/config", response_model=DiscordActionResponse)

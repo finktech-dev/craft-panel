@@ -837,6 +837,29 @@
       <h2 id="discord-title" class="screen-title" tabindex="-1">Avisos en Discord</h2>
       <p class="screen-lead">Recibí un mensaje en tu Discord cuando el servidor se enciende, se cae o alguien entra.</p>
 
+      {#- Two different things: the panel's notices (no mod) and a chat bridge (needs a mod). -#}
+      <div class="mt-6 grid gap-3 sm:grid-cols-2">
+        <div class="rounded-xl border border-zinc-800 p-4">
+          <h3 class="font-semibold text-zinc-50">Avisos del panel</h3>
+          <p class="mt-1 text-sm leading-relaxed text-zinc-400">Funcionan sin instalar nada: el panel mira el servidor y manda un mensaje a un canal de tu Discord. Se configuran acá abajo.</p>
+        </div>
+        <div id="discord-bridge" class="rounded-xl border border-zinc-800 p-4" aria-live="polite">
+          <h3 class="font-semibold text-zinc-50">Chat entre Discord y el juego</h3>
+          <p id="discord-bridge-text" class="mt-1 text-sm leading-relaxed text-zinc-400">Revisando tus mods…</p>
+          <div id="discord-bridge-actions" class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2"></div>
+        </div>
+      </div>
+      <details id="discord-bridge-steps" class="mt-3 hidden rounded-xl border border-zinc-800 p-4 text-sm">
+        <summary class="cursor-pointer font-semibold text-zinc-200">Cómo instalar el mod del chat paso a paso</summary>
+        <ol class="mt-3 list-decimal space-y-2 pl-5 leading-relaxed text-zinc-400">
+          <li>Tocá <b class="font-semibold text-zinc-200">Instalar desde el panel</b> y listo: baja la versión para tu servidor y lo que necesita para andar. Hacelo con el servidor apagado.</li>
+          <li>Si preferís hacerlo a mano: en <span class="text-zinc-200">Modrinth</span>, entrá a <b class="font-semibold text-zinc-200">Versions</b> y bajá el archivo que dice <span id="discord-bridge-env" class="text-zinc-200">tu versión</span>. Después, en <a href="/mods" class="link">Mods</a>, tocá <b class="font-semibold text-zinc-200">Agregar desde archivo</b> y elegilo. También podés copiarlo a la carpeta <span class="font-mono text-zinc-300">mods</span> de tu servidor.</li>
+          <li>Si Modrinth dice que necesita otro mod (por ejemplo <span class="text-zinc-200">CraterLib</span>), agregalo igual.</li>
+          <li>Encendé el servidor una vez: el mod crea su archivo de ajustes y vuelve a aparecer acá.</li>
+          <li>Creá un bot en el portal de desarrolladores de Discord y pegá su token en los ajustes del mod. La página del mod en Modrinth explica cada paso. El token es una contraseña: no lo compartas con nadie.</li>
+        </ol>
+      </details>
+
       <div class="mt-6">{{ subtabs('discord', 'Partes de los avisos', [('canal', 'Canal'), ('avisos', 'Qué avisos mandar'), ('textos', 'Textos de los avisos'), ('cartel', 'Cartel del servidor')]) }}</div>
 
       {#- Every sub-screen feeds the same Guardar below. -#}
@@ -936,7 +959,11 @@
         <h3 id="banner-title" class="font-semibold text-zinc-100">Cartel del servidor</h3>
         <p class="mt-1 max-w-xl text-sm leading-relaxed text-zinc-400">Una imagen con el estado del servidor para pegar en Discord o en un foro.</p>
         <img id="status-banner" src="/api/server/banner.png" alt="Cartel con el estado del servidor" class="mt-5 w-full max-w-xl rounded-lg bg-zinc-900" width="600" height="160" loading="lazy">
-        <button id="copy-banner-markdown" type="button" class="v2-button btn-primary mt-4">Copiar el enlace</button>
+        <p id="banner-share-note" class="mt-4 max-w-xl text-sm leading-relaxed text-zinc-400">Descargá la imagen y pegala en Discord: muestra cómo está el servidor en este momento. Un enlace no serviría, porque Discord no puede entrar a tu compu.</p>
+        <div class="mt-4 flex flex-wrap items-center gap-3">
+          <a id="download-banner" href="/api/server/banner.png" download="estado-del-servidor.png" class="v2-button btn-primary">Descargar la imagen</a>
+          <button id="copy-banner-markdown" type="button" class="v2-button btn-quiet hidden">Copiar el enlace</button>
+        </div>
       </div>
 
       {#- The banner has nothing to save, so the save row hides on its sub-screen. -#}
