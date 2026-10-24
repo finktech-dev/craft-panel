@@ -116,11 +116,10 @@ def _template_context(request: Request, current_page: str) -> dict[str, object]:
         "two_factor_enabled": two_factor_enabled,
         "csrf_token": get_csrf_token(request) if request_has_admin_session(request) else None,
         # The first-run password is only ever shown to a browser on this PC,
-        # never through a tunnel, reverse proxy or LAN address.
+        # never through a tunnel, reverse proxy or LAN address. It lives only
+        # in memory (the file keeps a hash) and is dropped after the first login.
         "initial_admin_pin": (
-            settings.admin_pin.get_secret_value()
-            if settings.admin_pin_generated_this_start and request_is_direct_loopback(request)
-            else None
+            settings.initial_admin_password if request_is_direct_loopback(request) else None
         ),
     }
 

@@ -67,6 +67,49 @@
     <p class="mt-3 max-w-xl text-lg leading-relaxed text-zinc-400">Acá cambiás cómo entran tus amigos, los avisos en Discord, los rangos y las reglas del servidor.</p>
   </header>
 
+  {#- Wired by static/js/admin-two-factor.js; the initial state comes from data-enabled. -#}
+  <section id="two-factor" class="mx-auto max-w-3xl border-t border-zinc-800 py-9" aria-labelledby="two-factor-title" data-enabled="{{ 'true' if two_factor_enabled else 'false' }}">
+    <h2 id="two-factor-title" class="text-lg font-semibold text-zinc-50">Verificación en dos pasos</h2>
+    <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Además de la contraseña, el panel te pide un código de 6 números que cambia cada 30 segundos. Lo genera una app de códigos en tu celular, así que aunque alguien sepa tu contraseña no puede entrar.</p>
+    <p id="two-factor-state" class="mt-3 text-sm text-zinc-500" aria-live="polite">{{ 'Está activada.' if two_factor_enabled else 'Está apagada.' }}</p>
+
+    <div id="two-factor-actions-off" class="mt-5{% if two_factor_enabled %} hidden{% endif %}">
+      <button id="two-factor-start" type="button" class="v2-button btn-primary">Activarla</button>
+    </div>
+    <div id="two-factor-actions-on" class="mt-5 flex flex-wrap gap-3{% if not two_factor_enabled %} hidden{% endif %}">
+      <button id="two-factor-change" type="button" class="v2-button btn-quiet">Pasarla a otro celular</button>
+      <button id="two-factor-turn-off" type="button" class="v2-button btn-quiet">Apagarla</button>
+    </div>
+
+    {#- Asks for a code from the current app before changing or turning off an active factor. -#}
+    <form id="two-factor-confirm" class="mt-5 hidden max-w-sm" novalidate>
+      <label for="two-factor-current-code" id="two-factor-confirm-label" class="block text-sm font-medium text-zinc-300">Código que te muestra ahora la app</label>
+      <input id="two-factor-current-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" class="mt-2 font-mono {{ input_cls }}" />
+      <p class="mt-2 text-sm text-zinc-500">Lo pedimos para confirmar que sos vos.</p>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <button id="two-factor-confirm-submit" type="submit" class="v2-button btn-primary">Seguir</button>
+        <button id="two-factor-confirm-cancel" type="button" class="v2-button btn-quiet">Cancelar</button>
+      </div>
+    </form>
+
+    <form id="two-factor-setup" class="mt-5 hidden" novalidate>
+      <p class="font-semibold text-zinc-50">1. Escaneá este código con la app de tu celular</p>
+      <img id="two-factor-qr" alt="Código QR para la app de códigos" width="200" height="200" class="mt-3 rounded-lg" />
+      <p class="mt-4 text-sm leading-relaxed text-zinc-400">Si no podés escanearlo, elegí cargar la clave a mano en la app y copiá esta:</p>
+      <div class="mt-2 flex max-w-xl items-center gap-2">
+        <code id="two-factor-key" class="min-w-0 flex-1 overflow-x-auto rounded-lg bg-zinc-900 px-4 py-3 font-mono text-sm text-zinc-100"></code>
+        <button id="two-factor-copy-key" type="button" class="v2-button btn-quiet">Copiar</button>
+      </div>
+      <label for="two-factor-setup-code" class="mt-6 block font-semibold text-zinc-50">2. Escribí los 6 números que te muestra la app</label>
+      <input id="two-factor-setup-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" class="mt-2 max-w-sm font-mono {{ input_cls }}" />
+      <div class="mt-4 flex flex-wrap gap-3">
+        <button id="two-factor-setup-submit" type="submit" class="v2-button btn-primary">Confirmar</button>
+        <button id="two-factor-setup-cancel" type="button" class="v2-button btn-quiet">Cancelar</button>
+      </div>
+    </form>
+    <p id="two-factor-error" class="mt-3 min-h-5 text-sm text-[#f3a79b]" role="alert"></p>
+  </section>
+
   <section class="mx-auto max-w-3xl border-t border-zinc-800 py-9" aria-labelledby="access-title">
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div class="min-w-0">
@@ -698,6 +741,7 @@
 </section>
 {% endblock %}
 {% block scripts %}
+<script defer src="/static/js/admin-two-factor.js"></script>
 <script src="/static/js/admin-tabs.js"></script>
 <script src="/static/js/admin-configs.js"></script>
 <script src="/static/js/admin-restrictions.js"></script>

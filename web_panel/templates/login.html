@@ -11,7 +11,7 @@
   {% if initial_admin_pin %}
   <div class="mt-8 rounded-xl border border-[#e8b04b]/30 bg-[#e8b04b]/[.06] p-5" role="alert">
     <p class="font-semibold text-zinc-50">Guardá esta contraseña</p>
-    <p class="mt-1 leading-relaxed text-zinc-400">Es la primera vez que abrís el panel. Esta contraseña se muestra una sola vez: copiala y guardala en un lugar seguro antes de seguir.</p>
+    <p class="mt-1 leading-relaxed text-zinc-400">Es la primera vez que abrís el panel. Esta contraseña se ve solo en esta PC y hasta que entres por primera vez: copiala y guardala en un lugar seguro antes de seguir. Si cerrás el panel sin entrar, la próxima vez vas a ver una nueva.</p>
     <div class="mt-4 flex items-center gap-2">
       <code id="initial-admin-pin" class="min-w-0 flex-1 overflow-x-auto rounded-lg bg-zinc-900 px-4 py-3 font-mono text-sm text-zinc-100">{{ initial_admin_pin }}</code>
       <button id="copy-initial-pin" type="button" class="v2-button btn-quiet">Copiar</button>

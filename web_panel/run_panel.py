@@ -56,8 +56,8 @@ def main() -> None:
     server = uvicorn.Server(config)
 
     if settings.admin_pin_generated_this_start:
-        print("[Panel Web] Se generó una contraseña de administrador segura en web_panel/.panel_secrets.json.")
-        print("[Panel Web] Guardala en un gestor de contraseñas antes de abrir el panel.")
+        print("[Panel Web] Se generó una contraseña de administrador nueva.")
+        print("[Panel Web] Abrí el panel en esta PC para verla una sola vez y guardala en un lugar seguro.")
 
     try:
         # En Windows, server.run() envuelve el bucle de asyncio

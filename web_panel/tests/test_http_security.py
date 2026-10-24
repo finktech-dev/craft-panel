@@ -7,21 +7,26 @@ from pathlib import Path
 
 import pyotp
 import pytest
-from pydantic import SecretStr
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.core import security
 from app.core.config import settings
+from app.core.passwords import hash_password
 from app.core.rate_limit import limiter
 from main import app
 
 PIN = "correct-horse-battery-staple"
+# Low scrypt cost keeps the many logins in this module fast; the format is the real one.
+PIN_HASH = hash_password(PIN, log2_n=10)
 
 
 @pytest.fixture(autouse=True)
 def _isolated_auth_state(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(settings, "admin_pin", SecretStr(PIN))
+    monkeypatch.setattr(settings, "_admin_password_hash", PIN_HASH)
+    monkeypatch.setattr(settings, "_initial_admin_password", None)
+    monkeypatch.setattr(settings, "_admin_pin_generated_this_start", False)
+    monkeypatch.setattr(settings, "local_secrets_path", tmp_path / ".panel_secrets.json")
     monkeypatch.setattr(security.totp_manager, "_secret_path", tmp_path / ".totp_secret")
     monkeypatch.setattr(security.totp_manager, "_last_used_counter", -1)
     security.login_attempt_tracker._attempts.clear()
@@ -135,7 +140,7 @@ def test_login_rotates_the_session_cookie() -> None:
 
 
 def test_first_run_password_is_only_shown_on_this_pc(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "_admin_pin_generated_this_start", True)
+    monkeypatch.setattr(settings, "_initial_admin_password", PIN)
     assert PIN in _client().get("/").text
     assert PIN not in _client().get("/", headers={"x-forwarded-for": "203.0.113.9"}).text
     assert PIN not in _client().get("/", headers={"host": "abc.trycloudflare.com"}).text
@@ -200,6 +205,8 @@ def test_totp_codes_cannot_be_replayed() -> None:
     manager = security.totp_manager
     secret = manager.begin_setup()
     assert manager.verify_setup_code(pyotp.TOTP(secret).now())
+    # The setup code itself is consumed; pretend the next 30 s window started.
+    manager._last_used_counter = -1
     code = pyotp.TOTP(secret).now()
     assert manager.verify_login_code(code) is True
     assert manager.verify_login_code(code) is False
