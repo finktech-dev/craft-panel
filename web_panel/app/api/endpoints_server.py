@@ -36,6 +36,7 @@ from app.services.server_process import (
     server_manager,
 )
 from app.services.server_properties_service import server_properties_service
+from app.services.server_settings_file import read_server_settings
 from app.services.spark_service import spark_service
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,7 @@ async def start_server(dev_mode: bool = False) -> JobAccepted:
     if server_manager.is_running:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El servidor ya está en ejecución.")
     _raise_if_busy()
+    await _raise_if_settings_file_blocks_start()
     await _raise_if_external_server()
     _require_playit_ready()
 
@@ -164,7 +166,14 @@ async def _raise_if_external_server() -> None:
     own_pid = getattr(server_manager, "process_pid", None)
     found = await asyncio.to_thread(external_server_detector.detect, own_pid)
     if found is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=found.message)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=found.explanation)
+
+
+async def _raise_if_settings_file_blocks_start() -> None:
+    """A wrong ``inicio`` or ``java`` in craftpanel.txt fails right away, before any job starts."""
+    file_settings = await asyncio.to_thread(read_server_settings, settings)
+    if problem := file_settings.launch_problem:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=problem)
 
 
 def _raise_if_busy() -> None:
@@ -199,6 +208,7 @@ def _restart_work(restart: Callable[[JobReporter], Awaitable[bool]]) -> Callable
 @router.post("/restart", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
 async def restart_server() -> JobAccepted:
     _raise_if_busy()
+    await _raise_if_settings_file_blocks_start()
     await _raise_if_external_server()
     _require_playit_ready()
     job = start_job(
@@ -215,6 +225,7 @@ async def graceful_restart_server(countdown: int = 10) -> JobAccepted:
     if countdown < 3 or countdown > 60:
         countdown = 10
     _raise_if_busy()
+    await _raise_if_settings_file_blocks_start()
     await _raise_if_external_server()
     _require_playit_ready()
     job = start_job(
@@ -240,6 +251,8 @@ class ExternalServerInfo(BaseModel):
     pid: int | None = None
     process_name: str | None = None
     reason: str | None = None
+    kind: str | None = None
+    reasons: list[str] = Field(default_factory=list)
     port: int | None = None
     message: str | None = None
     can_terminate: bool = False
@@ -270,6 +283,8 @@ async def external_server() -> ExternalServerInfo:
         pid=found.pid,
         process_name=found.name,
         reason=found.reason,
+        kind=found.kind,
+        reasons=list(found.reasons),
         port=found.port,
         message=found.message,
         can_terminate=found.can_terminate,

@@ -1,26 +1,67 @@
-"""Detect Minecraft servers running outside the panel (run.bat, another tool, a previous panel session)."""
+"""Detect Minecraft servers running outside the panel (run.bat, another tool, a previous panel session).
+
+Detection is evidence based. Only Java processes and whatever listens on the
+server port are inspected (never every process on the machine), and for each
+one the detector collects signals:
+
+* it holds the active world's ``session.lock`` open (Minecraft keeps it open
+  while the world is loaded, so this is the strongest signal);
+* its working folder is the server folder;
+* its command line mentions the server folder, a Minecraft launch marker
+  (``@user_jvm_args.txt``, Forge/NeoForge libraries, Fabric's launcher,
+  ``-jar server.jar``, ``nogui``) or one of the user's ``[reconocer]`` words;
+* it listens on ``server-port``;
+* it belongs to the process tree the panel itself started last time.
+
+A verdict is then given: ``is_our_server`` (a Java process with at least one
+confident signal: our world's lock, our folder, our folder in its command
+line, a user word, or our previous session), ``other_java_server`` (it looks
+like Minecraft but from another folder) or ``other_program_on_port``. Only
+``is_our_server`` may be force-closed; starting is refused whenever anything
+holds our world's lock or our port, or our own server is already open.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
 import os
+import re
 import uuid
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 import psutil
 
 from app.core.config import Settings, settings
+from app.core.path_safety import is_safe_component
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_SERVER_PORT = 25565
 _JAVA_NAMES = frozenset({"java.exe", "javaw.exe", "java", "javaw"})
 _PID_FILENAME = ".server_process.json"
+_PROCESS_ERRORS = (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError)
+# Command-line fragments that only a Minecraft server launch tends to have.
+_MINECRAFT_MARKERS: tuple[tuple[str, str], ...] = (
+    ("@user_jvm_args.txt", "@user_jvm_args.txt"),
+    ("@libraries/net/neoforged/", "las librerías de NeoForge"),
+    ("@libraries/net/minecraftforge/", "las librerías de Forge"),
+    ("fabric-server-launch.jar", "fabric-server-launch.jar"),
+    ("-jar server.jar", "server.jar"),
+    ("nogui", "nogui"),
+)
 
-ExternalReason = Literal["previous_panel_session", "server_directory", "port"]
+ExternalReason = Literal[
+    "previous_panel_session", "world_lock", "server_directory", "command_line", "hint", "port", "minecraft_like"
+]
+ExternalKind = Literal["is_our_server", "other_java_server", "other_program_on_port"]
+
+
+def is_java_name(name: str) -> bool:
+    return name.lower() in _JAVA_NAMES
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,21 +70,66 @@ class ExternalServer:
     name: str
     reason: ExternalReason
     port: int
+    kind: ExternalKind = "is_our_server"
+    reasons: tuple[str, ...] = ()
 
     @property
     def can_terminate(self) -> bool:
-        """Only a Java process may be force-closed; anything else just holds the port."""
-        return self.name.lower() in _JAVA_NAMES
+        """Only a Java process confidently identified as this server may be force-closed."""
+        return self.kind == "is_our_server" and is_java_name(self.name)
 
     @property
     def message(self) -> str:
+        if self.kind == "other_program_on_port" or (self.kind == "is_our_server" and not is_java_name(self.name)):
+            if self.reason == "previous_panel_session":
+                return (
+                    f"Quedó abierto de una vez anterior que usaste el panel y está usando el puerto {self.port}. "
+                    "Cerralo desde su ventana para poder manejar el servidor con el panel."
+                )
+            return (
+                f"Otro programa ({self.name}) está usando el puerto {self.port}, que el servidor necesita. "
+                "Cerralo desde su propia ventana para poder encender el servidor."
+            )
+        if self.kind == "other_java_server":
+            return (
+                "Hay otro servidor de Minecraft abierto, de otra carpeta, y está usando lo que este necesita. "
+                "Cerralo desde su propia ventana para poder encender este."
+            )
         if self.reason == "previous_panel_session":
             origin = "Quedó abierto de una vez anterior que usaste el panel."
-        elif self.reason == "server_directory":
-            origin = "Lo abrieron fuera del panel, por ejemplo con run.bat."
         else:
-            origin = f"Otro programa está usando el puerto {self.port}, que el servidor necesita."
+            origin = "Lo abrieron fuera del panel, por ejemplo con run.bat."
         return f"{origin} Cerralo desde su ventana o desde acá para poder manejarlo con el panel."
+
+    @property
+    def explanation(self) -> str:
+        """``message`` plus what the panel found, for refusals such as a blocked start."""
+        if not self.reasons:
+            return self.message
+        return f"{self.message} Lo que encontramos: {'; '.join(self.reasons)}."
+
+
+@dataclass(slots=True)
+class _Evidence:
+    pid: int
+    name: str
+    holds_port: bool = False
+    holds_world: bool = False
+    cwd_match: bool = False
+    command_line_folder: bool = False
+    markers: list[str] = field(default_factory=list)
+    hints: list[str] = field(default_factory=list)
+    previous_session: bool = False
+
+    @property
+    def is_java(self) -> bool:
+        return is_java_name(self.name)
+
+    @property
+    def confident(self) -> bool:
+        return self.is_java and (
+            self.holds_world or self.cwd_match or self.command_line_folder or bool(self.hints) or self.previous_session
+        )
 
 
 class ExternalServerDetector:
@@ -57,19 +143,31 @@ class ExternalServerDetector:
         assert self._settings.panel_directory is not None
         return self._settings.panel_directory / _PID_FILENAME
 
-    def server_port(self) -> int:
+    def _properties(self) -> dict[str, str]:
         assert self._settings.server_directory is not None
         properties = self._settings.server_directory / "server.properties"
+        values: dict[str, str] = {}
         try:
             for line in properties.read_text(encoding="utf-8", errors="replace").splitlines():
+                if line.lstrip().startswith(("#", "!")):
+                    continue
                 key, separator, value = line.partition("=")
-                if separator and key.strip() == "server-port":
-                    port = int(value.strip())
-                    if 1 <= port <= 65535:
-                        return port
-        except (OSError, ValueError):
+                if separator:
+                    values[key.strip()] = value.strip()
+        except OSError:
             pass
-        return _DEFAULT_SERVER_PORT
+        return values
+
+    def server_port(self) -> int:
+        try:
+            port = int(self._properties().get("server-port", ""))
+        except ValueError:
+            return _DEFAULT_SERVER_PORT
+        return port if 1 <= port <= 65535 else _DEFAULT_SERVER_PORT
+
+    def level_name(self) -> str:
+        name = self._properties().get("level-name", "world") or "world"
+        return name if is_safe_component(name) else "world"
 
     def remember_panel_process(self, pid: int) -> None:
         """Persist the launcher PID so a restarted panel can recognise its own orphan."""
@@ -90,24 +188,140 @@ class ExternalServerDetector:
         except OSError as error:
             logger.warning("Could not remove the server PID file: %s", error)
 
-    def detect(self, own_pid: int | None = None) -> ExternalServer | None:
-        """Return the first foreign server process, ignoring the tree the panel itself runs."""
+    # -- detection ------------------------------------------------------
+
+    def inspect(self, own_pid: int | None = None) -> list[ExternalServer]:
+        """Every relevant foreign process with its verdict, most relevant first."""
         own_tree = self._process_tree(own_pid)
         previous_tree = self._process_tree(self._remembered_pid())
-        found = self._find_in_server_directory(own_tree) or self._find_on_port(own_tree)
-        if found is None:
+        port = self.server_port()
+        world = self.level_name()
+        port_holders = self._port_holders(port, own_tree)
+        candidates: dict[int, str] = dict(port_holders)
+        for pid, name in self._java_processes(own_tree):
+            candidates.setdefault(pid, name)
+
+        hints = self._hints()
+        found: list[tuple[int, ExternalServer]] = []
+        for pid, name in candidates.items():
+            evidence = self._collect(pid, name, world, hints)
+            evidence.holds_port = pid in port_holders
+            evidence.previous_session = pid in previous_tree
+            verdict = self._verdict(evidence, port, world)
+            if verdict is not None:
+                found.append(verdict)
+        found.sort(key=lambda item: item[0], reverse=True)
+        return [server for _, server in found]
+
+    def detect(self, own_pid: int | None = None) -> ExternalServer | None:
+        """The foreign process that blocks starting this server, if any."""
+        found = self.inspect(own_pid)
+        return found[0] if found else None
+
+    def _verdict(self, evidence: _Evidence, port: int, world: str) -> tuple[int, ExternalServer] | None:
+        reasons: list[str] = []
+        if evidence.holds_world:
+            reasons.append(f"Tiene abierto el mundo {world}")
+        if evidence.previous_session:
+            reasons.append("Lo abrió el panel la vez anterior")
+        if evidence.cwd_match:
+            reasons.append("Se abrió desde la carpeta del servidor")
+        if evidence.command_line_folder:
+            reasons.append("Su línea de inicio menciona la carpeta del servidor")
+        reasons.extend(f"Coincide con «{hint}», una de tus palabras para reconocerlo" for hint in evidence.hints)
+        if evidence.markers and evidence.is_java:
+            reasons.append(f"Arranca como un servidor de Minecraft ({', '.join(evidence.markers)})")
+        if evidence.holds_port:
+            reasons.append(f"Usa el puerto {port}")
+        if not evidence.is_java:
+            reasons.append(f"Es otro programa ({evidence.name}), no un servidor de Minecraft")
+
+        if evidence.confident:
+            kind: ExternalKind = "is_our_server"
+            score = 300
+        elif evidence.holds_world or evidence.holds_port or evidence.previous_session:
+            # Something else really is in the way: it holds our world or our port.
+            kind = "other_java_server" if evidence.is_java and evidence.markers else "other_program_on_port"
+            score = 200 if evidence.holds_world else 100
+        else:
+            # A Java program elsewhere that touches nothing of ours never blocks a start.
             return None
-        pid, name, reason = found
-        if pid in previous_tree:
-            reason = "previous_panel_session"
-        return ExternalServer(pid=pid, name=name, reason=reason, port=self.server_port())
+
+        if evidence.previous_session:
+            reason: ExternalReason = "previous_panel_session"
+        elif evidence.holds_world:
+            reason = "world_lock"
+        elif evidence.cwd_match:
+            reason = "server_directory"
+        elif evidence.command_line_folder:
+            reason = "command_line"
+        elif evidence.hints:
+            reason = "hint"
+        elif evidence.holds_port:
+            reason = "port"
+        else:
+            reason = "minecraft_like"
+        score += len(reasons)
+        return score, ExternalServer(
+            pid=evidence.pid, name=evidence.name, reason=reason, port=port, kind=kind, reasons=tuple(reasons)
+        )
+
+    def _hints(self) -> tuple[str, ...]:
+        from app.services.server_settings_file import read_server_settings
+
+        try:
+            return read_server_settings(self._settings).recognize
+        except Exception as error:  # noqa: BLE001 - a broken settings file must never break detection
+            logger.warning("Could not read the recognition words: %s", error)
+            return ()
+
+    def _collect(self, pid: int, name: str, world: str, hints: Iterable[str]) -> _Evidence:
+        evidence = _Evidence(pid=pid, name=name)
+        assert self._settings.server_directory is not None
+        server_directory = self._settings.server_directory.resolve()
+        normalized_server = os.path.normcase(str(server_directory))
+        lock_path = os.path.normcase(str(server_directory / world / "session.lock"))
+        try:
+            process = psutil.Process(pid)
+        except _PROCESS_ERRORS:
+            return evidence
+
+        try:
+            cwd = os.path.normcase(str(Path(process.cwd()).resolve()))
+            evidence.cwd_match = cwd == normalized_server
+        except _PROCESS_ERRORS:
+            cwd = ""
+
+        try:
+            arguments = [str(part) for part in process.cmdline()]
+        except _PROCESS_ERRORS:
+            arguments = []
+        command_line = " ".join(arguments)
+        if command_line:
+            normalized = os.path.normcase(command_line)
+            folder = re.escape(normalized_server)
+            evidence.command_line_folder = re.search(rf"{folder}(?=$|[\\/\"'\s])", normalized) is not None
+            if os.sep == "\\":
+                forward = re.escape(normalized_server.replace("\\", "/"))
+                evidence.command_line_folder |= re.search(rf"{forward}(?=$|[/\"'\s])", normalized) is not None
+            comparable = command_line.replace("\\", "/").casefold()
+            evidence.markers = [label for needle, label in _MINECRAFT_MARKERS if needle in comparable]
+            searchable = f"{command_line} {cwd}".casefold()
+            evidence.hints = [hint for hint in hints if hint.casefold() in searchable]
+
+        try:
+            open_files = process.open_files()
+        except _PROCESS_ERRORS:
+            open_files = []
+        evidence.holds_world = any(os.path.normcase(str(entry.path)) == lock_path for entry in open_files)
+        return evidence
 
     def terminate(self, pid: int, own_pid: int | None = None) -> bool:
         """Kill a detected external server tree; refuses PIDs that are not currently detected."""
         detected = self.detect(own_pid)
         if detected is None or detected.pid != pid:
             return False
-        # Never kill an unrelated program that merely holds the server port.
+        # Never kill an unrelated program, or a server we are not sure is this one.
         if not detected.can_terminate:
             return False
         try:
@@ -141,27 +355,23 @@ class ExternalServerDetector:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return set()
 
-    def _find_in_server_directory(self, own_tree: set[int]) -> tuple[int, str, ExternalReason] | None:
-        assert self._settings.server_directory is not None
-        server_directory = os.path.normcase(str(self._settings.server_directory.resolve()))
+    @staticmethod
+    def _java_processes(own_tree: set[int]) -> list[tuple[int, str]]:
+        found: list[tuple[int, str]] = []
         for process in psutil.process_iter(["pid", "name"]):
             name = (process.info.get("name") or "").lower()
-            if process.info["pid"] in own_tree or name not in _JAVA_NAMES:
-                continue
-            try:
-                cwd = os.path.normcase(str(Path(process.cwd()).resolve()))
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
-                continue
-            if cwd == server_directory:
-                return process.info["pid"], name, "server_directory"
-        return None
+            pid = process.info.get("pid")
+            if pid is not None and pid not in own_tree and name in _JAVA_NAMES:
+                found.append((pid, name))
+        return found
 
-    def _find_on_port(self, own_tree: set[int]) -> tuple[int, str, ExternalReason] | None:
-        port = self.server_port()
+    @staticmethod
+    def _port_holders(port: int, own_tree: set[int]) -> dict[int, str]:
         try:
             connections = psutil.net_connections(kind="tcp")
         except (psutil.AccessDenied, OSError):
-            return None
+            return {}
+        holders: dict[int, str] = {}
         for connection in connections:
             if (
                 connection.status == psutil.CONN_LISTEN
@@ -169,13 +379,13 @@ class ExternalServerDetector:
                 and connection.laddr.port == port
                 and connection.pid
                 and connection.pid not in own_tree
+                and connection.pid not in holders
             ):
                 try:
-                    name = psutil.Process(connection.pid).name().lower()
+                    holders[connection.pid] = psutil.Process(connection.pid).name().lower()
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    name = "desconocido"
-                return connection.pid, name, "port"
-        return None
+                    holders[connection.pid] = "desconocido"
+        return holders
 
 
 external_server_detector = ExternalServerDetector()

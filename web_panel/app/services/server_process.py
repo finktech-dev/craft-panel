@@ -13,12 +13,14 @@ from collections.abc import AsyncIterator, Coroutine
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Any, Final
 
 from app.core.config import Settings, settings
 from app.services.crash_analyzer import crash_analyzer
 from app.services.discord_service import discord_service
 from app.services.external_server_service import ExternalServerDetector
+from app.services.server_settings_file import read_server_settings
 from app.services.progress import ProgressCallback, StepPlan, report
 from app.websocket.manager import ConnectionManager, connection_manager
 
@@ -97,6 +99,21 @@ class ExternalServerRunningError(ServerProcessError):
     """A server the panel did not start is already running (run.bat, previous session...)."""
 
     status_code = 409
+
+
+class ServerSettingsFileError(ServerProcessError):
+    """craftpanel.txt names a start script or Java that cannot be used."""
+
+    status_code = 409
+
+
+def server_environment(configured: Settings) -> dict[str, str]:
+    """Environment for the server process: the chosen Java goes first on PATH."""
+    environment = os.environ.copy()
+    java_bin = configured.server_java_bin_directory
+    if java_bin is not None:
+        environment["PATH"] = f"{java_bin}{os.pathsep}{environment.get('PATH', '')}"
+    return environment
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,24 +243,30 @@ class MinecraftServerManager:
                 raise ServerProcessError(
                     f"No existe el directorio del servidor: {self._settings.server_directory}"
                 )
+            file_settings = await asyncio.to_thread(read_server_settings, self._settings)
+            if problem := file_settings.launch_problem:
+                raise ServerSettingsFileError(problem)
+            if file_settings.java and not Path(file_settings.java).is_file():
+                raise ServerSettingsFileError(
+                    f"No encontramos el Java elegido para este servidor ({file_settings.java}). "
+                    "Corregilo en Ajustes › Tu servidor o dejalo vacío."
+                )
             if not self._settings.server_start_script.is_file():
                 raise ServerProcessError(
-                    f"No existe el script de inicio del servidor: {self._settings.server_start_script}"
+                    f"No encontramos {self._settings.server_start_script.name} en la carpeta del servidor. "
+                    "Revisá «Archivo para encender» en Ajustes › Tu servidor."
                 )
 
             external = await asyncio.to_thread(self._external_detector.detect)
             if external is not None:
-                raise ExternalServerRunningError(external.message)
+                raise ExternalServerRunningError(external.explanation)
 
             self._state = ServerState.STARTING
             self._stop_requested = False
             self._start_requested_time = asyncio.get_running_loop().time()
             self._ready_notified = False
             try:
-                environment = os.environ.copy()
-                local_java = self._settings.local_java_executable_path
-                if local_java.is_file():
-                    environment["PATH"] = f"{local_java.parent}{os.pathsep}{environment.get('PATH', '')}"
+                environment = server_environment(self._settings)
                 self._process = await asyncio.create_subprocess_exec(
                     *self._settings.server_start_command,
                     cwd=str(self._settings.server_directory),

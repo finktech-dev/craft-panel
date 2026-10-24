@@ -112,10 +112,23 @@
       </div>`).join('');
   };
 
+  const EXTERNAL_TITLES = {
+    is_our_server: 'El servidor ya está abierto en otra ventana',
+    other_java_server: 'Hay otro servidor de Minecraft abierto',
+    other_program_on_port: 'Otro programa está usando el puerto del servidor',
+  };
   const setExternal = (external) => {
     externalPid = external?.detected ? external.pid : null;
     $('#external-server')?.classList.toggle('hidden', !externalPid);
-    if (externalPid) text('#external-message', external.message);
+    if (externalPid) {
+      text('#external-title', EXTERNAL_TITLES[external.kind] || EXTERNAL_TITLES.is_our_server);
+      text('#external-message', external.message);
+    }
+    // Why the panel thinks so, as a short list built with textContent only.
+    const reasons = externalPid && Array.isArray(external.reasons) ? external.reasons : [];
+    const list = $('#external-reasons');
+    if (list) list.replaceChildren(...reasons.map((reason) => Object.assign(document.createElement('li'), { textContent: reason })));
+    $('#external-reasons-title')?.classList.toggle('hidden', reasons.length === 0);
     // Only a Minecraft (Java) process can be closed from here; anything else just holds the port.
     const terminate = $('#external-terminate');
     if (terminate) terminate.hidden = !external?.can_terminate;
