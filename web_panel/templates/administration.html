@@ -749,26 +749,36 @@
     {{ subpanel('configs', 'archivos', first=true) }}
     <div id="tab-panel-configs" class="py-8">
       <h3 class="text-lg font-semibold text-zinc-50">Ajustes de los mods</h3>
-      <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Cambiá cómo funciona cada mod. Cada cambio se guarda al momento; la mayoría se nota cuando reiniciás el servidor.</p>
+      <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Cambiá cómo funciona cada mod. La mayoría de los cambios se notan cuando reiniciás el servidor.</p>
+      <p id="config-editor-note" class="mt-2 hidden max-w-xl text-sm leading-relaxed text-zinc-500"></p>
       <label for="config-search" class="sr-only">Buscar un archivo</label>
       <input id="config-search" type="search" class="mt-5 {{ input_cls }}" placeholder="Buscar por nombre del mod" />
       <div id="config-picker" class="mt-4 border-t border-zinc-800"></div>
 
-      <div id="config-workspace" class="mt-8 hidden border-t border-zinc-800 pt-6 xl:-mx-32">
-        <div class="flex items-start justify-between gap-3">
+      <p id="config-picker-more" class="hidden pt-4 text-sm text-zinc-500"><span id="config-picker-count"></span> <button id="config-show-more" type="button" class="link ml-2">Mostrar más</button></p>
+
+      <dialog id="config-workspace" class="drawer drawer-wide" aria-labelledby="selected-config-name">
+        <div class="drawer-head">
           <div class="min-w-0">
             <p id="selected-config-name" class="break-all font-mono text-sm font-semibold text-zinc-50"></p>
             <p id="selected-config-help" class="mt-1 text-sm text-zinc-400"></p>
           </div>
-          <button id="close-config" type="button" class="v2-button btn-quiet shrink-0">Cerrar</button>
+          <div class="flex shrink-0 items-center gap-2">
+            <button id="config-open-local" type="button" class="v2-button btn-quiet hidden min-h-0 py-1.5 text-sm"></button>
+            <button id="close-config" type="button" class="nav-link" data-close-dialog>Cerrar</button>
+          </div>
         </div>
-        <div id="config-form" class="mt-4 border-t border-zinc-800"></div>
-        <details class="mt-6 text-sm text-zinc-400">
-          <summary class="cursor-pointer hover:text-zinc-200">Opciones avanzadas · editar el archivo como texto</summary>
-          <label for="config-code" class="sr-only">Contenido del archivo</label>
-          <textarea id="config-code" spellcheck="false" class="mt-3 h-80 w-full rounded-lg border border-zinc-800 bg-zinc-900 p-4 font-mono text-xs leading-relaxed text-zinc-100 outline-none focus:border-emerald-400"></textarea>
-          <button id="save-config" type="button" class="v2-button btn-primary mt-3">Revisar y guardar</button>
-        </details>
+        <div class="drawer-body">
+          <p id="config-loading" class="py-10 text-center text-zinc-500" aria-live="polite">Abriendo el archivo…</p>
+          <div id="config-form" class="border-t border-zinc-800"></div>
+          <details class="mt-6 text-sm text-zinc-400">
+            <summary class="cursor-pointer hover:text-zinc-200">Opciones avanzadas · editar el archivo como texto</summary>
+            <label for="config-code" class="sr-only">Contenido del archivo</label>
+            <textarea id="config-code" spellcheck="false" class="mt-3 h-80 w-full rounded-lg border border-zinc-800 bg-zinc-900 p-4 font-mono text-xs leading-relaxed text-zinc-100 outline-none focus:border-emerald-400"></textarea>
+            <button id="save-config" type="button" class="v2-button btn-primary mt-3">Revisar y guardar</button>
+          </details>
+        </div>
+      </dialog>
       </div>
     </div>
     </div>

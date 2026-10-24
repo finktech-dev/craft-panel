@@ -5,7 +5,7 @@
 <section class="mx-auto max-w-3xl" aria-labelledby="crashes-title">
   <header class="pb-8">
     <h1 id="crashes-title" class="font-display text-4xl font-semibold text-zinc-50">Problemas</h1>
-    <p class="mt-3 max-w-xl text-lg leading-relaxed text-zinc-400">Cuando alguien se cae del servidor o el servidor se cierra solo, acá te contamos qué pasó y qué podés hacer.</p>
+    <p class="mt-3 max-w-xl text-lg leading-relaxed text-zinc-400">Cuando alguien se cae, lo expulsan o el servidor se cierra solo, acá te contamos qué pasó, qué estaba haciendo y qué podés hacer.</p>
     <p class="mt-3 text-sm text-zinc-500">
       <span id="stat-critical">0</span> problemas · <span id="stat-normal">0</span> salidas normales · <span id="stat-total">0</span> en total · <span id="stat-players">0</span> jugadores
     </p>
@@ -31,7 +31,7 @@
         <option value="">Cualquier motivo</option>
       </select>
       <label class="inline-flex cursor-pointer select-none items-center gap-2">
-        <input type="checkbox" id="filter-errors-only" class="h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-emerald-500">
+        <input type="checkbox" id="filter-errors-only" checked class="h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-emerald-500">
         <span>Ocultar las salidas normales</span>
       </label>
     </div>
@@ -81,6 +81,11 @@
     <div id="viewer-suggestion-box" class="mt-5 rounded-xl bg-zinc-950 p-4">
       <p id="viewer-suggestion-title" class="font-semibold text-zinc-50">Qué pasó</p>
       <p id="viewer-suggestion-text" class="mt-1 leading-relaxed text-zinc-300"></p>
+    </div>
+
+    <div id="viewer-timeline-box" class="mt-5">
+      <p class="pb-2 font-semibold text-zinc-50">Qué estaba pasando</p>
+      <div id="viewer-timeline" class="rounded-lg bg-zinc-950 p-4 text-sm"></div>
     </div>
 
     <div class="mt-5">

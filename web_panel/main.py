@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from app.api import server_automation
 from app.api.router import router as api_router
 from app.core.config import settings
+from app.core.navigation import NAV_COOKIE, nav_layout, parse_nav_cookie
 from app.core.security import (
     TwoFactorError,
     get_csrf_token,
@@ -99,6 +100,7 @@ assert settings.static_directory is not None
 assert settings.panel_directory is not None
 app.mount("/static", StaticFiles(directory=str(settings.static_directory)), name="static")
 templates = Jinja2Templates(directory=str(settings.panel_directory / "templates"))
+templates.env.globals["nav_layout"] = nav_layout
 app.include_router(api_router)
 app.include_router(terminal_router)
 
@@ -123,6 +125,7 @@ def _template_context(request: Request, current_page: str) -> dict[str, object]:
     return {
         "request": request,
         "current_page": current_page,
+        "nav_bar": parse_nav_cookie(request.cookies.get(NAV_COOKIE)),
         "is_admin": request_has_admin_session(request),
         "public_address": settings.effective_public_address,
         "brand_name": settings.effective_server_name or "Craft Panel",

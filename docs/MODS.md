@@ -13,18 +13,18 @@ Mods must match the server loader and Minecraft version. A NeoForge server needs
 ## Install from Modrinth
 
 1. Open the panel.
-2. Go to **Gestor de Mods**.
-3. Open **Explorar Catalogo Modrinth**.
-4. Search for a mod, for example `Create`, `JEI`, or `Waystones`.
-5. Keep the loader and Minecraft version on auto-detect, or choose them manually if you are preparing a specific server version.
-6. Click **Instalar Mod**.
+2. Go to the **"Mods"** page.
+3. Open the **"Buscar mods nuevos"** (Find new mods) tab.
+4. In **"Nombre del mod"** (Mod name), search for a mod, for example `Create`, `JEI`, or `Waystones`.
+5. Keep the loader and Minecraft version on auto-detect, or choose them manually under **"Opciones avanzadas"** (Advanced options) if you are preparing a specific server version.
+6. Click **"Instalar"** (Install).
 
 The panel downloads the selected Modrinth file into `server/mods/`. When Modrinth declares required dependencies, the panel tries to install those required dependencies too.
 
 ## Upload local `.jar` files
 
-1. Open **Gestor de Mods**.
-2. Click **Subir .jar**.
+1. Open the **"Mods"** page.
+2. Click **"Agregar desde archivo"** (Add from file).
 3. Select or drag one or more compatible `.jar` files.
 4. Wait for the upload to finish.
 
@@ -32,11 +32,11 @@ Uploaded files are stored in `server/mods/`. They are local runtime files and ar
 
 ## Enable, disable, update, or delete mods
 
-In **Gestor de Mods**, installed mods can be:
+On the **"Mods"** page, under **"Tus mods"** (Your mods), installed mods can be:
 
 - Enabled or disabled with the switch on each row.
-- Enabled, disabled, or deleted in bulk by selecting multiple rows.
-- Checked for Modrinth updates with **Buscar Actualizaciones**.
+- Enabled, disabled, or deleted in bulk by selecting multiple rows and clicking **"Encender"** (Turn on), **"Apagar"** (Turn off) or **"Quitar"** (Remove).
+- Checked for Modrinth updates with **"Ver si hay actualizaciones"** (Check for updates).
 - Deleted permanently from `server/mods/`.
 
 Most mod changes require a server restart. The safest flow is: stop server, change mods, start server, then watch the console for loader errors.
@@ -45,9 +45,9 @@ Most mod changes require a server restart. The safest flow is: stop server, chan
 
 Many modded servers also require players to install matching client-side mods.
 
-1. Open **Gestor de Mods**.
-2. Click **Generar Modpack ZIP**.
-3. Download the generated ZIP.
+1. Open the **"Mods"** page and find **"Paquete para tus amigos"** (Pack for your friends).
+2. Click **"Preparar paquete"** (Prepare pack).
+3. Download the generated ZIP with **"Descargar paquete"** (Download pack).
 4. Send it to players so they can copy its `mods/` and included client configuration into their Minecraft instance.
 
 The exporter excludes common server-only tools such as Spark, LuckPerms, WorldEdit, Chunky, BlueMap, and similar admin/server utilities. If a special mod is incorrectly included or excluded, adjust the modpack manually before sharing it.

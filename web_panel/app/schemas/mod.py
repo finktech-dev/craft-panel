@@ -64,6 +64,8 @@ class ModUpdateItem(BaseModel):
     current_version: str | None = None
     latest_version: str | None = None
     project_id: str | None = None
+    # Exact Modrinth version to install when updating.
+    version_id: str | None = None
     has_update: bool = False
 
 

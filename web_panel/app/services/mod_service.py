@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import hashlib
 import contextlib
 import json
 import logging
@@ -47,6 +48,7 @@ _MAX_METADATA_BYTES: Final = 1 * _MEBIBYTE
 _MAX_DEPENDENCY_INSTALLS: Final = 30
 # Modrinth project/version IDs are base62; slugs add "-", "_" and ".".
 _MODRINTH_ID: Final = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_UPDATES_CACHE_SECONDS: Final = 6 * 3600
 _ZIP_MAGIC: Final = (b"PK\x03\x04", b"PK\x05\x06")
 SERVER_ONLY_MODS: Final[frozenset[str]] = frozenset({
     "chunky",
@@ -115,6 +117,7 @@ class ModService:
         self._manager = manager
         self._versions = ServerVersionService(configured_settings)
         self.history = ModHistoryService(configured_settings, manager)
+        self._updates_cache: tuple[datetime, tuple[tuple[str, str], ...], list[ModUpdateItem]] | None = None
 
     def _require_server_stopped(self, operation: str) -> None:
         try:
@@ -466,69 +469,95 @@ class ModService:
 
         return await asyncio.to_thread(self._mod_item_from_path, destination, self._settings)
 
-    async def check_updates(self) -> list[ModUpdateItem]:
-        """Comprueba de forma asíncrona si hay versiones más nuevas en Modrinth para los mods instalados."""
-        installed = await self.list_mods()
-        candidates = [
-            m for m in installed
-            if m.is_enabled and (m.mod_id or m.name) and _MODRINTH_ID.match(m.mod_id or m.name)
-        ]
-        if not candidates:
+    async def check_updates(self, *, refresh: bool = False) -> list[ModUpdateItem]:
+        """Updates for enabled mods, identified by file hash so version labels never cause false alarms.
+
+        Modrinth answers for the whole folder in two requests. Results are kept for a few hours
+        so the mods page can show its "Actualizaciones" tab right away.
+        """
+        installed = [mod for mod in await self.list_mods() if mod.is_enabled]
+        signature = tuple(sorted((mod.filename, mod.modified_at) for mod in installed))
+        cached = self._updates_cache
+        if (
+            not refresh
+            and cached is not None
+            and cached[1] == signature
+            and (datetime.now(UTC) - cached[0]).total_seconds() < _UPDATES_CACHE_SECONDS
+        ):
+            return cached[2]
+        results = await self._check_updates_by_hash(installed)
+        self._updates_cache = (datetime.now(UTC), signature, results)
+        return results
+
+    async def _check_updates_by_hash(self, installed: list[ModItem]) -> list[ModUpdateItem]:
+        if not installed:
             return []
-
+        hashes = await asyncio.to_thread(self._sha1_by_filename, [mod.filename for mod in installed])
+        if not hashes:
+            return []
         env = self.get_environment()
-        loader = env["loader"].lower()
-        mc_version = env["minecraft_version"].lower()
-
-        query_params: dict[str, Any] = {}
+        loader = (env["loader"] or "").lower()
+        mc_version = (env["minecraft_version"] or "").lower()
+        update_query: dict[str, Any] = {"hashes": list(hashes.values()), "algorithm": "sha1"}
         if loader not in ("all", "any", "vanilla", "custom", ""):
-            query_params["loaders"] = json.dumps([loader])
+            update_query["loaders"] = [loader]
         if mc_version not in ("all", "any", ""):
-            query_params["game_versions"] = json.dumps([mc_version])
+            update_query["game_versions"] = [mc_version]
+        try:
+            async with allowed_client(MODRINTH_HOSTS, timeout=20.0, follow_redirects=False) as client:
+                current_response = await client.post(
+                    f"{_MODRINTH_API}/version_files", json={"hashes": update_query["hashes"], "algorithm": "sha1"}
+                )
+                latest_response = await client.post(f"{_MODRINTH_API}/version_files/update", json=update_query)
+        except httpx.HTTPError as error:
+            raise ModrinthServiceError("No pudimos consultar Modrinth. Revisá la conexión a internet.") from error
+        if current_response.status_code != 200 or latest_response.status_code != 200:
+            raise ModrinthServiceError("Modrinth no respondió bien. Probá de nuevo en un rato.")
+        current_versions = current_response.json() if isinstance(current_response.json(), dict) else {}
+        latest_versions = latest_response.json() if isinstance(latest_response.json(), dict) else {}
 
         results: list[ModUpdateItem] = []
-        semaphore = asyncio.Semaphore(5)
-
-        async def _check_single(mod: ModItem) -> ModUpdateItem:
-            target_id = mod.mod_id or mod.name
-            update_item = ModUpdateItem(
+        for mod in installed:
+            digest = hashes.get(mod.filename)
+            current = current_versions.get(digest) if digest else None
+            if not isinstance(current, dict):
+                # Not published on Modrinth (or a custom build): nothing to compare against.
+                continue
+            latest = latest_versions.get(digest)
+            item = ModUpdateItem(
                 filename=mod.filename,
                 mod_id=mod.mod_id,
                 name=mod.name,
-                current_version=mod.version,
+                current_version=current.get("version_number") or mod.version,
                 latest_version=None,
-                project_id=None,
+                project_id=current.get("project_id"),
+                version_id=None,
                 has_update=False,
             )
-            async with semaphore:
-                try:
-                    async with allowed_client(MODRINTH_HOSTS, timeout=10.0, follow_redirects=False) as client:
-                        resp = await client.get(
-                            f"{_MODRINTH_API}/project/{target_id}/version",
-                            params=query_params or None,
-                        )
-                        if resp.status_code == 200:
-                            versions = resp.json()
-                            if isinstance(versions, list) and versions:
-                                latest = max(versions, key=lambda v: v.get("date_published", ""))
-                                latest_ver = latest.get("version_number")
-                                update_item.latest_version = latest_ver
-                                update_item.project_id = latest.get("project_id")
-                                if (
-                                    mod.version
-                                    and latest_ver
-                                    and mod.version.strip().casefold() != latest_ver.strip().casefold()
-                                ):
-                                    update_item.has_update = True
-                except Exception as err:
-                    logger.debug("Error comprobando actualización para %s: %s", mod.filename, err)
-            return update_item
-
-        updates = await asyncio.gather(*[_check_single(m) for m in candidates], return_exceptions=True)
-        for item in updates:
-            if isinstance(item, ModUpdateItem):
-                results.append(item)
+            if isinstance(latest, dict) and latest.get("id") and latest.get("id") != current.get("id"):
+                newer = str(latest.get("date_published", "")) > str(current.get("date_published", ""))
+                if newer:
+                    item.latest_version = latest.get("version_number")
+                    item.version_id = latest.get("id")
+                    item.has_update = True
+            results.append(item)
         return results
+
+    def _sha1_by_filename(self, filenames: list[str]) -> dict[str, str]:
+        digests: dict[str, str] = {}
+        for filename in filenames:
+            path = self.mods_directory / filename
+            if not is_safe_component(filename) or path.is_symlink() or not path.is_file():
+                continue
+            digest = hashlib.sha1(usedforsecurity=False)
+            try:
+                with path.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            except OSError:
+                continue
+            digests[filename] = digest.hexdigest()
+        return digests
 
     async def export_client_pack(self) -> Path:
         """Empaqueta mods activos y configuraciones presentes sin bloquear FastAPI."""

@@ -17,4 +17,10 @@ Thanks for helping make the panel easier for non-technical Minecraft hosts.
 4. Run focused tests without starting a real Minecraft server: `python -m pytest web_panel/tests`.
 5. Explain in the pull request what the code validates and what still needs manual verification.
 
+## Language and translations
+
+The panel interface is in Spanish (Rioplatense, "vos" form); documentation, code comments and config keys are in English. Help translating the interface into other languages (i18n) is very welcome.
+
+## License
+
 This repository is released under the MIT License. Do not copy code from other panels without verifying license compatibility.

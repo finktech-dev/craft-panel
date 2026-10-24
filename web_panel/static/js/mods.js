@@ -1,7 +1,5 @@
 /**
- * Gestor de Mods (web_panel/static/js/mods.js)
- * Controlador modular para la administración interactiva de mods locales y catálogo Modrinth.
- * Soporta operaciones en lote, subida múltiple, metadatos enriquecidos, configs y verificación de versiones.
+ * Mods page: installed mods (paged), updates, the Modrinth catalogue and the change history.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -11,8 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Every change to the mods folder is recorded, so success messages point to the undo.
   const UNDO_HINT = ' Podés deshacerlo en Historial.';
 
-  // Estado del cliente
+  // Page state
+  const PAGE_SIZE = 25;
   let installedMods = [];
+  let lastFiltered = [];
+  let currentPage = 1;
+  let updatesList = [];
   let currentFilter = 'all';
   let currentSort = 'name';
   let searchTerm = '';
@@ -21,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let updatesMap = {};
   let detectedEnv = { loader: null, minecraft_version: null };
 
-  // Elementos DOM principales
+  // Main elements
   const envBadgeText = $('#env-badge-text');
   const modrinthLoaderSelect = $('#modrinth-loader-select');
   const modrinthVersionInput = $('#modrinth-version-input');
@@ -33,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectAllCheckbox = $('#select-all-mods');
   const btnCheckUpdates = $('#btn-check-updates');
 
-  // Barra de acciones en lote
+  // Bulk actions bar
   const bulkBar = $('#bulk-actions-bar');
   const bulkCount = $('#bulk-selected-count');
   const btnBulkEnable = $('#btn-bulk-enable');
@@ -48,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const kpiDisabled = $('#kpi-disabled-mods');
   const kpiSize = $('#kpi-total-size');
 
-  // Modales
+  // Dialogs
   const uploadModal = $('#modal-upload-mod');
   // The empty state's button opens the same upload dialog (no inline handlers: strict CSP).
   $('#btn-empty-upload')?.addEventListener('click', () => $('#btn-open-upload-modal')?.click());
@@ -68,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const downloadBtn = $('#btn-download-pack');
   const packInfo = $('#pack-export-info');
 
-  // 0. DETECCIÓN DINÁMICA DE ENTORNO
+  // 0. Server type and Minecraft version
   async function loadEnvironment() {
     try {
       const env = await Panel.api('/api/mods/environment');
@@ -88,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 1. CARGA DE MODS
+  // 1. Load mods
   async function loadMods() {
     try {
       if (installedContainer) {
@@ -112,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 2. ACTUALIZACIÓN DE KPIS
+  // 2. Counters
   function updateKpis() {
     const total = installedMods.length;
     const active = installedMods.filter(m => m.is_enabled).length;
@@ -128,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (badgeInstalled) badgeInstalled.textContent = total;
   }
 
-  // 3. BARRA DE ACCIONES EN LOTE (BULK ACTIONS)
+  // 3. Bulk actions bar
   function updateBulkBar() {
     if (!bulkBar) return;
     const count = selectedFilenames.size;
@@ -140,11 +142,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 4. RENDERIZADO DE MODS INSTALADOS
+  // 4. Installed mods, one page at a time
   function renderInstalledMods() {
     if (!installedContainer) return;
 
-    // Filtrado
     const query = searchTerm.trim().toLowerCase();
     let filtered = installedMods.filter(mod => {
       const matchSearch =
@@ -160,7 +161,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     });
 
-    // Ordenamiento
     filtered.sort((a, b) => {
       if (currentSort === 'name') return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
       if (currentSort === 'size_desc') return b.size_mb - a.size_mb;
@@ -169,8 +169,12 @@ document.addEventListener('DOMContentLoaded', () => {
       return 0;
     });
 
+    lastFiltered = filtered;
+    updateSelectAllLabel();
+    const pager = $('#installed-pager');
     if (filtered.length === 0) {
       installedContainer.classList.add('hidden');
+      pager?.classList.add('hidden');
       if (emptyState) {
         emptyState.classList.remove('hidden');
         const emptyMsg = $('#installed-empty-msg');
@@ -186,7 +190,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (emptyState) emptyState.classList.add('hidden');
     installedContainer.classList.remove('hidden');
 
-    installedContainer.innerHTML = filtered.map(mod => {
+    const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    currentPage = Math.min(Math.max(1, currentPage), pageCount);
+    const first = (currentPage - 1) * PAGE_SIZE;
+    const pageMods = filtered.slice(first, first + PAGE_SIZE);
+    renderPager(filtered.length, pageCount, first, pageMods.length);
+
+    installedContainer.innerHTML = pageMods.map(mod => {
       const encodedFilename = encodeURIComponent(mod.filename);
       const isEnabled = mod.is_enabled;
       const isServerOnly = !!mod.is_server_only;
@@ -204,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
         : '';
       const updateData = updatesMap[mod.filename];
       const updateButton = (updateData && updateData.has_update)
-        ? `<button type="button" data-update-project="${esc(updateData.project_id || '')}" data-update-filename="${encodedFilename}" class="mod-update-btn link text-sm" title="Hay una versión nueva en Modrinth">Actualizar a ${esc(updateData.latest_version || 'la nueva versión')}</button>`
+        ? `<button type="button" class="mod-see-update link text-sm" title="Hay una versión nueva en Modrinth">Hay una versión nueva: ${esc(updateData.latest_version || '')}</button>`
         : '';
 
       return `
@@ -229,10 +239,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('');
   }
 
-  // 5. BÚSQUEDA Y FILTRADO LOCAL
+  // Page numbers: first, last, and the ones around the current page.
+  function renderPager(total, pageCount, first, shown) {
+    const pager = $('#installed-pager');
+    if (!pager) return;
+    pager.classList.toggle('hidden', pageCount <= 1);
+    const range = $('#installed-range');
+    if (range) range.textContent = `${first + 1}–${first + shown} de ${total}`;
+    const pages = $('#installed-pages');
+    if (!pages) return;
+    const numbers = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, pageCount])]
+      .filter((n) => n >= 1 && n <= pageCount).sort((a, b) => a - b);
+    const buttons = [`<button type="button" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''} aria-label="Página anterior">‹</button>`];
+    numbers.forEach((n, index) => {
+      if (index && n - numbers[index - 1] > 1) buttons.push('<span class="px-1 py-2" aria-hidden="true">…</span>');
+      buttons.push(`<button type="button" data-page="${n}" ${n === currentPage ? 'aria-current="page"' : ''} aria-label="Página ${n}">${n}</button>`);
+    });
+    buttons.push(`<button type="button" data-page="${currentPage + 1}" ${currentPage === pageCount ? 'disabled' : ''} aria-label="Página siguiente">›</button>`);
+    pages.innerHTML = buttons.join('');
+  }
+
+  $('#installed-pages')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-page]');
+    if (!button || button.disabled) return;
+    currentPage = Number(button.dataset.page);
+    renderInstalledMods();
+    $('#local-mod-search')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
+
+  function updateSelectAllLabel() {
+    const labelNode = $('#select-all-label');
+    if (labelNode) labelNode.textContent = lastFiltered.length > PAGE_SIZE ? `Elegir todos (${lastFiltered.length})` : 'Elegir todos';
+  }
+
+  // 5. Search, sort and filters (always back to the first page)
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       searchTerm = e.target.value;
+      currentPage = 1;
       renderInstalledMods();
     });
   }
@@ -240,6 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sortSelect) {
     sortSelect.addEventListener('change', (e) => {
       currentSort = e.target.value;
+      currentPage = 1;
       renderInstalledMods();
     });
   }
@@ -253,16 +298,17 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('bg-zinc-800', 'text-zinc-50');
       btn.classList.remove('text-zinc-400');
       currentFilter = btn.dataset.filter || 'all';
+      currentPage = 1;
       renderInstalledMods();
     });
   });
 
-  // 6. SELECCIÓN INDIVIDUAL Y MASTER (BULK ACTIONS)
+  // 6. Selection and on/off switches
   if (installedContainer) {
     installedContainer.addEventListener('change', async (event) => {
       const target = event.target;
 
-      // Checkbox de selección para bulk
+      // Selection checkbox for bulk actions
       if (target.classList.contains('mod-select-checkbox')) {
         const fn = target.dataset.selectFilename;
         if (target.checked) selectedFilenames.add(fn);
@@ -271,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Switch toggle individual
+      // On/off switch
       if (target.classList.contains('mod-switch-checkbox')) {
         const filename = target.dataset.toggleFilename;
         if (!filename) return;
@@ -290,59 +336,28 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Clicks en la lista (Delete individual o Update en 1 clic)
-    installedContainer.addEventListener('click', async (event) => {
+    // Clicks in the list: remove one mod, or jump to its update.
+    installedContainer.addEventListener('click', (event) => {
       const deleteBtn = event.target.closest('.delete-mod-btn');
       if (deleteBtn) {
-        const filename = deleteBtn.dataset.deleteFilename;
-        const modName = deleteBtn.dataset.modName;
-        openDeleteModal(filename, modName);
+        openDeleteModal(deleteBtn.dataset.deleteFilename, deleteBtn.dataset.modName);
         return;
       }
-
-      const updateBtn = event.target.closest('.mod-update-btn');
-      if (updateBtn) {
-        const projectId = updateBtn.dataset.updateProject;
-        if (!projectId) return;
-        const replaceFilename = decodeURIComponent(updateBtn.dataset.updateFilename || '');
-        updateBtn.disabled = true;
-        updateBtn.textContent = 'Actualizando…';
-        try {
-          const body = { project_id: projectId };
-          // The old jar is removed once the new version is in place.
-          if (replaceFilename) body.replace_filename = replaceFilename;
-          const mod = await Panel.api('/api/mods/install', { method: 'POST', body });
-          Panel.toast(`Actualizaste ${mod.name}.${UNDO_HINT}`, 'success');
-          await loadMods();
-        } catch (err) {
-          Panel.toast(err.message, 'error');
-          updateBtn.disabled = false;
-          updateBtn.textContent = 'Reintentar';
-        }
-      }
+      if (event.target.closest('.mod-see-update')) switchMainTab('updates');
     });
   }
 
-  // Master checkbox: Seleccionar todos
+  // "Elegir todos" picks every mod that matches the current search and filter, on every page.
   if (selectAllCheckbox) {
     selectAllCheckbox.addEventListener('change', (e) => {
-      const checkboxes = $$('.mod-select-checkbox');
-      if (e.target.checked) {
-        checkboxes.forEach(cb => {
-          cb.checked = true;
-          selectedFilenames.add(cb.dataset.selectFilename);
-        });
-      } else {
-        checkboxes.forEach(cb => {
-          cb.checked = false;
-        });
-        selectedFilenames.clear();
-      }
+      if (e.target.checked) lastFiltered.forEach((mod) => selectedFilenames.add(mod.filename));
+      else selectedFilenames.clear();
+      $$('.mod-select-checkbox').forEach((cb) => { cb.checked = selectedFilenames.has(cb.dataset.selectFilename); });
       updateBulkBar();
     });
   }
 
-  // Ejecutor de operaciones en lote
+  // Bulk actions
   async function executeBulkAction(action) {
     if (selectedFilenames.size === 0) return;
     const filenames = Array.from(selectedFilenames);
@@ -377,37 +392,110 @@ document.addEventListener('DOMContentLoaded', () => {
     if (bulkDeleteModal) bulkDeleteModal.close();
   });
 
-  // 7. VERIFICADOR DE ACTUALIZACIONES (UPDATE CHECKER)
-  if (btnCheckUpdates) {
-    btnCheckUpdates.addEventListener('click', async () => {
+  // 7. Updates. The server remembers the answer for a few hours, so opening the page is quick;
+  // "Ver si hay actualizaciones" asks Modrinth again.
+  const updatesTabButton = $('#tab-btn-updates');
+  const updatesListNode = $('#updates-list');
+
+  function renderUpdates() {
+    const pending = updatesList.filter((item) => item.has_update);
+    updatesTabButton?.classList.toggle('hidden', pending.length === 0);
+    const badge = $('#tab-badge-updates');
+    if (badge) badge.textContent = pending.length;
+    if (!updatesListNode) return;
+    if (!pending.length) {
+      updatesListNode.innerHTML = '<p class="py-12 text-center text-zinc-500">Tus mods están al día.</p>';
+      $('#btn-update-all')?.classList.add('hidden');
+      if (!$('#panel-updates')?.classList.contains('hidden')) switchMainTab('installed');
+      return;
+    }
+    $('#btn-update-all')?.classList.toggle('hidden', pending.length < 2);
+    updatesListNode.innerHTML = pending.map((item) => `
+      <article class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-800 py-4">
+        <div class="min-w-0 flex-1">
+          <h3 class="truncate font-semibold text-zinc-50">${esc(item.name)}</h3>
+          <p class="mt-0.5 text-sm text-zinc-500">${esc(item.current_version || 'Versión actual')} <span aria-hidden="true">→</span> <span class="text-zinc-300">${esc(item.latest_version || 'nueva')}</span></p>
+        </div>
+        <button type="button" class="update-one v2-button btn-quiet min-h-0 shrink-0 py-1.5 text-sm" data-filename="${esc(item.filename)}">Actualizar</button>
+      </article>`).join('');
+  }
+
+  async function loadUpdates({ refresh = false, quiet = true } = {}) {
+    if (btnCheckUpdates && !quiet) {
       btnCheckUpdates.disabled = true;
       btnCheckUpdates.textContent = 'Buscando actualizaciones…';
-      try {
-        const updates = await Panel.api('/api/mods/updates');
-        updatesMap = {};
-        let count = 0;
-        updates.forEach(u => {
-          if (u.has_update) {
-            updatesMap[u.filename] = u;
-            count++;
-          }
-        });
-        if (count > 0) {
-          Panel.toast(`¡Se encontraron ${count} actualización(es) disponibles en Modrinth!`, 'success');
-        } else {
-          Panel.toast('Todos los mods compatibles están al día.', 'info');
-        }
-        renderInstalledMods();
-      } catch (err) {
-        Panel.toast(err.message, 'error');
-      } finally {
+    }
+    try {
+      updatesList = await Panel.api(`/api/mods/updates${refresh ? '?refresh=true' : ''}`);
+      updatesMap = Object.fromEntries(updatesList.filter((item) => item.has_update).map((item) => [item.filename, item]));
+      const checked = $('#updates-checked');
+      if (checked) checked.textContent = `Revisado a las ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Solo se revisan los mods publicados en Modrinth.`;
+      renderUpdates();
+      renderInstalledMods();
+      if (!quiet) {
+        const count = Object.keys(updatesMap).length;
+        Panel.toast(count ? `Hay ${count === 1 ? '1 actualización' : `${count} actualizaciones`}. Mirá la pestaña Actualizaciones.` : 'Tus mods están al día.');
+      }
+    } catch (err) {
+      if (!quiet) Panel.toast(err.message, 'error');
+    } finally {
+      if (btnCheckUpdates && !quiet) {
         btnCheckUpdates.disabled = false;
         btnCheckUpdates.textContent = 'Ver si hay actualizaciones';
       }
-    });
+    }
   }
 
-  // 8. MODAL DE ELIMINACIÓN SEGURA INDIVIDUAL
+  async function installUpdate(filename) {
+    const item = updatesMap[filename];
+    if (!item?.project_id) return false;
+    const body = { project_id: item.project_id, replace_filename: filename };
+    if (item.version_id) body.version_id = item.version_id;
+    await Panel.api('/api/mods/install', { method: 'POST', body });
+    updatesList = updatesList.filter((entry) => entry.filename !== filename);
+    delete updatesMap[filename];
+    return true;
+  }
+
+  btnCheckUpdates?.addEventListener('click', () => loadUpdates({ refresh: true, quiet: false }));
+
+  updatesListNode?.addEventListener('click', async (event) => {
+    const button = event.target.closest('.update-one');
+    if (!button) return;
+    button.disabled = true;
+    button.textContent = 'Actualizando…';
+    try {
+      const name = updatesMap[button.dataset.filename]?.name || 'el mod';
+      await installUpdate(button.dataset.filename);
+      Panel.toast(`Actualizaste ${name}.${UNDO_HINT}`, 'success');
+      renderUpdates();
+      await loadMods();
+    } catch (err) {
+      Panel.toast(err.message, 'error');
+      button.disabled = false;
+      button.textContent = 'Reintentar';
+    }
+  });
+
+  $('#btn-update-all')?.addEventListener('click', async ({ currentTarget }) => {
+    const filenames = Object.keys(updatesMap);
+    if (!filenames.length || !window.confirm(`¿Actualizar ${filenames.length} mods? Podés volver atrás desde Historial.`)) return;
+    currentTarget.disabled = true;
+    let done = 0;
+    const failed = [];
+    for (const filename of filenames) {
+      currentTarget.textContent = `Actualizando ${done + failed.length + 1} de ${filenames.length}…`;
+      try { await installUpdate(filename); done += 1; } catch (err) { failed.push(`${updatesMap[filename]?.name || filename}: ${err.message}`); }
+    }
+    currentTarget.disabled = false;
+    currentTarget.textContent = 'Actualizar todos';
+    if (done) Panel.toast(`Actualizaste ${done === 1 ? '1 mod' : `${done} mods`}.${UNDO_HINT}`, 'success');
+    if (failed.length) Panel.toast(`No se pudieron actualizar: ${failed.join(' · ')}`, 'error');
+    renderUpdates();
+    await loadMods();
+  });
+
+  // 8. Remove one mod
   function openDeleteModal(encodedFilename, modName) {
     modToDelete = decodeURIComponent(encodedFilename);
     const targetLabel = $('#delete-mod-name-target');
@@ -437,7 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 9. SUBIDA MÚLTIPLE DE ARCHIVOS (BATCH UPLOAD + DROPZONE)
+  // 9. Upload one or more .jar files
   $('#btn-open-upload-modal')?.addEventListener('click', () => {
     if (uploadStatus) uploadStatus.textContent = '';
     if (uploadProgress) uploadProgress.classList.add('hidden');
@@ -529,17 +617,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 10. PESTAÑAS PRINCIPALES: TUS MODS, BUSCAR Y HISTORIAL
+  // 10. Tabs: your mods, updates, search and history
   const TAB_ACTIVE = 'tab-pill -mb-px border-b-2 border-emerald-400 pb-3 font-semibold text-zinc-50';
   const TAB_IDLE = 'tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200';
-  const mainTabs = ['installed', 'modrinth', 'history'];
+  const mainTabs = ['installed', 'updates', 'modrinth', 'history'];
 
   function switchMainTab(tab) {
     mainTabs.forEach((name) => {
       const button = $(`#tab-btn-${name}`);
       const panel = $(`#panel-${name}`);
       if (button) {
-        button.className = name === tab ? TAB_ACTIVE : TAB_IDLE;
+        // The updates tab stays hidden while there is nothing to update.
+        const hidden = name === 'updates' && button.classList.contains('hidden');
+        button.className = (name === tab ? TAB_ACTIVE : TAB_IDLE) + (hidden ? ' hidden' : '');
         button.setAttribute('aria-current', name === tab ? 'page' : 'false');
       }
       panel?.classList.toggle('hidden', name !== tab);
@@ -549,7 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   mainTabs.forEach((name) => $(`#tab-btn-${name}`)?.addEventListener('click', () => switchMainTab(name)));
 
-  // 11. BÚSQUEDA Y CATÁLOGO MODRINTH CON RESOLUCIÓN DE DEPENDENCIAS
+  // 11. Modrinth search; required libraries install automatically
   if (modrinthForm) {
     modrinthForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -649,7 +739,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 12. EXPORTAR MODPACK CLIENTE
+  // 12. Pack for friends
   if (exportBtn) {
     exportBtn.addEventListener('click', async () => {
       exportBtn.disabled = true;
@@ -674,7 +764,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 13. HISTORIAL Y VOLVER ATRÁS
+  // 13. History and going back
   const historyList = $('#history-list');
   const historyEmpty = $('#history-empty');
   const historyDialog = $('#modal-history-restore');
@@ -805,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Carga inicial
+  // First load; updates come in the background.
   loadEnvironment();
-  loadMods();
+  loadMods().then(() => loadUpdates());
 });

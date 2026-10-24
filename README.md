@@ -4,7 +4,7 @@ A self-hosted control panel for starting and sharing a local Minecraft server wi
 
 The goal is simple: help a non-technical person host a private Minecraft server for friends in a few guided steps.
 
-## Primeros pasos
+## Getting started
 
 Craft Panel runs on **Windows 10 and Windows 11**. The first start needs an Internet connection.
 
@@ -24,22 +24,22 @@ Download the Windows app from [playit.gg/download](https://playit.gg/download), 
 
 **3. Follow the panel's steps.**
 
-1. **Java**: if your computer already has a good Java, this step is skipped. If not, click **Descargar Java**.
-2. **Tipo de servidor**: pick normal Minecraft, mods (NeoForge or Fabric), or bring a server you already have.
-3. **Amigos**: write your friends' Minecraft names. With Playit running, click **Usar la dirección de mi Playit** (or paste the address Playit shows you).
-4. **Jugar**: click **Encender**. When the server is ready, the panel shows the address to send to your friends.
+1. **Java**: if your computer already has a good Java, this step is skipped. If not, click **"Descargar Java"** (Download Java).
+2. **"Tipo de servidor"** (Server type): pick normal Minecraft, mods (NeoForge or Fabric), or bring a server you already have.
+3. **"Amigos"** (Friends): write your friends' Minecraft names. With Playit running, click **"Usar la dirección de mi Playit"** (Use my Playit address) (or paste the address Playit shows you).
+4. **"Jugar"** (Play): click **"Encender"** (Start). When the server is ready, the panel shows the address to send to your friends.
 
 ### If something goes wrong
 
 - **"Windows protected your PC" or "Open File - Security Warning"**: click **More info** → **Run anyway**, or **Run**. Windows asks this for files downloaded from the Internet.
-- **"Primero hay que descomprimir el ZIP"**: you opened the file from inside the ZIP. Extract it first (step 1.2).
+- **"Primero hay que descomprimir el ZIP"** (You need to extract the ZIP first): you opened the file from inside the ZIP. Extract it first (step 1.2).
 - **Typing `python` opens the Microsoft Store, or Python cannot be found**: the launcher installs Python with Windows Package Manager when it can. If it still fails, install Python 3.11 or newer from [python.org](https://www.python.org/downloads/) with **Add python.exe to PATH** checked, and in Windows Settings search **App execution aliases** and turn off `python.exe` and `python3.exe`.
-- **"Python se instaló, pero esta ventana todavía no lo encuentra"**: close the window and double-click `iniciar_panel.bat` again.
-- **"No se pudo borrar la carpeta .venv"**: close other panel windows and try again. The launcher rebuilds a broken `.venv` folder on its own.
+- **"Python se instalo, pero esta ventana todavia no lo encuentra"** (Python was installed, but this window cannot find it yet): close the window and double-click `iniciar_panel.bat` again.
+- **"No se pudo borrar la carpeta .venv"** (The .venv folder could not be deleted): close other panel windows and try again. The launcher rebuilds a broken `.venv` folder on its own.
 - **Files disappear or the panel fails inside OneDrive**: move the whole folder to one OneDrive does not sync, such as `C:\CraftPanel`.
-- **Playit is installed but the panel says it is off**: the Playit service starts by hand. **Encender** turns it on for you, or open **Playit.gg** from the Start menu. To have it start with Windows, open **Services**, double-click **playitd** and set **Startup type** to **Automatic** (Windows asks for permission).
-- **The panel cannot find your Playit address**: copy the address shown in the Playit app or on playit.gg and paste it in **Pegá la dirección que te muestra Playit**.
-- **Java is too old for the Minecraft version you chose**: click **Instalar** anyway. The panel downloads the right Java into `tools/java` first, without changing the Java installed in Windows.
+- **Playit is installed but the panel says it is off**: the Playit service starts by hand. **"Encender"** turns it on for you, or open **Playit.gg** from the Start menu. To have it start with Windows, open **Services**, double-click **playitd** and set **Startup type** to **Automatic** (Windows asks for permission).
+- **The panel cannot find your Playit address**: copy the address shown in the Playit app or on playit.gg and paste it in **"Pegá la dirección que te muestra Playit"** (Paste the address Playit shows you).
+- **Java is too old for the Minecraft version you chose**: click **"Instalar"** (Install) anyway. The panel downloads the right Java into `tools/java` first, without changing the Java installed in Windows.
 - **The browser did not open**: open `http://127.0.0.1:8080` yourself while the black window is open.
 
 ## Personal open-source project
@@ -60,7 +60,7 @@ See [Installing mods](docs/MODS.md) for the host workflow and the friend-facing 
 
 ## Per-server settings: `server/craftpanel.txt`
 
-Each server can keep its own plain-text settings file, `server/craftpanel.txt`, editable with Notepad or from **Ajustes › Tu servidor**. It works like `.gitignore`: `#` starts a comment, `key = value` sets a value, and `[section]` starts a list with one entry per line. Keys and sections are English; the comments the panel writes are in Spanish. Empty values mean "use the panel's default", and the panel never creates the file until you save from Ajustes.
+Each server can keep its own plain-text settings file, `server/craftpanel.txt`, editable with Notepad or from **"Ajustes" › "Tu servidor"** (Settings › Your server). It works like `.gitignore`: `#` starts a comment, `key = value` sets a value, and `[section]` starts a list with one entry per line. Keys and sections are English; the comments the panel writes are in Spanish (for example, the first line below means "Craft Panel · settings for this server"). Empty values mean "use the panel's default", and the panel never creates the file until you save from "Ajustes".
 
 ```ini
 # Craft Panel · ajustes de este servidor
@@ -98,7 +98,7 @@ This repository contains no webhook URLs, player names, world names, or machine-
 ## Requirements
 
 - Python 3.11 or newer for the panel bootstrap. On Windows, `iniciar_panel.bat` can install it through Windows Package Manager when available.
-- A Java runtime compatible with the Minecraft version selected. The panel looks in `java` from `server/craftpanel.txt`, `tools/java`, `JAVA_HOME`, `PATH`, the Windows registry (Oracle, Adoptium, Microsoft, Azul Zulu, BellSoft and others), the default `Program Files` folders and the Java bundled with the Minecraft Launcher. It runs each one to check its real version and picks the lowest Java that is new enough. If none fits, **Descargar Java** puts an Adoptium runtime in `tools/java` without touching the Java installed in Windows or `PATH`.
+- A Java runtime compatible with the Minecraft version selected. The panel looks in `java` from `server/craftpanel.txt`, `tools/java`, `JAVA_HOME`, `PATH`, the Windows registry (Oracle, Adoptium, Microsoft, Azul Zulu, BellSoft and others), the default `Program Files` folders and the Java bundled with the Minecraft Launcher. It runs each one to check its real version and picks the lowest Java that is new enough. If none fits, **"Descargar Java"** puts an Adoptium runtime in `tools/java` without touching the Java installed in Windows or `PATH`.
 - Internet access while installing a server runtime. The wizard downloads only the server runtime you select; it never commits, replaces, or uploads worlds, backups, mod JARs, or generated libraries.
 
 ## Compatibility
@@ -113,9 +113,15 @@ This repository contains no webhook URLs, player names, world names, or machine-
 
 ## Sharing with friends
 
-Playit.gg is enabled by default. The recommended way is the official Playit app for Windows: the panel detects it (running, installed but off, or missing) without depending on the Windows language, never starts a second agent next to it, and turns its service on when you click **Encender**. **Usar la dirección de mi Playit** reads the Minecraft address from the app, or you can paste it yourself. See [docs/SECURITY.md](docs/SECURITY.md) for exactly what the panel reads.
+Playit.gg is enabled by default. The recommended way is the official Playit app for Windows: the panel detects it (running, installed but off, or missing) without depending on the Windows language, never starts a second agent next to it, and turns its service on when you click **"Encender"**. **"Usar la dirección de mi Playit"** reads the Minecraft address from the app, or you can paste it yourself. See [docs/SECURITY.md](docs/SECURITY.md) for exactly what the panel reads.
 
-Without the app, the wizard can still link your account: approve this computer on Playit’s official claim page and the panel downloads the agent itself. A manually supplied agent key remains available as an advanced fallback. Choose **Jugar solo en esta casa** only when friends from other homes should not join.
+Without the app, the wizard can still link your account: approve this computer on Playit’s official claim page and the panel downloads the agent itself. A manually supplied agent key remains available as an advanced fallback. Choose **"Jugar solo en esta casa"** (Play only in this home) only when friends from other homes should not join.
+
+## Language
+
+The panel interface is currently in Spanish. Documentation and code (comments, config keys) are in English. If you need the panel in another language, or want to help add translations (i18n), contributions are very welcome: see the [contribution guide](docs/CONTRIBUTING.md).
+
+In these docs, text you see on screen is kept in Spanish, exactly as the panel shows it, with an English meaning in parentheses the first time, for example "Encender" (Start).
 
 ## Contributing
 

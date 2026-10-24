@@ -40,7 +40,7 @@ The panel has a single administrator. There are no user roles.
 - `restablecer_contrasena_panel.bat` replaces the password. Type one (at least 12 characters) or leave it empty to get a random one, which is printed once in that window. Only the hash is saved, and every open session is signed out.
 - After 5 wrong attempts, an IP is locked out for 15 minutes.
 - A global limit pauses remote logins if many IPs fail at once. The owner on the PC itself is never locked out.
-- Optional TOTP 2FA works with any authenticator app. Turn it on in **Ajustes → Verificación en dos pasos**: scan the QR code (or type the key by hand) and confirm with a 6-digit code. Each code is accepted only once, including the one used to confirm.
+- Optional TOTP 2FA works with any authenticator app. Turn it on in **"Ajustes" → "Verificación en dos pasos"** (Settings → Two-step verification): scan the QR code (or type the key by hand) and confirm with a 6-digit code. Each code is accepted only once, including the one used to confirm.
 - Moving 2FA to another phone or turning it off needs a current code from the app, not just a session, so a stolen cookie cannot remove the second factor. Wrong codes count toward a lockout. If you lose the phone, delete `web_panel/.totp_secret` on the PC to turn 2FA off.
 - Sessions are signed `HttpOnly`, `SameSite=Strict` cookies. Each session gets a new id at login and expires after a fixed lifetime (8 hours by default).
 - Logging out revokes the session, so a copied cookie stops working.
@@ -78,7 +78,7 @@ The panel has a single administrator. There are no user roles.
 - The password hash, session key, 2FA secret, Playit key and Discord config are stored in `web_panel/` and are ignored by Git.
 - They are written atomically, with owner-only permissions where the operating system supports it.
 - They are never returned by the API, except the Discord webhook, which only the logged-in administrator can see in its own settings page.
-- API answers shown in the browser never include folders of this PC, the Windows user name or the machine name. Java is described by version, vendor and place ("Java 21 de Adoptium, en tu computadora") and the start script by its file name.
+- API answers shown in the browser never include folders of this PC, the Windows user name or the machine name. Java is described by version, vendor and place ("Java 21 de Adoptium, en tu computadora", meaning "Java 21 from Adoptium, on your computer") and the start script by its file name.
 
 **The official Playit app for Windows**
 
@@ -86,11 +86,11 @@ When the official Playit installer is used, its `playitd` Windows service holds 
 
 - **Detection** reads the service status with `psutil` (or `sc.exe` as a fallback) and checks whether `Program Files\playit_gg\bin` exists. It never reads the key for this.
 - **Turning it on** runs the app's own `playit.exe start`. The Playit installer lets every signed-in user start and stop that service, so no administrator rights are needed and the panel never changes how the service starts. Making it start with Windows is left to the user, through Windows' *Services* tool.
-- **"Usar la dirección de mi Playit"** first asks the service's local status pipe (`\\.\pipe\playitd-system`) with the read-only `get_state` request. That needs no secret, and the panel never sends any other request on that pipe (the pipe also accepts `stop` and `reset_secret` from any local user).
-- Only if the pipe does not answer, and only on that click, the panel reads the agent key from `playit.toml` and uses it in memory for **one** HTTPS request to `https://api.playit.gg/v1/agents/rundata` (an allow-listed host, no redirects). The key is never logged, saved, copied to `web_panel/`, returned by the API or shown. Errors are replaced by plain messages that never include it. The automatic lookup after "Encender" uses the pipe only and never reads the key.
+- **"Usar la dirección de mi Playit"** (Use my Playit address) first asks the service's local status pipe (`\\.\pipe\playitd-system`) with the read-only `get_state` request. That needs no secret, and the panel never sends any other request on that pipe (the pipe also accepts `stop` and `reset_secret` from any local user).
+- Only if the pipe does not answer, and only on that click, the panel reads the agent key from `playit.toml` and uses it in memory for **one** HTTPS request to `https://api.playit.gg/v1/agents/rundata` (an allow-listed host, no redirects). The key is never logged, saved, copied to `web_panel/`, returned by the API or shown. Errors are replaced by plain messages that never include it. The automatic lookup after "Encender" (Start) uses the pipe only and never reads the key.
 - Only the Minecraft address is saved: in `public_address` of `server/craftpanel.txt` when that file exists, otherwise in the panel's own setting.
 
-**Trade-off.** Reading `playit.toml` means the panel process can see a key that lets anyone run tunnels for that Playit account. The installer does not lock that file down, so it usually keeps the default `C:\ProgramData` permissions, which let every user of the PC read it; the panel gets no access the signed-in user did not already have. If Windows refuses to read it, the panel says so and offers the paste field. The risk is the panel's own: a bug that leaked the key would expose it. That is why the pipe is tried first, the key is only read after a click, and it is never written anywhere. If you prefer the panel never to touch it, paste the address yourself in **"Pegá la dirección que te muestra Playit"**. That field accepts only a host name or IP with an optional port.
+**Trade-off.** Reading `playit.toml` means the panel process can see a key that lets anyone run tunnels for that Playit account. The installer does not lock that file down, so it usually keeps the default `C:\ProgramData` permissions, which let every user of the PC read it; the panel gets no access the signed-in user did not already have. If Windows refuses to read it, the panel says so and offers the paste field. The risk is the panel's own: a bug that leaked the key would expose it. That is why the pipe is tried first, the key is only read after a click, and it is never written anywhere. If you prefer the panel never to touch it, paste the address yourself in **"Pegá la dirección que te muestra Playit"** (Paste the address Playit shows you). That field accepts only a host name or IP with an optional port.
 
 ## If you expose the panel to the Internet
 
@@ -106,7 +106,7 @@ You usually don't need to: friends join the **Minecraft server** through Playit,
      ```
 
      The proxy must keep the original `Host` header, or send it in `X-Forwarded-Host`, and it must set `X-Forwarded-Proto: https`.
-2. **Turn on 2FA** (**Ajustes → Verificación en dos pasos**) before publishing the panel, and keep the authenticator on your phone.
+2. **Turn on 2FA** (**"Ajustes" → "Verificación en dos pasos"**) before publishing the panel, and keep the authenticator on your phone.
 3. **Use a strong, unique password.** The generated one is fine. If you change it, use a password manager and at least 16 characters, and don't reuse a password from another site.
 4. **Keep the panel and Minecraft separate.** Minecraft uses its own port (25565, or the Playit address). The panel must never be published on the same address or port as the game. Players don't need the panel.
 5. **Protect the Minecraft server itself:**

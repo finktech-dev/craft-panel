@@ -48,9 +48,9 @@ async def get_mod_environment() -> ModEnvironmentResponse:
 
 
 @router.get("/updates", response_model=list[ModUpdateItem], dependencies=[Depends(rate_limit("mods-updates", 6, 60))])
-async def check_mod_updates() -> list[ModUpdateItem]:
+async def check_mod_updates(refresh: bool = False) -> list[ModUpdateItem]:
     try:
-        return await mod_service.check_updates()
+        return await mod_service.check_updates(refresh=refresh)
     except ModServiceError as error:
         _raise_mod_error(error)
 
