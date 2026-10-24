@@ -368,6 +368,7 @@ def _friend_connection_info(
     configured_address: str | None,
     tunnel: TunnelStatus,
     file_address: str | None = None,
+    playit_host_state: str | None = None,
 ) -> FriendConnectionInfo:
     """Describe una dirección existente sin iniciar, detener ni configurar túneles."""
     custom_address = custom_address.strip() if custom_address else None
@@ -402,8 +403,19 @@ def _friend_connection_info(
     else:
         address = f"127.0.0.1:{port}"
         source = "local_only"
-        message = "Por ahora solo se puede jugar desde esta computadora."
-        next_step = "Para que entren amigos desde sus casas, activá el acceso por Internet en Ajustes."
+        # The next step depends on the official Playit app (None when Internet access is off).
+        if playit_host_state == "stopped":
+            message = "Tu Playit está instalado pero apagado."
+            next_step = "Al tocar Encender lo prendemos solo, y después aparece acá la dirección para tus amigos."
+        elif playit_host_state == "running":
+            message = "Playit está funcionando, pero todavía no sabemos tu dirección."
+            next_step = "Tocá «Usar la dirección de mi Playit» o pegá abajo la que te muestra Playit."
+        elif playit_host_state == "not_installed":
+            message = "Por ahora solo se puede jugar desde esta computadora."
+            next_step = "Para que entren amigos desde sus casas, instalá Playit desde playit.gg/download y volvé acá."
+        else:
+            message = "Por ahora solo se puede jugar desde esta computadora."
+            next_step = "Para que entren amigos desde sus casas, activá el acceso por Internet en Ajustes."
 
     return FriendConnectionInfo(
         public_address=address,
@@ -425,12 +437,14 @@ async def get_connection_info() -> FriendConnectionInfo:
     custom_addr = panel_address(settings)
 
     tunnel_stat = playit_service.status()
+    host_state = (await asyncio.to_thread(playit_service.host_status)).state if settings.playit_enabled else None
     return _friend_connection_info(
         port=port,
         custom_address=custom_addr,
         configured_address=settings.server_public_address,
         file_address=read_server_settings(settings).value("public_address"),
         tunnel=tunnel_stat,
+        playit_host_state=host_state,
     )
 
 

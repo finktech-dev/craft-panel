@@ -44,3 +44,24 @@ def test_manual_address_is_explicitly_unverified() -> None:
     assert result.source == "manual"
     assert result.is_custom is True
     assert "No podemos comprobar" in result.message
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        ("stopped", "Al tocar Encender lo prendemos solo"),
+        ("running", "Usar la dirección de mi Playit"),
+        ("not_installed", "playit.gg/download"),
+        (None, "activá el acceso por Internet en Ajustes"),
+    ],
+)
+def test_local_fallback_tells_the_next_step_for_each_playit_state(state, expected) -> None:
+    result = _friend_connection_info(
+        port=25565, custom_address=None, configured_address=None, tunnel=_tunnel(), playit_host_state=state
+    )
+
+    assert result.source == "local_only"
+    assert expected in result.next_step
