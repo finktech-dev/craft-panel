@@ -16,7 +16,7 @@ def _write_zip(path: Path, content: str) -> None:
         archive.writestr("world/level.dat", content)
 
 
-def test_audit_purges_only_old_valid_archives_and_preserves_corrupt(tmp_path: Path):
+def test_audit_purges_only_old_valid_panel_archives_and_preserves_corrupt(tmp_path: Path):
     configured = Settings(
         project_root=tmp_path,
         backup_retention_count=1,
@@ -28,22 +28,26 @@ def test_audit_purges_only_old_valid_archives_and_preserves_corrupt(tmp_path: Pa
     simplebackups.mkdir(parents=True)
 
     newest = configured.backups_directory / "newest.zip"
-    oldest = simplebackups / "oldest.zip"
+    oldest = configured.backups_directory / "oldest.zip"
+    simplebackups_old = simplebackups / "simple-old.zip"
     corrupt = simplebackups / "corrupt.zip"
     configured.backups_directory.mkdir(parents=True)
     _write_zip(newest, "new")
     _write_zip(oldest, "old")
+    _write_zip(simplebackups_old, "simple")
     corrupt.write_bytes(b"this is not a zip archive")
     now = time.time()
     os.utime(newest, (now, now))
     os.utime(oldest, (now - 60, now - 60))
+    os.utime(simplebackups_old, (now - 120, now - 120))
 
     result = BackupService(configured_settings=configured)._audit_and_purge_sync()
 
     assert newest.exists()
     assert not oldest.exists()
+    assert simplebackups_old.exists(), "SimpleBackups manages its own retention"
     assert corrupt.exists()
     assert result.deleted == [str(oldest)]
     assert result.skipped_corrupt == [str(corrupt)]
     states = {entry.filename: entry.healthy for entry in result.checked}
-    assert states == {"newest.zip": True, "oldest.zip": True, "corrupt.zip": False}
+    assert states == {"newest.zip": True, "oldest.zip": True, "simple-old.zip": True, "corrupt.zip": False}

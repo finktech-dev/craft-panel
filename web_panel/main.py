@@ -15,12 +15,20 @@ from fastapi.templating import Jinja2Templates
 
 from app.api.router import router as api_router
 from app.core.config import settings
-from app.core.security import TwoFactorError, get_csrf_token, request_has_admin_session, totp_manager
-from app.core.security_middleware import SecurityHeadersAndCsrfMiddleware
+from app.core.security import (
+    TwoFactorError,
+    get_csrf_token,
+    request_has_admin_session,
+    request_is_direct_loopback,
+    totp_manager,
+)
+from app.core.security_middleware import RequestGuardMiddleware, SecurityHeadersAndCsrfMiddleware
+from app.services.job_service import job_service
 from app.services.server_process import server_manager
 from app.services.cloudflare_service import cloudflare_quick_tunnel_service
 from app.services.playit_service import playit_service
 from app.services.scheduler_service import scheduler_service
+from app.services.server_version_service import server_version_service
 from app.websocket.terminal import router as terminal_router
 
 logging.basicConfig(
@@ -40,6 +48,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # esta cancelación evita una traza falsa tras un apagado correcto.
         logging.getLogger("panel").info("Se recibió una interrupción; apagando el panel ordenadamente.")
     finally:
+        # Record jobs that this shutdown interrupts before anything else stops.
+        job_service.shutdown()
         scheduler_service.shutdown()
         try:
             await server_manager.shutdown()
@@ -60,6 +70,11 @@ app = FastAPI(
     title="Panel del servidor Minecraft",
     version="0.1.0",
     lifespan=lifespan,
+    # The interactive API docs are not needed by the UI and only widen what an
+    # Internet visitor can probe.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 # SessionMiddleware queda por fuera del control CSRF para que este último pueda
 # leer la sesión firmada antes de procesar una acción administrativa.
@@ -72,6 +87,9 @@ app.add_middleware(
     same_site="strict",
     https_only=settings.effective_cookie_secure,
 )
+# Outermost: reject forged Host headers (DNS rebinding) and oversized bodies
+# before sessions, routing or multipart parsing do any work.
+app.add_middleware(RequestGuardMiddleware)
 
 assert settings.static_directory is not None
 assert settings.panel_directory is not None
@@ -96,11 +114,16 @@ def _template_context(request: Request, current_page: str) -> dict[str, object]:
         "request": request,
         "current_page": current_page,
         "is_admin": request_has_admin_session(request),
-        "public_address": settings.server_public_address or "IP no configurada",
-        "minecraft_version": settings.minecraft_version,
+        "public_address": settings.server_public_address,
+        "minecraft_version": server_version_service.detect().minecraft_version or "",
         "two_factor_enabled": two_factor_enabled,
         "csrf_token": get_csrf_token(request) if request_has_admin_session(request) else None,
-        "initial_admin_pin": settings.admin_pin.get_secret_value() if settings.admin_pin_generated_this_start else None,
+        # The first-run password is only ever shown to a browser on this PC,
+        # never through a tunnel, reverse proxy or LAN address. It lives only
+        # in memory (the file keeps a hash) and is dropped after the first login.
+        "initial_admin_pin": (
+            settings.initial_admin_password if request_is_direct_loopback(request) else None
+        ),
     }
 
 

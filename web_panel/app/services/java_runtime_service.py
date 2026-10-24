@@ -5,17 +5,36 @@ from __future__ import annotations
 import asyncio
 import os
 import platform
+import re
 import shutil
 import tarfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
 
 import httpx
 
+from app.core.archive_safety import ArchiveLimits, ArchiveSafetyError, extract_tar, extract_zip
 from app.core.config import Settings, settings
+from app.core.net_safety import ADOPTIUM_HOSTS, allowed_client, download_to_file, is_allowed_url
+from app.services.progress import ProgressCallback, StepPlan, download_message, report
 
 _ADOPTIUM_API = "https://api.adoptium.net/v3/assets/latest/{major}/hotspot"
+# A JDK archive is ~200 MB and unpacks to ~350 MB; leave generous headroom.
+_MAX_DOWNLOAD_BYTES = 1024**3
+_RUNTIME_LIMITS = ArchiveLimits(max_members=20_000, max_total_bytes=2 * 1024**3, max_member_bytes=1024**3)
+# Windows Defender and OneDrive briefly lock freshly extracted executables.
+_MOVE_ATTEMPTS = 8
+_MOVE_RETRY_SECONDS = 0.5
+
+# Steps announced through the ``progress`` callback, in order.
+INSTALL_JAVA_STEPS: StepPlan = (
+    ("find", "Buscando la versión de Java correcta"),
+    ("download", "Descargando Java"),
+    ("extract", "Descomprimiendo Java"),
+    ("finish", "Dejándolo listo"),
+)
 
 
 class JavaRuntimeServiceError(RuntimeError):
@@ -35,14 +54,21 @@ class JavaRuntimeService:
 
     @staticmethod
     def required_major(minecraft_version: str) -> int:
-        """Minecraft's general Java baseline; mod loaders can impose stricter rules."""
-        try:
-            major, minor, *patch = (int(part) for part in minecraft_version.split("."))
-        except ValueError as error:
-            raise JavaRuntimeValidationError("La versión de Minecraft no es válida.") from error
+        """Minimum Java major for a Minecraft release; mod loaders can impose stricter rules.
+
+        Matches the ``javaVersion.majorVersion`` that Mojang publishes per
+        release: up to 1.16.5 -> 8, 1.17 -> 16, 1.18 to 1.20.4 -> 17,
+        1.20.5 to 1.21.11 -> 21, and the year-based releases (26.1+) -> 25.
+        """
+        numeric = re.match(r"^\s*(\d+)\.(\d+)(?:\.(\d+))?", minecraft_version or "")
+        if numeric is None:
+            raise JavaRuntimeValidationError("La versión de Minecraft no es válida.")
+        major, minor, patch = int(numeric.group(1)), int(numeric.group(2)), int(numeric.group(3) or 0)
+        if major >= 26:
+            return 25
         if major != 1:
-            raise JavaRuntimeValidationError("Solo se admiten versiones modernas de Minecraft 1.x.")
-        if minor >= 20 and (minor > 20 or (patch and patch[0] >= 5)):
+            raise JavaRuntimeValidationError("La versión de Minecraft no es válida.")
+        if minor > 20 or (minor == 20 and patch >= 5):
             return 21
         if minor >= 18:
             return 17
@@ -50,7 +76,20 @@ class JavaRuntimeService:
             return 16
         return 8
 
-    async def install_for(self, minecraft_version: str) -> str:
+    def preflight(self, minecraft_version: str) -> None:
+        """Cheap checks that let a request fail right away instead of inside a job."""
+        self.required_major(minecraft_version)
+        if self._settings.local_java_executable_path.is_file():
+            return
+        assert self._settings.tools_directory is not None
+        if (self._settings.tools_directory / "java").exists():
+            raise JavaRuntimeValidationError(
+                "tools/java ya existe, pero no contiene un ejecutable Java válido. "
+                "Corregilo o eliminá esa carpeta antes de descargar otro runtime."
+            )
+
+    async def install_for(self, minecraft_version: str, progress: ProgressCallback | None = None) -> str:
+        """Download Java into tools/java; ``progress`` receives :data:`INSTALL_JAVA_STEPS`."""
         required = self.required_major(minecraft_version)
         destination = self._settings.local_java_executable_path
         if destination.is_file():
@@ -63,20 +102,30 @@ class JavaRuntimeService:
             if destination.is_file():
                 return "Ya existe Java local en tools/java. No se reemplazó."
             await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
-            archive = target.parent / f".java-{uuid.uuid4().hex}.download"
-            staging = target.parent / f".java-{uuid.uuid4().hex}.extract"
+            # Short names keep deep JDK paths under the 260-character Windows limit.
+            archive = target.parent / f".java-{uuid.uuid4().hex[:8]}.download"
+            staging = target.parent / f".java-{uuid.uuid4().hex[:8]}.extract"
             try:
+                report(progress, "find", f"Buscando Java {required} para tu computadora.")
                 package = await self._find_package(required)
-                await self._download(package["link"], archive)
-                await asyncio.to_thread(self._extract_runtime, archive, staging)
+                report(progress, "download")
+                await self._download(package["link"], archive, package.get("checksum"), progress)
+                report(progress, "extract")
+                await asyncio.to_thread(self._extract_runtime, archive, staging, progress)
+                report(progress, "finish")
                 executable = self._find_java(staging)
                 if executable is None:
                     raise JavaRuntimeServiceError("La descarga oficial no contenía un ejecutable Java utilizable.")
                 runtime_root = executable.parents[1]
-                await asyncio.to_thread(os.replace, runtime_root, target)
-            except (httpx.HTTPError, OSError, tarfile.TarError, zipfile.BadZipFile) as error:
+                await asyncio.to_thread(self._replace_with_retry, runtime_root, target)
+            except (httpx.HTTPError, OSError, tarfile.TarError, zipfile.BadZipFile, ArchiveSafetyError) as error:
                 if isinstance(error, JavaRuntimeServiceError):
                     raise
+                if isinstance(error, PermissionError):
+                    raise JavaRuntimeServiceError(
+                        "Java se descargó, pero Windows o el antivirus bloqueó los archivos al prepararlo. "
+                        "Esperá unos segundos e intentá de nuevo."
+                    ) from error
                 raise JavaRuntimeServiceError("No se pudo descargar o preparar Java desde Adoptium. Revisá la conexión e intentá de nuevo.") from error
             finally:
                 await asyncio.to_thread(self._remove_path, archive)
@@ -87,60 +136,98 @@ class JavaRuntimeService:
         os_name = {"Windows": "windows", "Linux": "linux", "Darwin": "mac"}.get(platform.system())
         if os_name is None:
             raise JavaRuntimeValidationError("Este sistema operativo todavía no está soportado para descarga automática de Java.")
-        machine = platform.machine().casefold()
-        architecture = "aarch64" if machine in {"arm64", "aarch64"} else "x64"
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
-            for image_type in ("jre", "jdk"):
-                response = await client.get(
-                    _ADOPTIUM_API.format(major=major),
-                    params={"architecture": architecture, "image_type": image_type, "os": os_name, "vendor": "eclipse"},
-                )
-                if response.status_code == 404:
-                    continue
-                response.raise_for_status()
-                releases = response.json()
-                if not isinstance(releases, list) or not releases:
-                    continue
-                package = releases[0].get("binary", {}).get("package", {})
-                link = package.get("link") if isinstance(package, dict) else None
-                if isinstance(link, str) and link.startswith("https://"):
-                    return {"link": link}
+        async with allowed_client(ADOPTIUM_HOSTS, timeout=60.0) as client:
+            for architecture in self._architectures(os_name, platform.machine()):
+                for image_type in ("jre", "jdk"):
+                    response = await client.get(
+                        _ADOPTIUM_API.format(major=major),
+                        params={"architecture": architecture, "image_type": image_type, "os": os_name, "vendor": "eclipse"},
+                    )
+                    if response.status_code == 404:
+                        continue
+                    response.raise_for_status()
+                    releases = response.json()
+                    if not isinstance(releases, list) or not releases:
+                        continue
+                    package = releases[0].get("binary", {}).get("package", {})
+                    link = package.get("link") if isinstance(package, dict) else None
+                    checksum = package.get("checksum") if isinstance(package, dict) else None
+                    if isinstance(link, str) and is_allowed_url(link, ADOPTIUM_HOSTS):
+                        result = {"link": link}
+                        if isinstance(checksum, str) and len(checksum) == 64:
+                            result["checksum"] = checksum
+                        return result
         raise JavaRuntimeServiceError("Adoptium no ofreció un runtime compatible para esta computadora.")
 
-    async def _download(self, url: str, destination: Path) -> None:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0), follow_redirects=True) as client:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                with destination.open("wb") as output:
-                    async for chunk in response.aiter_bytes(64 * 1024):
-                        output.write(chunk)
+    @staticmethod
+    def _architectures(os_name: str, machine: str) -> tuple[str, ...]:
+        """Adoptium architectures to try, best match first."""
+        normalized = machine.casefold()
+        if normalized in {"arm64", "aarch64"}:
+            # Windows 11 on ARM runs x64 Java through emulation, and Adoptium
+            # publishes native Windows ARM64 builds only for recent Java versions.
+            return ("aarch64", "x64") if os_name == "windows" else ("aarch64",)
+        if normalized in {"x86", "i386", "i686"}:
+            return ("x32",)
+        return ("x64",)
 
-    def _extract_runtime(self, archive: Path, destination: Path) -> None:
+    @staticmethod
+    def _replace_with_retry(source: Path, target: Path) -> None:
+        """Move the extracted runtime, waiting out transient Windows file locks."""
+        for attempt in range(_MOVE_ATTEMPTS):
+            try:
+                os.replace(source, target)
+                return
+            except PermissionError:
+                if attempt == _MOVE_ATTEMPTS - 1:
+                    raise
+                time.sleep(_MOVE_RETRY_SECONDS)
+
+    async def _download(
+        self, url: str, destination: Path, sha256: str | None = None, progress: ProgressCallback | None = None
+    ) -> None:
+        def on_progress(done: int, total: int | None) -> None:
+            message, percent = download_message(done, total)
+            report(progress, "download", message, percent)
+
+        async with allowed_client(ADOPTIUM_HOSTS, timeout=120.0) as client:
+            await download_to_file(
+                client,
+                url,
+                destination,
+                max_bytes=_MAX_DOWNLOAD_BYTES,
+                expected_hash=("sha256", sha256) if sha256 else None,
+                on_progress=on_progress if progress else None,
+            )
+
+    def _extract_runtime(self, archive: Path, destination: Path, progress: ProgressCallback | None = None) -> None:
         destination.mkdir(parents=True, exist_ok=False)
+
+        def on_member(done: int, total: int) -> None:
+            if done == total or done % 200 == 0:
+                report(progress, "extract", f"Descomprimidos {done} de {total} archivos.", done * 100 / max(total, 1))
+
+        listener = on_member if progress else None
         if zipfile.is_zipfile(archive):
             with zipfile.ZipFile(archive) as contents:
-                self._safe_extract_zip(contents, destination)
+                self._safe_extract_zip(contents, destination, listener)
             return
         with tarfile.open(archive, "r:*") as contents:
-            self._safe_extract_tar(contents, destination)
+            self._safe_extract_tar(contents, destination, listener)
 
     @staticmethod
-    def _safe_extract_zip(contents: zipfile.ZipFile, destination: Path) -> None:
-        root = destination.resolve()
-        for member in contents.infolist():
-            candidate = (destination / member.filename).resolve()
-            if not candidate.is_relative_to(root):
-                raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.")
-        contents.extractall(destination)
+    def _safe_extract_zip(contents: zipfile.ZipFile, destination: Path, on_member=None) -> None:
+        try:
+            extract_zip(contents, destination, _RUNTIME_LIMITS, on_member=on_member)
+        except ArchiveSafetyError as error:
+            raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.") from error
 
     @staticmethod
-    def _safe_extract_tar(contents: tarfile.TarFile, destination: Path) -> None:
-        root = destination.resolve()
-        for member in contents.getmembers():
-            candidate = (destination / member.name).resolve()
-            if not candidate.is_relative_to(root) or member.issym() or member.islnk():
-                raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.")
-        contents.extractall(destination)
+    def _safe_extract_tar(contents: tarfile.TarFile, destination: Path, on_member=None) -> None:
+        try:
+            extract_tar(contents, destination, _RUNTIME_LIMITS, on_member=on_member)
+        except ArchiveSafetyError as error:
+            raise JavaRuntimeServiceError("El archivo descargado contenía una ruta insegura.") from error
 
     def _find_java(self, root: Path) -> Path | None:
         executable = "java.exe" if os.name == "nt" else "java"

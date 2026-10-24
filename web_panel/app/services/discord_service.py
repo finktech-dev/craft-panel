@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Final
@@ -12,12 +13,23 @@ from urllib.parse import quote
 import httpx
 
 from app.core.config import Settings, settings
+from app.core.path_safety import write_private_text
 from app.schemas.backup import BackupItem
 from app.schemas.crash import CrashReportSummary
 from app.schemas.discord import DiscordConfig
+from app.services.server_version_service import ServerVersionService
 
 logger = logging.getLogger(__name__)
 _DISCORD_MAX_FIELD_LENGTH: Final = 1024
+# Only real Discord webhook URLs: anything else would let the panel POST to
+# arbitrary hosts (SSRF) and leak alert contents.
+_WEBHOOK_URL: Final = re.compile(
+    r"^https://(?:(?:ptb|canary)\.)?discord(?:app)?\.com/api(?:/v\d+)?/webhooks/\d{5,25}/[A-Za-z0-9_-]{20,100}$"
+)
+
+
+def is_discord_webhook_url(url: str) -> bool:
+    return bool(_WEBHOOK_URL.match(url.strip()))
 
 
 class DiscordService:
@@ -26,6 +38,7 @@ class DiscordService:
     def __init__(self, configured_settings: Settings = settings) -> None:
         self._settings = configured_settings
         self._cached_config: DiscordConfig | None = None
+        self._versions = ServerVersionService(configured_settings)
 
     @property
     def _config_file(self) -> Path | None:
@@ -61,7 +74,7 @@ class DiscordService:
         configured = self._display_value(cfg.server_software_label, "discord_server_software_label")
         if configured:
             return configured
-        return f"Minecraft {self._settings.minecraft_version}"
+        return self._versions.detect().label or "Minecraft"
 
     def _world_name(self, cfg: DiscordConfig) -> str:
         return self._display_value(cfg.world_name, "discord_world_name", "No configurado")
@@ -85,10 +98,14 @@ class DiscordService:
 
     def save_config(self, new_config: DiscordConfig) -> DiscordConfig:
         """Guarda la configuración persistente en .discord_config.json."""
+        for url in (new_config.webhook_url, new_config.events_webhook_url):
+            if url.strip() and not is_discord_webhook_url(url):
+                raise ValueError("La URL del webhook debe ser de Discord (https://discord.com/api/webhooks/...).")
         target = self._config_file
         if target:
             try:
-                target.write_text(new_config.model_dump_json(indent=2), encoding="utf-8")
+                # Webhook URLs are secrets: anyone holding one can post as the bot.
+                write_private_text(target, new_config.model_dump_json(indent=2))
             except Exception as error:
                 logger.error("No se pudo guardar .discord_config.json: %s", error)
                 raise RuntimeError("No se pudo guardar la configuración de Discord en disco.") from error
@@ -125,7 +142,7 @@ class DiscordService:
         if not webhook_url:
             return False, "No hay ninguna URL de Webhook de Discord configurada."
 
-        if not webhook_url.startswith("https://discord.com/api/webhooks/") and not webhook_url.startswith("https://discordapp.com/api/webhooks/"):
+        if not is_discord_webhook_url(webhook_url):
             return False, "La URL del webhook debe comenzar con https://discord.com/api/webhooks/"
 
         embed_obj: dict[str, Any] = {
@@ -152,14 +169,15 @@ class DiscordService:
             payload["content"] = content[:2000]
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0), follow_redirects=False) as client:
                 resp = await client.post(webhook_url, json=payload)
                 if resp.status_code in {200, 204}:
                     return True, "Alerta enviada correctamente a Discord."
                 return False, f"Discord respondió con error HTTP {resp.status_code}: {resp.text[:200]}"
         except httpx.HTTPError as error:
-            logger.warning("Error al enviar webhook a Discord: %s", error)
-            return False, f"Error de conexión al enviar webhook: {error}"
+            # Log only the error type: httpx messages can include the webhook URL (a secret).
+            logger.warning("Error al enviar webhook a Discord: %s", type(error).__name__)
+            return False, "Error de conexión al enviar el webhook a Discord."
 
     async def send_test(
         self,

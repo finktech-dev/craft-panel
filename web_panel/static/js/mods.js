@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => document.querySelectorAll(selector);
   const esc = Panel.escapeHtml;
+  // Every change to the mods folder is recorded, so success messages point to the undo.
+  const UNDO_HINT = ' Podés deshacerlo en Historial.';
 
   // Estado del cliente
   let installedMods = [];
@@ -17,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let modToDelete = null;
   const selectedFilenames = new Set();
   let updatesMap = {};
-  let detectedEnv = { loader: 'neoforge', minecraft_version: '1.21.1' };
+  let detectedEnv = { loader: null, minecraft_version: null };
 
   // Elementos DOM principales
   const envBadgeText = $('#env-badge-text');
@@ -48,6 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Modales
   const uploadModal = $('#modal-upload-mod');
+  // The empty state's button opens the same upload dialog (no inline handlers: strict CSP).
+  $('#btn-empty-upload')?.addEventListener('click', () => $('#btn-open-upload-modal')?.click());
   const deleteModal = $('#modal-delete-mod');
   const fileInput = $('#mod-file-input');
   const dropZone = $('#modal-drop-zone');
@@ -68,19 +72,18 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadEnvironment() {
     try {
       const env = await Panel.api('/api/mods/environment');
-      if (env && env.loader) {
+      if (env) {
         detectedEnv = env;
-        if (envBadgeText) {
-          envBadgeText.textContent = `${env.loader.toUpperCase()} ${env.minecraft_version}`;
-        }
-        if (modrinthVersionInput && !modrinthVersionInput.value) {
+        // The backend builds the label and leaves out whatever it could not detect.
+        if (envBadgeText) envBadgeText.textContent = env.label || 'Minecraft';
+        if (modrinthVersionInput && !modrinthVersionInput.value && env.minecraft_version) {
           modrinthVersionInput.placeholder = env.minecraft_version;
         }
       }
     } catch (err) {
       console.warn('No se pudo detectar el motor del servidor:', err);
       if (envBadgeText) {
-        envBadgeText.textContent = 'Auto-detectado';
+        envBadgeText.textContent = 'Minecraft';
       }
     }
   }
@@ -90,10 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       if (installedContainer) {
         installedContainer.innerHTML = `
-          <div class="col-span-full py-12 text-center text-zinc-500">
-            <span class="inline-block animate-spin text-2xl mb-2">⏳</span>
-            <p class="text-sm">Cargando lista de mods...</p>
-          </div>
+          <p class="py-12 text-center text-zinc-500">Cargando tus mods…</p>
         `;
       }
       installedMods = await Panel.api('/api/mods');
@@ -106,9 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
       Panel.toast(err.message, 'error');
       if (installedContainer) {
         installedContainer.innerHTML = `
-          <div class="col-span-full rounded-xl border border-rose-500/30 bg-rose-950/20 p-6 text-center text-rose-300 text-sm">
-            No se pudieron cargar los mods: ${esc(err.message)}
-          </div>
+          <p class="py-12 text-center text-[#f3a79b]">No pudimos cargar tus mods. ${esc(err.message)}</p>
         `;
       }
     }
@@ -178,8 +176,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const emptyMsg = $('#installed-empty-msg');
         if (emptyMsg) {
           emptyMsg.textContent = searchTerm
-            ? 'No se encontraron mods que coincidan con la búsqueda.'
-            : 'No hay mods instalados en server/mods todavía.';
+            ? 'Ningún mod coincide con lo que buscaste.'
+            : 'Buscá uno en "Buscar mods nuevos" o agregalo desde un archivo.';
         }
       }
       return;
@@ -194,78 +192,38 @@ document.addEventListener('DOMContentLoaded', () => {
       const isServerOnly = !!mod.is_server_only;
       const isSelected = selectedFilenames.has(mod.filename);
 
-      const badgeType = isServerOnly
-        ? `<span class="inline-flex items-center gap-1 rounded bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 text-[11px] font-semibold text-indigo-300" title="Excluido automáticamente del paquete de clientes">⚙️ Solo Servidor</span>`
-        : `<span class="inline-flex items-center gap-1 rounded bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 text-[11px] font-semibold text-sky-300">👥 Servidor + Cliente</span>`;
-
-      const statusDot = isEnabled
-        ? `<span class="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 ring-4 ring-emerald-400/20" title="Habilitado"></span>`
-        : `<span class="h-2.5 w-2.5 shrink-0 rounded-full bg-zinc-600 ring-4 ring-zinc-700/20" title="Deshabilitado"></span>`;
-
-      const versionBadge = mod.version
-        ? `<span class="rounded bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 text-[10px] font-mono font-bold text-emerald-400" title="Versión declarada en metadata">v${esc(mod.version)}</span>`
+      const versionText = mod.version ? `<span class="text-sm text-zinc-500">${esc(mod.version)}</span>` : '';
+      const serverOnlyText = isServerOnly
+        ? `<span class="text-sm text-zinc-500" title="Tus amigos no necesitan instalarlo">· solo del servidor</span>`
         : '';
-
-      const authorsText = mod.authors
-        ? `<span class="text-[11px] text-zinc-500 truncate max-w-[12rem]">de ${esc(mod.authors)}</span>`
-        : '';
-
       const descriptionText = mod.description
-        ? `<p class="text-xs text-zinc-400 mt-1 line-clamp-1 leading-relaxed">${esc(mod.description)}</p>`
+        ? `<p class="mt-0.5 line-clamp-1 text-sm leading-relaxed text-zinc-400">${esc(mod.description)}</p>`
         : '';
-
-      const configButton = mod.has_config
-        ? `<a href="/administration#configs" class="inline-flex items-center gap-1 rounded-lg border border-zinc-700/80 bg-zinc-800/80 hover:bg-zinc-700/80 px-2.5 py-1 text-xs font-semibold text-zinc-300 hover:text-zinc-100 transition shadow-sm" title="Abrir editor para ${esc(mod.config_filename || 'este mod')}">⚙️ Config</a>`
+      const configLink = mod.has_config
+        ? `<a href="/administration#configs" class="link text-sm" title="Cambiar la configuración de ${esc(mod.config_filename || 'este mod')}">Configurar</a>`
         : '';
-
-      // Check de actualización
       const updateData = updatesMap[mod.filename];
-      const updateBadge = (updateData && updateData.has_update)
-        ? `<button data-update-project="${esc(updateData.project_id || '')}" data-update-filename="${encodedFilename}" class="mod-update-btn inline-flex items-center gap-1 rounded-lg bg-sky-500/20 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-1 text-xs font-bold text-sky-300 transition shadow-sm animate-pulse" title="Nueva versión disponible en Modrinth">🚀 Actualizar a v${esc(updateData.latest_version || '')}</button>`
+      const updateButton = (updateData && updateData.has_update)
+        ? `<button type="button" data-update-project="${esc(updateData.project_id || '')}" data-update-filename="${encodedFilename}" class="mod-update-btn link text-sm" title="Hay una versión nueva en Modrinth">Actualizar a ${esc(updateData.latest_version || 'la nueva versión')}</button>`
         : '';
 
       return `
-        <article class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl border ${isEnabled ? 'border-zinc-800 bg-zinc-900/60' : 'border-zinc-800/60 bg-zinc-950/40 opacity-80'} hover:border-zinc-700 transition">
-          <div class="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
-            <!-- Selector para operaciones en lote -->
-            <label class="cursor-pointer pt-0.5 sm:pt-0 shrink-0">
-              <input type="checkbox" data-select-filename="${esc(mod.filename)}" ${isSelected ? 'checked' : ''} class="mod-select-checkbox rounded border-zinc-700 bg-zinc-800 text-emerald-500 focus:ring-emerald-400 h-4 w-4">
-            </label>
-
-            <div class="mt-1 sm:mt-0">${statusDot}</div>
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <h4 class="font-bold text-sm text-zinc-100 truncate">${esc(mod.name)}</h4>
-                ${versionBadge}
-                <span class="rounded bg-zinc-800/80 px-2 py-0.5 text-[11px] font-mono text-zinc-400">${mod.size_mb.toFixed(2)} MB</span>
-                ${badgeType}
-                ${authorsText}
-                ${updateBadge}
-              </div>
-              <p class="text-xs text-zinc-500 font-mono mt-0.5 truncate" title="${esc(mod.filename)}">
-                ${esc(mod.filename)}
-              </p>
-              ${descriptionText}
+        <article class="flex items-center gap-4 border-b border-zinc-800 py-4 ${isEnabled ? '' : 'opacity-60'}" title="${esc(mod.filename)} · ${mod.size_mb.toFixed(1)} MB">
+          <input type="checkbox" data-select-filename="${esc(mod.filename)}" ${isSelected ? 'checked' : ''} aria-label="Elegir ${esc(mod.name)}" class="mod-select-checkbox h-4 w-4 shrink-0 rounded border-zinc-700 bg-zinc-800 text-emerald-500">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-baseline gap-x-2">
+              <h3 class="truncate font-semibold text-zinc-50">${esc(mod.name)}</h3>
+              ${versionText}
+              ${serverOnlyText}
             </div>
+            ${descriptionText}
+            ${(configLink || updateButton) ? `<div class="mt-1.5 flex flex-wrap gap-4">${updateButton}${configLink}</div>` : ''}
           </div>
-
-          <div class="flex items-center gap-3 self-end sm:self-center shrink-0">
-            ${configButton}
-
-            <!-- Modern Switch -->
-            <label class="relative inline-flex items-center cursor-pointer select-none">
-              <input type="checkbox" ${isEnabled ? 'checked' : ''} data-toggle-filename="${encodedFilename}" class="mod-switch-checkbox sr-only peer">
-              <div class="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-200 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-400 peer-checked:after:bg-zinc-950"></div>
-              <span class="ml-2 text-xs font-semibold ${isEnabled ? 'text-emerald-300' : 'text-zinc-400'}">${isEnabled ? 'Activo' : 'Inactivo'}</span>
-            </label>
-
-            <!-- Botón Borrar -->
-            <button data-delete-filename="${encodedFilename}" data-mod-name="${esc(mod.name)}" class="delete-mod-btn rounded-lg p-2 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition" title="Eliminar mod permanentemente">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
+          <label class="relative inline-flex shrink-0 cursor-pointer select-none items-center" title="${isEnabled ? 'Encendido' : 'Apagado'}">
+            <input type="checkbox" ${isEnabled ? 'checked' : ''} data-toggle-filename="${encodedFilename}" class="mod-switch-checkbox peer sr-only" aria-label="${isEnabled ? 'Apagar' : 'Encender'} ${esc(mod.name)}">
+            <div class="h-6 w-11 rounded-full bg-zinc-700 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-zinc-200 after:transition-all after:content-[''] peer-checked:bg-emerald-400 peer-checked:after:translate-x-full peer-checked:after:bg-[#16250c] peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-200"></div>
+          </label>
+          <button type="button" data-delete-filename="${encodedFilename}" data-mod-name="${esc(mod.name)}" class="delete-mod-btn shrink-0 rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-[#f3a79b]">Quitar</button>
         </article>
       `;
     }).join('');
@@ -289,11 +247,11 @@ document.addEventListener('DOMContentLoaded', () => {
   filterButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       filterButtons.forEach(b => {
-        b.classList.remove('bg-emerald-400/20', 'text-emerald-300', 'border-emerald-500/40');
-        b.classList.add('bg-zinc-900', 'text-zinc-400', 'border-zinc-800');
+        b.classList.remove('bg-zinc-800', 'text-zinc-50');
+        b.classList.add('text-zinc-400');
       });
-      btn.classList.add('bg-emerald-400/20', 'text-emerald-300', 'border-emerald-500/40');
-      btn.classList.remove('bg-zinc-900', 'text-zinc-400', 'border-zinc-800');
+      btn.classList.add('bg-zinc-800', 'text-zinc-50');
+      btn.classList.remove('text-zinc-400');
       currentFilter = btn.dataset.filter || 'all';
       renderInstalledMods();
     });
@@ -321,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
         target.disabled = true;
         try {
           const result = await Panel.api(`/api/mods/${filename}/toggle`, { method: 'POST' });
-          Panel.toast(result.message, 'success');
+          Panel.toast(result.message + UNDO_HINT, 'success');
           await loadMods();
         } catch (err) {
           Panel.toast(err.message, 'error');
@@ -346,19 +304,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (updateBtn) {
         const projectId = updateBtn.dataset.updateProject;
         if (!projectId) return;
+        const replaceFilename = decodeURIComponent(updateBtn.dataset.updateFilename || '');
         updateBtn.disabled = true;
-        updateBtn.innerHTML = `⏳ Actualizando...`;
+        updateBtn.textContent = 'Actualizando…';
         try {
-          const mod = await Panel.api('/api/mods/install', {
-            method: 'POST',
-            body: { project_id: projectId },
-          });
-          Panel.toast(`¡Mod "${mod.name}" actualizado con éxito!`, 'success');
+          const body = { project_id: projectId };
+          // The old jar is removed once the new version is in place.
+          if (replaceFilename) body.replace_filename = replaceFilename;
+          const mod = await Panel.api('/api/mods/install', { method: 'POST', body });
+          Panel.toast(`Actualizaste ${mod.name}.${UNDO_HINT}`, 'success');
           await loadMods();
         } catch (err) {
           Panel.toast(err.message, 'error');
           updateBtn.disabled = false;
-          updateBtn.innerHTML = `🚀 Reintentar`;
+          updateBtn.textContent = 'Reintentar';
         }
       }
     });
@@ -392,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
         method: 'POST',
         body: { action, filenames },
       });
-      Panel.toast(res.message, res.errors.length ? 'info' : 'success');
+      Panel.toast(res.affected_count ? res.message + UNDO_HINT : res.message, res.errors.length ? 'info' : 'success');
       selectedFilenames.clear();
       if (selectAllCheckbox) selectAllCheckbox.checked = false;
       updateBulkBar();
@@ -422,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnCheckUpdates) {
     btnCheckUpdates.addEventListener('click', async () => {
       btnCheckUpdates.disabled = true;
-      btnCheckUpdates.innerHTML = `<span class="inline-block animate-spin mr-1">⏳</span> Buscando...`;
+      btnCheckUpdates.textContent = 'Buscando actualizaciones…';
       try {
         const updates = await Panel.api('/api/mods/updates');
         updatesMap = {};
@@ -443,7 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Panel.toast(err.message, 'error');
       } finally {
         btnCheckUpdates.disabled = false;
-        btnCheckUpdates.innerHTML = `<span>🔄</span> Buscar Actualizaciones`;
+        btnCheckUpdates.textContent = 'Ver si hay actualizaciones';
       }
     });
   }
@@ -467,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.disabled = true;
     try {
       await Panel.api(`/api/mods/${encodeURIComponent(modToDelete)}`, { method: 'DELETE' });
-      Panel.toast(`Mod "${modToDelete}" eliminado correctamente.`, 'success');
+      Panel.toast(`Quitaste ${modToDelete}.${UNDO_HINT}`, 'success');
       if (deleteModal) deleteModal.close();
       modToDelete = null;
       await loadMods();
@@ -528,7 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (uploadedCount > 0) {
-      Panel.toast(`¡${uploadedCount} archivo(s) .jar subidos con éxito!`, 'success');
+      Panel.toast(`Agregaste ${uploadedCount === 1 ? '1 mod' : `${uploadedCount} mods`}.${UNDO_HINT}`, 'success');
       await loadMods();
     }
 
@@ -570,28 +529,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 10. PESTAÑAS PRINCIPALES: INSTALADOS VS MODRINTH
-  const tabBtnInstalled = $('#tab-btn-installed');
-  const tabBtnModrinth = $('#tab-btn-modrinth');
-  const panelInstalled = $('#panel-installed');
-  const panelModrinth = $('#panel-modrinth');
+  // 10. PESTAÑAS PRINCIPALES: TUS MODS, BUSCAR Y HISTORIAL
+  const TAB_ACTIVE = 'tab-pill -mb-px border-b-2 border-emerald-400 pb-3 font-semibold text-zinc-50';
+  const TAB_IDLE = 'tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200';
+  const mainTabs = ['installed', 'modrinth', 'history'];
 
   function switchMainTab(tab) {
-    if (tab === 'installed') {
-      tabBtnInstalled.className = 'tab-pill rounded-xl bg-emerald-400 px-4 py-2 text-xs sm:text-sm font-bold text-zinc-950 shadow-sm transition';
-      tabBtnModrinth.className = 'tab-pill rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs sm:text-sm font-semibold text-zinc-400 hover:text-zinc-200 transition';
-      panelInstalled.classList.remove('hidden');
-      panelModrinth.classList.add('hidden');
-    } else {
-      tabBtnModrinth.className = 'tab-pill rounded-xl bg-emerald-400 px-4 py-2 text-xs sm:text-sm font-bold text-zinc-950 shadow-sm transition';
-      tabBtnInstalled.className = 'tab-pill rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs sm:text-sm font-semibold text-zinc-400 hover:text-zinc-200 transition';
-      panelModrinth.classList.remove('hidden');
-      panelInstalled.classList.add('hidden');
-    }
+    mainTabs.forEach((name) => {
+      const button = $(`#tab-btn-${name}`);
+      const panel = $(`#panel-${name}`);
+      if (button) {
+        button.className = name === tab ? TAB_ACTIVE : TAB_IDLE;
+        button.setAttribute('aria-current', name === tab ? 'page' : 'false');
+      }
+      panel?.classList.toggle('hidden', name !== tab);
+    });
+    if (tab === 'history') loadHistory();
   }
 
-  tabBtnInstalled?.addEventListener('click', () => switchMainTab('installed'));
-  tabBtnModrinth?.addEventListener('click', () => switchMainTab('modrinth'));
+  mainTabs.forEach((name) => $(`#tab-btn-${name}`)?.addEventListener('click', () => switchMainTab(name)));
 
   // 11. BÚSQUEDA Y CATÁLOGO MODRINTH CON RESOLUCIÓN DE DEPENDENCIAS
   if (modrinthForm) {
@@ -611,23 +567,15 @@ document.addEventListener('DOMContentLoaded', () => {
         queryParams.set('game_version', selectedVersion);
       }
 
-      modrinthResults.innerHTML = `
-        <div class="py-12 text-center text-zinc-500">
-          <span class="inline-block animate-spin text-2xl mb-2">⏳</span>
-          <p class="text-sm">Buscando mods compatibles en Modrinth...</p>
-        </div>
-      `;
+      modrinthResults.innerHTML = `<p class="py-12 text-center text-zinc-500">Buscando…</p>`;
 
       try {
         const hits = await Panel.api(`/api/mods/search?${queryParams.toString()}`);
         if (!hits.length) {
-          const currentLoaderDisplay = selectedLoader === 'auto' ? (detectedEnv.loader || 'tu motor') : selectedLoader;
-          const currentVerDisplay = selectedVersion || detectedEnv.minecraft_version || '';
           modrinthResults.innerHTML = `
-            <div class="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-zinc-500">
-              <span class="text-3xl block mb-2">🔍</span>
-              <p class="font-semibold text-zinc-300">No se encontraron mods compatibles con ${esc(currentLoaderDisplay)} ${esc(currentVerDisplay)}</p>
-              <p class="text-xs text-zinc-500 mt-1">Probá con otro término como "Create", "JEI", "Waystones" o cambiá los filtros de motor/versión.</p>
+            <div class="py-12 text-center">
+              <p class="font-semibold text-zinc-200">No encontramos mods con ese nombre que funcionen en tu servidor</p>
+              <p class="mt-1 text-zinc-500">Probá con otro nombre o revisá las opciones avanzadas.</p>
             </div>
           `;
           return;
@@ -638,41 +586,27 @@ document.addEventListener('DOMContentLoaded', () => {
         modrinthResults.innerHTML = hits.map(hit => {
           const isAlreadyInstalled = installedNames.has(hit.title.toLowerCase()) || installedNames.has(hit.slug.toLowerCase());
           const icon = hit.icon_url
-            ? `<img class="h-12 w-12 rounded-xl object-cover ring-1 ring-zinc-700/60" src="${esc(hit.icon_url)}" alt="">`
-            : `<div class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-zinc-800 text-lg text-emerald-400 ring-1 ring-zinc-700/60 font-bold">◈</div>`;
+            ? `<img class="h-11 w-11 shrink-0 rounded-lg object-cover" src="${esc(hit.icon_url)}" alt="">`
+            : `<div class="h-11 w-11 shrink-0 rounded-lg bg-zinc-800"></div>`;
+          const downloads = Number(hit.downloads || 0).toLocaleString('es-AR');
 
           return `
-            <article class="flex flex-col sm:flex-row gap-4 p-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 hover:border-zinc-700 transition">
-              <div class="shrink-0 flex items-start">${icon}</div>
+            <article class="flex items-start gap-4 border-b border-zinc-800 py-5">
+              ${icon}
               <div class="min-w-0 flex-1">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <h4 class="font-bold text-base text-zinc-100">${esc(hit.title)}</h4>
-                    <span class="text-xs font-mono text-zinc-500">Slug: ${esc(hit.slug)}</span>
-                  </div>
-                  <div>
-                    ${isAlreadyInstalled
-                      ? `<span class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-300">✓ Ya Instalado</span>`
-                      : `<button data-install-project="${esc(hit.project_id)}" class="install-mod-btn rounded-lg bg-emerald-400 px-4 py-2 text-xs font-bold text-zinc-950 hover:bg-emerald-300 transition shadow-sm">Instalar Mod</button>`
-                    }
-                  </div>
-                </div>
-                <p class="mt-2 text-xs text-zinc-400 line-clamp-2 leading-relaxed">${esc(hit.description)}</p>
-                <div class="mt-3 flex items-center gap-4 text-xs text-zinc-500">
-                  <span>📥 ${Number(hit.downloads || 0).toLocaleString('es-AR')} descargas</span>
-                  <span class="text-emerald-400/80">⚡ Resuelve dependencias automáticamente</span>
-                  <a href="https://modrinth.com/mod/${esc(hit.slug)}" target="_blank" rel="noreferrer" class="text-emerald-400 hover:underline">Ver en Modrinth ↗</a>
-                </div>
+                <h3 class="font-semibold text-zinc-50">${esc(hit.title)}</h3>
+                <p class="mt-0.5 line-clamp-2 text-sm leading-relaxed text-zinc-400">${esc(hit.description)}</p>
+                <p class="mt-1.5 text-sm text-zinc-500">${downloads} descargas · <a href="https://modrinth.com/mod/${esc(hit.slug)}" target="_blank" rel="noopener noreferrer" class="link">Ver en Modrinth</a></p>
               </div>
+              ${isAlreadyInstalled
+                ? `<span class="shrink-0 py-2 text-sm text-zinc-500">Ya lo tenés</span>`
+                : `<button type="button" data-install-project="${esc(hit.project_id)}" class="install-mod-btn v2-button btn-primary shrink-0 min-h-0 py-2 text-sm">Instalar</button>`
+              }
             </article>
           `;
         }).join('');
       } catch (err) {
-        modrinthResults.innerHTML = `
-          <div class="rounded-xl border border-rose-500/30 bg-rose-950/20 p-5 text-center text-rose-300 text-xs">
-            ${esc(err.message)}
-          </div>
-        `;
+        modrinthResults.innerHTML = `<p class="py-12 text-center text-[#f3a79b]">${esc(err.message)}</p>`;
       }
     });
 
@@ -702,15 +636,15 @@ document.addEventListener('DOMContentLoaded', () => {
           method: 'POST',
           body: installBody,
         });
-        Panel.toast(`¡Mod "${mod.name}" y sus librerías requeridas instalados correctamente!`, 'success');
+        Panel.toast(`Instalaste ${mod.name}.${UNDO_HINT}`, 'success');
         installBtn.replaceWith(document.createRange().createContextualFragment(
-          `<span class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-300">✓ Ya Instalado</span>`
+          `<span class="shrink-0 py-2 text-sm text-zinc-500">Ya lo tenés</span>`
         ));
         await loadMods();
       } catch (err) {
         Panel.toast(err.message, 'error');
         installBtn.disabled = false;
-        installBtn.textContent = 'Instalar Mod';
+        installBtn.textContent = 'Instalar';
       }
     });
   }
@@ -739,6 +673,137 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // 13. HISTORIAL Y VOLVER ATRÁS
+  const historyList = $('#history-list');
+  const historyEmpty = $('#history-empty');
+  const historyDialog = $('#modal-history-restore');
+  const historyConsequence = $('#history-restore-consequence');
+  const confirmHistoryRestore = $('#confirm-history-restore');
+  let historyTarget = null;
+
+  // "12 de octubre a las 18:04", the way people say it.
+  const formatMoment = (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    const sameYear = date.getFullYear() === new Date().getFullYear();
+    const dayOptions = sameYear ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' };
+    const day = date.toLocaleDateString('es-AR', dayOptions);
+    const time = date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    return `${day} a las ${time}`;
+  };
+
+  // "hace 5 minutos", "ayer", "hace 3 días"; older points show their date.
+  const relativeTime = (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+    const abs = Math.abs(seconds);
+    const format = new Intl.RelativeTimeFormat('es-AR', { numeric: 'auto' });
+    if (abs < 60) return 'recién';
+    if (abs < 3600) return format.format(Math.round(seconds / 60), 'minute');
+    if (abs < 86400) return format.format(Math.round(seconds / 3600), 'hour');
+    if (abs < 86400 * 7) return format.format(Math.round(seconds / 86400), 'day');
+    return `el ${formatMoment(value)}`;
+  };
+
+  async function loadHistory() {
+    if (!historyList) return;
+    try {
+      const entries = await Panel.api('/api/mods/history');
+      if (!entries.length) {
+        historyList.classList.add('hidden');
+        historyEmpty?.classList.remove('hidden');
+        return;
+      }
+      historyEmpty?.classList.add('hidden');
+      historyList.classList.remove('hidden');
+      historyList.innerHTML = entries.map((entry) => {
+        const id = esc(entry.id);
+        const missingNote = entry.restorable
+          ? ''
+          : ' · <span class="text-[#f3a79b]">Faltan archivos de este punto, no se puede volver</span>';
+        return `
+          <article class="flex flex-col gap-3 border-b border-zinc-800 py-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0 flex-1">
+              <h3 class="font-semibold text-zinc-50">${esc(entry.summary)}</h3>
+              <p class="mt-0.5 text-sm text-zinc-500"><time datetime="${esc(entry.created_at)}" title="${esc(formatMoment(entry.created_at))}">${esc(relativeTime(entry.created_at))}</time>${missingNote}</p>
+              <details class="history-details mt-2 text-sm" data-history-id="${id}">
+                <summary class="cursor-pointer text-zinc-400 hover:text-zinc-200">Qué cambia si volvés acá</summary>
+                <div class="history-diff mt-2 leading-relaxed text-zinc-400"><p class="text-zinc-500">Revisando…</p></div>
+              </details>
+            </div>
+            <button type="button" class="history-restore-btn v2-button btn-quiet shrink-0" data-history-id="${id}" data-created-at="${esc(entry.created_at)}" ${entry.restorable ? '' : 'disabled'}>Volver a este punto</button>
+          </article>`;
+      }).join('');
+    } catch (err) {
+      historyEmpty?.classList.add('hidden');
+      historyList.classList.remove('hidden');
+      historyList.innerHTML = `<p class="py-12 text-center text-[#f3a79b]">No pudimos cargar el historial. ${esc(err.message)}</p>`;
+    }
+  }
+
+  async function loadHistoryDiff(details) {
+    if (details.dataset.loaded === 'true') return;
+    const target = details.querySelector('.history-diff');
+    try {
+      const detail = await Panel.api(`/api/mods/history/${encodeURIComponent(details.dataset.historyId)}`);
+      const lines = detail.lines.length
+        ? `<ul class="space-y-1">${detail.lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>`
+        : '<p>Tus mods ya están así.</p>';
+      const missing = detail.missing.length
+        ? `<p class="mt-2 text-[#f3a79b]">Ya no tenemos: ${detail.missing.map((mod) => esc(mod.name)).join(', ')}.</p>`
+        : '';
+      target.innerHTML = lines + missing;
+      details.dataset.loaded = 'true';
+    } catch (err) {
+      target.innerHTML = `<p class="text-[#f3a79b]">${esc(err.message)}</p>`;
+    }
+  }
+
+  if (historyList) {
+    // "toggle" does not bubble, so listen in the capture phase.
+    historyList.addEventListener('toggle', (event) => {
+      const details = event.target;
+      if (details.classList && details.classList.contains('history-details') && details.open) loadHistoryDiff(details);
+    }, true);
+
+    historyList.addEventListener('click', (event) => {
+      const button = event.target.closest('.history-restore-btn');
+      if (!button || button.disabled) return;
+      historyTarget = button.dataset.historyId;
+      if (historyConsequence) {
+        historyConsequence.textContent = `Tus mods quedan como estaban el ${formatMoment(button.dataset.createdAt)}. Primero apagá el servidor.`;
+      }
+      historyDialog?.showModal();
+    });
+  }
+
+  $('#cancel-history-restore')?.addEventListener('click', () => {
+    historyTarget = null;
+    historyDialog?.close();
+  });
+
+  confirmHistoryRestore?.addEventListener('click', async () => {
+    if (!historyTarget) return;
+    confirmHistoryRestore.disabled = true;
+    confirmHistoryRestore.textContent = 'Volviendo…';
+    try {
+      const result = await Panel.api(`/api/mods/history/${encodeURIComponent(historyTarget)}/restore`, {
+        method: 'POST',
+        body: { confirm: true },
+      });
+      historyDialog?.close();
+      Panel.toast(result.undo_id ? result.message + UNDO_HINT : result.message, 'success');
+      historyTarget = null;
+      await Promise.all([loadMods(), loadHistory()]);
+    } catch (err) {
+      Panel.toast(err.message, 'error');
+    } finally {
+      confirmHistoryRestore.disabled = false;
+      confirmHistoryRestore.textContent = 'Volver a este punto';
+    }
+  });
 
   // Carga inicial
   loadEnvironment();

@@ -15,10 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const switchTab = (activeKey) => {
     Object.entries(tabs).forEach(([key, tab]) => {
       if (key === activeKey) {
-        tab.btn.className = 'tab-btn rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950';
+        tab.btn.className = 'tab-btn -mb-px border-b-2 border-emerald-400 pb-3 font-semibold text-zinc-50';
+        tab.btn.setAttribute('aria-current', 'true');
         tab.content.classList.remove('hidden');
       } else {
-        tab.btn.className = 'tab-btn rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-300 hover:border-emerald-400/60';
+        tab.btn.className = 'tab-btn -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200';
+        tab.btn.removeAttribute('aria-current');
         tab.content.classList.add('hidden');
       }
     });
@@ -29,14 +31,18 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#tab-btn-whitelist').onclick = () => switchTab('whitelist');
   $('#tab-btn-advancements').onclick = () => switchTab('advancements');
   $('#tab-btn-luckperms').onclick = () => switchTab('luckperms');
+  // Deep links such as /worlds#whitelist (the sidebar "Jugadores" entry) open their tab directly.
+  const tabFromHash = () => { const key = window.location.hash.slice(1); if (key && Object.hasOwn(tabs, key)) switchTab(key); };
+  window.addEventListener('hashchange', tabFromHash);
+  tabFromHash();
 
   // Tooltip Modal
   const tooltipModal = $('#modal-tooltip-info');
   const showTooltip = (title, desc, rec, impact) => {
     $('#tooltip-title').textContent = title;
-    $('#tooltip-desc').textContent = desc || 'Sin descripción disponible.';
-    $('#tooltip-rec').textContent = rec || 'Configuración predeterminada.';
-    $('#tooltip-impact').textContent = impact || 'Sin impacto crítico reportado.';
+    $('#tooltip-desc').textContent = desc || 'No tenemos una explicación para este ajuste.';
+    $('#tooltip-rec').textContent = rec || 'Dejalo como viene.';
+    $('#tooltip-impact').textContent = impact || 'Nada importante.';
     tooltipModal.showModal();
   };
   $('#close-tooltip-modal').onclick = () => tooltipModal.close();
@@ -46,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = e.target.closest('.tooltip-trigger');
     if (btn && btn.dataset.tooltip) {
       showTooltip(
-        btn.dataset.title || 'Información de la opción',
+        btn.dataset.title || 'Sobre este ajuste',
         btn.dataset.tooltip,
         btn.dataset.rec || '',
         btn.dataset.impact || ''
@@ -62,39 +68,37 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const worlds = await Panel.api('/api/worlds');
       if (!worlds.length) {
-        grid.innerHTML = '<p class="text-sm text-zinc-500 col-span-full">No se encontraron mundos en server/.</p>';
+        grid.innerHTML = '<p class="py-6 text-zinc-500">Todavía no hay mundos. Creá uno o prendé el servidor para que arme el primero.</p>';
         return;
       }
 
-      grid.innerHTML = worlds.map((w) => `
-        <article class="rounded-xl border ${w.is_active ? 'border-emerald-400/60 bg-emerald-950/15 ring-1 ring-emerald-400/30' : 'border-zinc-800 bg-zinc-900/60'} p-5 flex flex-col justify-between space-y-4">
-          <div>
-            <div class="flex items-start justify-between gap-2">
-              <h3 class="font-bold text-base text-zinc-100 truncate">${esc(w.name)}</h3>
-              ${w.is_active ? '<span class="rounded-full bg-emerald-400/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-400/40">Activo</span>' : ''}
-            </div>
-            <div class="mt-3 space-y-1.5 text-xs text-zinc-400">
-              <p>📦 Tamaño en disco: <span class="font-medium text-zinc-200">${w.size_formatted}</span></p>
-              <p>🕒 Modificado: <span class="font-medium text-zinc-300">${w.last_modified}</span></p>
-              <p>🌌 Dimensiones: 
-                ${w.has_nether ? '<span class="text-rose-300 font-medium">Nether</span> ' : ''}
-                ${w.has_the_end ? '<span class="text-violet-300 font-medium">End</span>' : ''}
-                ${!w.has_nether && !w.has_the_end ? '<span class="text-zinc-500">Solo Overworld</span>' : ''}
-              </p>
-            </div>
-          </div>
+      const dimensionsText = (w) => {
+        if (w.has_nether && w.has_the_end) return 'con Nether y End';
+        if (w.has_nether) return 'con Nether';
+        if (w.has_the_end) return 'con End';
+        return 'solo el mundo normal';
+      };
 
-          <div class="border-t border-zinc-800/80 pt-3 flex items-center justify-between gap-2">
-            ${w.is_active 
-              ? '<span class="text-xs text-emerald-400 font-semibold">Cargado en el servidor</span>' 
-              : `<button data-switch-world="${esc(w.name)}" class="rounded-lg bg-emerald-400 px-3 py-1.5 text-xs font-bold text-zinc-950 hover:bg-emerald-300 transition">Activar este mundo</button>`
-            }
-            ${!w.is_active ? `<button data-delete-world="${esc(w.name)}" class="text-xs text-rose-400 hover:text-rose-300">Eliminar</button>` : ''}
+      grid.innerHTML = worlds.map((w) => `
+        <article class="flex flex-col gap-3 border-b border-zinc-800 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-baseline gap-x-2">
+              <h3 class="truncate font-semibold text-zinc-50">${esc(w.name)}</h3>
+              ${w.is_active ? '<span class="text-sm text-zinc-400">· en uso</span>' : ''}
+            </div>
+            <p class="mt-0.5 text-sm text-zinc-500">Ocupa ${esc(w.size_formatted)} · último cambio ${esc(w.last_modified)} · ${dimensionsText(w)}</p>
           </div>
+          ${w.is_active
+            ? '<p class="shrink-0 text-sm text-zinc-500">Se carga al prender el servidor</p>'
+            : `<div class="flex shrink-0 items-center gap-2">
+                <button type="button" data-switch-world="${esc(w.name)}" class="v2-button btn-quiet">Usar este mundo</button>
+                <button type="button" data-delete-world="${esc(w.name)}" class="rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-[#f3a79b]">Borrar</button>
+              </div>`
+          }
         </article>
       `).join('');
     } catch (e) {
-      grid.innerHTML = `<p class="text-sm text-rose-400 col-span-full">Error al cargar mundos: ${esc(e.message)}</p>`;
+      grid.innerHTML = `<p class="py-6 text-[#f3a79b]">No pudimos leer los mundos. ${esc(e.message)}</p>`;
     }
   };
 
@@ -122,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const deleteBtn = e.target.closest('[data-delete-world]');
     if (deleteBtn) {
       const worldName = deleteBtn.dataset.deleteWorld;
-      if (!confirm(`¿Estás seguro de que querés eliminar permanentemente el mundo "${worldName}"? Esta acción no se puede deshacer.`)) return;
+      if (!confirm(`¿Borrar el mundo "${worldName}"? Se borra para siempre y no se puede deshacer.`)) return;
       try {
         const res = await Panel.api(`/api/worlds/${encodeURIComponent(worldName)}`, { method: 'DELETE' });
         Panel.toast(res.message, 'success');
@@ -195,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
         i++;
       }
     }
-    preview.innerHTML = html || '<span class="text-zinc-500">Sin mensaje del día</span>';
+    preview.innerHTML = html || '<span class="text-zinc-500">Sin mensaje todavía</span>';
   };
 
   const renderProperties = () => {
@@ -203,44 +207,51 @@ document.addEventListener('DOMContentLoaded', () => {
     const container = $('#props-container');
     const filtered = propertiesData.properties.filter((p) => p.category === currentCategory);
 
+    if (!filtered.length) {
+      container.innerHTML = '<p class="py-6 text-zinc-500">No hay ajustes en esta parte.</p>';
+      return;
+    }
+
+    const fieldClass = 'min-h-11 rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400';
+
     container.innerHTML = filtered.map((p) => {
+      const currentVal = modifiedProperties[p.key] !== undefined ? modifiedProperties[p.key] : p.current_value;
+      const fieldLabel = `aria-label="${esc(p.label)}"`;
       let inputHtml = '';
       if (p.type === 'boolean') {
-        const isChecked = (modifiedProperties[p.key] !== undefined ? modifiedProperties[p.key] : p.current_value).toLowerCase() === 'true';
+        const isChecked = String(currentVal).toLowerCase() === 'true';
         inputHtml = `
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" data-prop-key="${esc(p.key)}" ${isChecked ? 'checked' : ''} class="peer sr-only">
-            <div class="h-6 w-11 rounded-full bg-zinc-800 peer-checked:bg-emerald-400 peer-focus:outline-none after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:bg-zinc-100 after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+          <label class="relative inline-flex cursor-pointer select-none items-center">
+            <input type="checkbox" data-prop-key="${esc(p.key)}" ${isChecked ? 'checked' : ''} ${fieldLabel} class="peer sr-only">
+            <div class="h-6 w-11 rounded-full bg-zinc-700 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-zinc-200 after:transition-all after:content-[''] peer-checked:bg-emerald-400 peer-checked:after:translate-x-full peer-checked:after:bg-[#16250c] peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-200"></div>
           </label>
         `;
       } else if (p.type === 'select' && p.options) {
-        const currentVal = modifiedProperties[p.key] !== undefined ? modifiedProperties[p.key] : p.current_value;
         inputHtml = `
-          <select data-prop-key="${esc(p.key)}" class="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-100">
+          <select data-prop-key="${esc(p.key)}" ${fieldLabel} class="${fieldClass} w-full sm:w-48">
             ${p.options.map((opt) => `<option value="${esc(opt.value)}" ${opt.value === currentVal ? 'selected' : ''}>${esc(opt.label)}</option>`).join('')}
           </select>
         `;
       } else if (p.type === 'number') {
-        const currentVal = modifiedProperties[p.key] !== undefined ? modifiedProperties[p.key] : p.current_value;
         inputHtml = `
-          <input type="number" data-prop-key="${esc(p.key)}" value="${esc(currentVal)}" ${p.min_value !== null ? `min="${p.min_value}"` : ''} ${p.max_value !== null ? `max="${p.max_value}"` : ''} class="w-24 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-100">
+          <input type="number" data-prop-key="${esc(p.key)}" value="${esc(currentVal)}" ${p.min_value !== null ? `min="${p.min_value}"` : ''} ${p.max_value !== null ? `max="${p.max_value}"` : ''} ${fieldLabel} class="${fieldClass} w-28">
         `;
       } else {
-        const currentVal = modifiedProperties[p.key] !== undefined ? modifiedProperties[p.key] : p.current_value;
         inputHtml = `
-          <input type="text" data-prop-key="${esc(p.key)}" value="${esc(currentVal)}" class="flex-1 min-w-[14rem] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-100">
+          <input type="text" data-prop-key="${esc(p.key)}" value="${esc(currentVal)}" ${fieldLabel} class="${fieldClass} w-full sm:w-72">
         `;
       }
 
       return `
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 transition hover:border-zinc-700">
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <span class="font-semibold text-sm text-zinc-200">${esc(p.label)}</span>
-              <button type="button" class="tooltip-trigger inline-grid h-4 w-4 place-items-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/40" data-title="${esc(p.label)}" data-tooltip="${esc(p.description)}" data-rec="${esc(p.recommended_value)}" data-impact="${esc(p.impact)}">?</button>
-            </div>
-            <p class="text-xs text-zinc-400">${esc(p.description)}</p>
-            <p class="text-[11px] text-emerald-300/80">💡 Recomendado: <span class="font-medium text-emerald-200">${esc(p.recommended_value)}</span></p>
+        <div class="flex flex-col gap-3 border-b border-zinc-800 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+          <div class="min-w-0">
+            <h3 class="font-semibold text-zinc-50">${esc(p.label)}</h3>
+            <p class="mt-0.5 text-sm leading-relaxed text-zinc-400">${esc(p.description)}</p>
+            <p class="mt-1 text-sm text-zinc-500">
+              Recomendado: ${esc(p.recommended_value)} ·
+              <button type="button" class="tooltip-trigger link" data-title="${esc(p.label)}" data-tooltip="${esc(p.description)}" data-rec="${esc(p.recommended_value)}" data-impact="${esc(p.impact)}">Qué cambia</button>
+              <span class="ml-1 font-mono text-xs text-zinc-600">${esc(p.key)}</span>
+            </p>
           </div>
           <div class="shrink-0">
             ${inputHtml}
@@ -258,23 +269,25 @@ document.addEventListener('DOMContentLoaded', () => {
       // Renderizar nav de categorías
       const nav = $('#props-categories-nav');
       nav.innerHTML = propertiesData.categories.map((cat) => `
-        <button data-cat="${esc(cat)}" class="cat-btn rounded-lg ${cat === currentCategory ? 'bg-zinc-800 text-emerald-300 ring-1 ring-emerald-400/30' : 'border border-zinc-800 text-zinc-400 hover:text-zinc-100'} px-3 py-1.5 text-xs font-semibold transition">${esc(cat)}</button>
+        <button type="button" data-cat="${esc(cat)}" class="${cat === currentCategory ? CAT_ACTIVE : CAT_IDLE}">${esc(cat)}</button>
       `).join('');
 
       renderProperties();
     } catch (e) {
+      $('#props-container').innerHTML = `<p class="py-6 text-[#f3a79b]">No pudimos leer los ajustes. ${esc(e.message)}</p>`;
       Panel.toast(e.message, 'error');
     }
   };
+
+  const CAT_ACTIVE = 'cat-btn rounded-full bg-zinc-800 px-3 py-1.5 font-medium text-zinc-50';
+  const CAT_IDLE = 'cat-btn rounded-full px-3 py-1.5 font-medium text-zinc-400 hover:text-zinc-200';
 
   $('#props-categories-nav').onclick = (e) => {
     const btn = e.target.closest('[data-cat]');
     if (btn) {
       currentCategory = btn.dataset.cat;
       $$('.cat-btn').forEach((b) => {
-        b.className = b.dataset.cat === currentCategory 
-          ? 'cat-btn rounded-lg bg-zinc-800 text-emerald-300 ring-1 ring-emerald-400/30 px-3 py-1.5 text-xs font-semibold transition' 
-          : 'cat-btn rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-100 px-3 py-1.5 text-xs font-semibold transition';
+        b.className = b.dataset.cat === currentCategory ? CAT_ACTIVE : CAT_IDLE;
       });
       renderProperties();
     }
@@ -294,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('#save-properties-btn').onclick = async () => {
     if (!Object.keys(modifiedProperties).length) {
-      Panel.toast('No hay cambios pendientes por guardar.', 'success');
+      Panel.toast('No cambiaste nada todavía.', 'success');
       return;
     }
 
@@ -307,7 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       propertiesData = res;
       Object.keys(modifiedProperties).forEach((k) => delete modifiedProperties[k]);
-      Panel.toast('server.properties guardado con éxito. Los cambios aplicarán al reiniciar el servidor.', 'success');
+      Panel.toast('Ajustes guardados. Se aplican la próxima vez que reinicies el servidor.', 'success');
       renderProperties();
     } catch (e) {
       Panel.toast(e.message, 'error');
@@ -319,28 +332,35 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   // 3. WHITELIST Y WAYPOINTS
   // ==========================================
+  const setWhitelistLabel = (enabled) => {
+    const label = $('#whitelist-toggle-label');
+    if (label) label.textContent = enabled ? 'Activada' : 'Apagada';
+  };
+
   const loadWhitelist = async () => {
+    const list = $('#whitelist-players-list');
     try {
       const s = await Panel.api('/api/whitelist');
       $('#whitelist-toggle').checked = s.enabled;
+      setWhitelistLabel(s.enabled);
       $('#whitelist-count').textContent = s.total;
 
-      const list = $('#whitelist-players-list');
       if (!s.players.length) {
-        list.innerHTML = '<p class="text-xs text-zinc-500 col-span-full">No hay jugadores en la lista blanca.</p>';
+        list.innerHTML = '<p class="py-6 text-zinc-500">Todavía no agregaste a nadie.</p>';
         return;
       }
 
       list.innerHTML = s.players.map((p) => `
-        <div class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 p-2.5">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <img src="${p.avatar_url}" alt="${esc(p.name)}" class="h-7 w-7 rounded bg-zinc-900 object-cover shrink-0">
-            <span class="font-medium text-xs text-zinc-200 truncate">${esc(p.name)}</span>
+        <div class="flex items-center justify-between gap-4 border-b border-zinc-800 py-3">
+          <div class="flex min-w-0 items-center gap-3">
+            <img src="${esc(p.avatar_url)}" alt="" class="h-8 w-8 shrink-0 rounded bg-zinc-900 object-cover">
+            <span class="truncate font-semibold text-zinc-50">${esc(p.name)}</span>
           </div>
-          <button data-remove-whitelist="${esc(p.name)}" class="text-xs text-rose-400 hover:text-rose-300">Quitar</button>
+          <button type="button" data-remove-whitelist="${esc(p.name)}" class="shrink-0 rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-[#f3a79b]" aria-label="Quitar a ${esc(p.name)} de la lista">Quitar</button>
         </div>
       `).join('');
     } catch (e) {
+      list.innerHTML = `<p class="py-6 text-[#f3a79b]">No pudimos leer la lista. ${esc(e.message)}</p>`;
       Panel.toast(e.message, 'error');
     }
   };
@@ -351,6 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
         method: 'POST',
         body: { enabled: e.target.checked },
       });
+      setWhitelistLabel(e.target.checked);
       Panel.toast(res.message, 'success');
     } catch (err) {
       Panel.toast(err.message, 'error');
@@ -398,27 +419,34 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const wps = await Panel.api('/api/waypoints');
       if (!wps.length) {
-        list.innerHTML = '<p class="text-xs text-zinc-500">No hay marcadores guardados.</p>';
+        list.innerHTML = '<p class="py-6 text-zinc-500">Todavía no guardaste ningún lugar.</p>';
         return;
       }
 
+      const DIMENSIONS = {
+        'minecraft:overworld': 'Mundo normal',
+        'minecraft:the_nether': 'Nether',
+        'minecraft:the_end': 'End',
+      };
+
       list.innerHTML = wps.map((wp) => `
-        <div class="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="font-bold text-sm text-emerald-300">${esc(wp.name)}</span>
-              <span class="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">${esc(wp.dimension.replace('minecraft:', ''))}</span>
+        <div class="flex flex-col gap-3 border-b border-zinc-800 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-baseline gap-x-2">
+              <h3 class="truncate font-semibold text-zinc-50">${esc(wp.name)}</h3>
+              <span class="text-sm text-zinc-500">${esc(DIMENSIONS[wp.dimension] || String(wp.dimension).replace('minecraft:', ''))}</span>
             </div>
-            <p class="mt-1 font-mono text-xs text-zinc-300">X: ${wp.x} · Y: ${wp.y} · Z: ${wp.z}</p>
-            ${wp.description ? `<p class="mt-0.5 text-xs text-zinc-500">${esc(wp.description)}</p>` : ''}
+            <p class="mt-0.5 font-mono text-sm text-zinc-400">X ${esc(wp.x)} · Y ${esc(wp.y)} · Z ${esc(wp.z)}</p>
+            ${wp.description ? `<p class="mt-0.5 text-sm text-zinc-500">${esc(wp.description)}</p>` : ''}
           </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <button data-tp-all="${esc(wp.id)}" class="rounded bg-emerald-400 px-2.5 py-1 text-xs font-bold text-zinc-950 hover:bg-emerald-300">TP Todos (@a)</button>
-            <button data-delete-wp="${esc(wp.id)}" class="text-xs text-zinc-400 hover:text-rose-400 p-1">×</button>
+          <div class="flex shrink-0 items-center gap-2">
+            <button type="button" data-tp-all="${esc(wp.id)}" class="v2-button btn-quiet">Llevar a todos</button>
+            <button type="button" data-delete-wp="${esc(wp.id)}" class="rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-[#f3a79b]" aria-label="Borrar ${esc(wp.name)}">Borrar</button>
           </div>
         </div>
       `).join('');
     } catch (e) {
+      list.innerHTML = `<p class="py-6 text-[#f3a79b]">No pudimos leer los lugares. ${esc(e.message)}</p>`;
       Panel.toast(e.message, 'error');
     }
   };
@@ -444,7 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const id = delBtn.dataset.deleteWp;
       try {
         await Panel.api(`/api/waypoints/${encodeURIComponent(id)}`, { method: 'DELETE' });
-        Panel.toast('Marcador eliminado.', 'success');
+        Panel.toast('Lugar borrado.', 'success');
         loadWaypoints();
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -470,7 +498,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     try {
       await Panel.api('/api/waypoints', { method: 'POST', body: payload });
-      Panel.toast('Marcador guardado con éxito.', 'success');
+      Panel.toast('Lugar guardado.', 'success');
       wpModal.close();
       $('#create-waypoint-form').reset();
       loadWaypoints();
@@ -487,7 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const msg = $('#luckperms-status-msg');
     const link = $('#link-luckperms-editor');
     btn.disabled = true;
-    msg.textContent = 'Enviando comando /lp editor al servidor...';
+    msg.textContent = 'Pidiéndole el enlace al servidor…';
 
     try {
       const res = await Panel.api('/api/luckperms/editor', { method: 'POST' });
@@ -495,8 +523,8 @@ document.addEventListener('DOMContentLoaded', () => {
         link.href = res.editor_url;
         link.classList.remove('hidden');
         link.classList.add('inline-flex');
-        msg.textContent = '¡Enlace obtenido! Abrí el editor con el botón de la derecha.';
-        Panel.toast('Enlace de LuckPerms listo.', 'success');
+        msg.textContent = 'Listo. Abrí el editor con el botón de al lado.';
+        Panel.toast('El editor de rangos está listo.', 'success');
       } else {
         msg.textContent = res.message;
         Panel.toast(res.message, 'error');
@@ -513,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const user = $('#lp-user-target').value.trim();
     const group = $('#lp-group-target').value.trim();
     if (!user || !group) {
-      Panel.toast('Ingresá el usuario y el grupo.', 'error');
+      Panel.toast('Escribí el jugador y el rango.', 'error');
       return;
     }
     try {
@@ -546,7 +574,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       select.innerHTML = worlds.map((w) => `
         <option value="${esc(w.name)}" ${w.is_active ? 'selected' : ''}>
-          ${esc(w.name)} ${w.is_active ? '(Activo)' : '(Inactivo)'} [${w.players_with_advancements} jugadores]
+          ${esc(w.name)}${w.is_active ? ' (en uso)' : ''} · ${esc(w.players_with_advancements)} jugadores
         </option>
       `).join('');
 
@@ -566,15 +594,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const url = targetWorld ? `/api/advancements/players?world=${encodeURIComponent(targetWorld)}` : '/api/advancements/players';
       const players = await Panel.api(url);
       if (!players.length) {
-        select.innerHTML = '<option value="">Sin jugadores registrados</option>';
+        select.innerHTML = '<option value="">Nadie jugó todavía</option>';
         currentAdvPlayer = '';
         const container = $('#adv-list-container');
-        if (container) container.innerHTML = '<p class="p-6 text-center text-xs text-zinc-500">No hay jugadores registrados en este mundo.</p>';
+        if (container) container.innerHTML = '<p class="py-6 text-zinc-500">Nadie jugó en este mundo todavía.</p>';
         return;
       }
 
       select.innerHTML = players.map((p) => `
-        <option value="${esc(p.username)}">${esc(p.username)} (${p.advancements_count} logros)</option>
+        <option value="${esc(p.username)}">${esc(p.username)} · ${esc(p.advancements_count)} logros</option>
       `).join('');
 
       currentAdvPlayer = players[0].username;
@@ -595,24 +623,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (!filtered.length) {
-      container.innerHTML = `<p class="p-6 text-center text-xs text-zinc-500">${query ? 'No se encontraron logros que coincidan con la búsqueda.' : 'El jugador no tiene logros completados.'}</p>`;
+      container.innerHTML = `<p class="py-6 text-zinc-500">${query ? 'Ningún logro coincide con lo que buscaste.' : 'Todavía no consiguió ningún logro.'}</p>`;
       return;
     }
 
     container.innerHTML = filtered.map((a) => `
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
-        <div class="space-y-0.5">
-          <div class="flex items-center gap-2">
-            <span class="font-semibold text-xs text-zinc-200">${esc(a.title)}</span>
-            <span class="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">${esc(a.category)}</span>
+      <div class="flex items-center justify-between gap-4 border-b border-zinc-800 py-3">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-baseline gap-x-2">
+            <h3 class="font-semibold text-zinc-50">${esc(a.title)}</h3>
+            <span class="text-sm text-zinc-500">${esc(a.category)}</span>
           </div>
-          <p class="font-mono text-[10px] text-zinc-500">${esc(a.id)}</p>
+          <p class="mt-0.5 truncate font-mono text-xs text-zinc-600">${esc(a.id)}</p>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <button data-revoke-adv="${esc(a.id)}" class="rounded bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition">
-            Quitar logro
-          </button>
-        </div>
+        <button type="button" data-revoke-adv="${esc(a.id)}" class="shrink-0 rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-[#f3a79b]" aria-label="Quitar ${esc(a.title)}">Quitar</button>
       </div>
     `).join('');
   };
@@ -623,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const targetWorld = worldName !== undefined ? worldName : currentAdvWorld;
     const container = $('#adv-list-container');
     if (!container) return;
-    container.innerHTML = '<p class="p-6 text-center text-xs text-zinc-500">Cargando logros...</p>';
+    container.innerHTML = '<p class="py-6 text-zinc-500">Cargando logros…</p>';
 
     try {
       const url = targetWorld ? `/api/advancements/player/${encodeURIComponent(username)}?world=${encodeURIComponent(targetWorld)}` : `/api/advancements/player/${encodeURIComponent(username)}`;
@@ -636,7 +660,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentAdvancements = data.advancements;
       renderAdvancementsList();
     } catch (e) {
-      container.innerHTML = `<p class="p-6 text-center text-xs text-rose-400">Error al cargar logros: ${esc(e.message)}</p>`;
+      container.innerHTML = `<p class="py-6 text-[#f3a79b]">No pudimos leer los logros. ${esc(e.message)}</p>`;
     }
   };
 
@@ -657,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btn-adv-revoke-all')?.addEventListener('click', async () => {
     if (!currentAdvPlayer) return;
     const worldMsg = currentAdvWorld ? ` en el mundo "${currentAdvWorld}"` : '';
-    if (!confirm(`¿Estás seguro de que querés reiniciar TODOS los logros de "${currentAdvPlayer}"${worldMsg}? Se borrará todo el árbol de Vanilla y mods.`)) return;
+    if (!confirm(`¿Borrar todos los logros de ${currentAdvPlayer}${worldMsg}? Pierde todo su progreso, también el de los mods, y no se puede deshacer.`)) return;
 
     try {
       const res = await Panel.api('/api/advancements/revoke', {
@@ -702,13 +726,13 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btn-adv-quick-revoke-root')?.addEventListener('click', async (e) => {
     const btn = e.target;
     if (!currentAdvPlayer) {
-      Panel.toast('Seleccioná un jugador primero.', 'warning');
+      Panel.toast('Elegí un jugador primero.', 'warning');
       return;
     }
     const inp = $('#adv-quick-root-input');
     const targetId = (inp?.value || '').trim();
     if (!targetId) {
-      Panel.toast('Ingresá una raíz o ID de avance.', 'warning');
+      Panel.toast('Escribí qué rama querés quitar.', 'warning');
       return;
     }
 
@@ -733,7 +757,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!btn || !currentAdvPlayer) return;
     const advId = btn.dataset.revokeAdv;
 
-    if (!confirm(`¿Quitar el logro "${advId}" a ${currentAdvPlayer}?`)) return;
+    if (!confirm(`¿Quitarle el logro "${advId}" a ${currentAdvPlayer}? Lo puede volver a conseguir jugando.`)) return;
 
     btn.disabled = true;
     try {
@@ -754,7 +778,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btn-adv-custom-revoke')?.addEventListener('click', async () => {
     const id = $('#adv-custom-id').value.trim();
     if (!id || !currentAdvPlayer) {
-      Panel.toast('Ingresá el ID del logro a quitar.', 'error');
+      Panel.toast('Elegí un jugador y escribí el logro que querés quitar.', 'error');
       return;
     }
     try {
@@ -773,7 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btn-adv-custom-grant')?.addEventListener('click', async () => {
     const id = $('#adv-custom-id').value.trim();
     if (!id || !currentAdvPlayer) {
-      Panel.toast('Ingresá el ID del logro a otorgar.', 'error');
+      Panel.toast('Elegí un jugador y escribí el logro que querés dar.', 'error');
       return;
     }
     try {

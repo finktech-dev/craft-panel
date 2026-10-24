@@ -1,34 +1,133 @@
 {% extends "base.html" %}
-{% block title %}Configurá tu servidor · Panel local de Minecraft{% endblock %}
+{% from "_icons.html" import pixel %}
+{% block title %}Armá tu servidor · Craft Panel{% endblock %}
 {% block content %}
-<section class="mx-auto max-w-3xl" aria-labelledby="onboarding-title">
-  <div class="mb-8 border-b border-zinc-800 pb-6"><p class="text-sm font-semibold text-emerald-300">Tu primer servidor</p><h1 id="onboarding-title" class="mt-1 text-3xl font-bold">Vamos a dejarlo listo para jugar</h1><p class="mt-2 text-sm leading-6 text-zinc-400">Un paso a la vez. Nunca reemplazamos tus mundos ni tu configuración existente.</p></div>
-  <ol class="mb-7 grid grid-cols-4 gap-2 text-center text-xs text-zinc-500" aria-label="Pasos de configuración"><li data-step-indicator="java" class="rounded-lg border border-zinc-800 p-2">1. Java</li><li data-step-indicator="server" class="rounded-lg border border-zinc-800 p-2">2. Servidor</li><li data-step-indicator="connection" class="rounded-lg border border-zinc-800 p-2">3. Amigos</li><li data-step-indicator="ready" class="rounded-lg border border-zinc-800 p-2">4. Jugar</li></ol>
-  <div id="onboarding-loading" class="v2-card p-6 text-zinc-400" aria-live="polite">Revisando tu computadora…</div>
-  <div id="onboarding-error" class="hidden rounded-xl border border-rose-400/30 bg-rose-950/30 p-5 text-rose-100" role="alert"></div>
-  <article data-step="java" class="onboarding-step hidden v2-card p-6"><h2 class="text-xl font-bold">Primero, revisá Java</h2><p id="java-message" class="mt-3 text-sm leading-6 text-zinc-400"></p><p class="mt-4 text-sm text-zinc-500">Los servidores de Minecraft necesitan una versión compatible de Java. La versión exacta depende de Minecraft: 1.20.5 o superior suele requerir Java 21; 1.18–1.20.4, Java 17; versiones más viejas pueden necesitar otra versión. Si no querés instalarlo en Windows/macOS/Linux, descargá una versión compatible, descomprimila dentro de <code>tools/java</code> y verificá que exista <code>tools/java/bin/java</code> (o <code>java.exe</code>).</p><div class="mt-6 flex flex-wrap gap-3"><button id="download-java" type="button" class="v2-button bg-emerald-400 text-emerald-950">Descargar Java compatible</button><a href="https://adoptium.net/temurin/releases/" target="_blank" rel="noreferrer" class="v2-button border border-zinc-700 bg-zinc-900">Elegirlo yo</a><button data-refresh type="button" class="v2-button border border-zinc-700 bg-zinc-900">Ya lo instalé</button></div><p id="java-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p></article>
-  <article data-step="server" class="onboarding-step hidden v2-card p-6"><h2 class="text-xl font-bold">Elegí el tipo de servidor</h2><p class="mt-2 text-sm leading-6 text-zinc-400">Elegí uno. Más adelante podés agregar mods; esto solo descarga los archivos necesarios.</p><fieldset class="mt-5 grid gap-3 sm:grid-cols-2"><label class="rounded-xl border border-zinc-700 p-4"><input type="radio" name="flavor" value="vanilla" checked><span class="ml-2 font-semibold">Vanilla</span><span class="mt-2 block text-xs text-zinc-500">Minecraft normal</span></label><label class="rounded-xl border border-zinc-700 p-4"><input type="radio" name="flavor" value="neoforge"><span class="ml-2 font-semibold">NeoForge</span><span class="mt-2 block text-xs text-zinc-500">Para muchos mods</span></label><label class="rounded-xl border border-zinc-700 p-4"><input type="radio" name="flavor" value="fabric"><span class="ml-2 font-semibold">Fabric</span><span class="mt-2 block text-xs text-zinc-500">Para mods de Fabric</span></label><label class="rounded-xl border border-zinc-700 p-4"><input type="radio" name="flavor" value="import"><span class="ml-2 font-semibold">Importar existente</span><span class="mt-2 block text-xs text-zinc-500">Ya tenés un servidor o mundo</span></label></fieldset><div id="install-new-server"><label class="mt-5 block text-sm font-semibold" for="minecraft-version">Versión de Minecraft<select id="minecraft-version" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3"></select></label><label class="mt-5 flex items-start gap-3 rounded-lg border border-amber-400/25 bg-amber-400/5 p-4 text-sm"><input id="accept-eula" type="checkbox" class="mt-1 h-4 w-4 accent-amber-400"><span>Acepto la <a class="text-amber-200 underline" href="https://aka.ms/MinecraftEULA" target="_blank" rel="noreferrer">EULA de Minecraft</a>.</span></label><button id="install-server" type="button" class="v2-button mt-5 bg-emerald-400 text-emerald-950">Instalar mi servidor</button></div><div id="import-existing-server" class="hidden mt-5 rounded-lg border border-sky-400/20 bg-sky-400/5 p-4 text-sm text-sky-100"><p class="font-semibold">No vamos a mover ni modificar tus archivos.</p><p class="mt-2 leading-6">Copiá la carpeta de tu servidor existente dentro de <code class="rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-100">server</code>, en la raíz de este proyecto. Tiene que incluir su script de inicio (<code>run.bat</code> en Windows o <code>run.sh</code> en macOS/Linux). Después volvé acá.</p><button id="check-imported-server" type="button" class="v2-button mt-4 border border-zinc-700 bg-zinc-900">Ya lo copié: revisar</button></div><p id="install-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p></article>
-  <article data-step="connection" class="onboarding-step hidden v2-card p-6">
-    <h2 class="text-xl font-bold">Dejá que se sumen tus amigos</h2>
-    <p class="mt-2 text-sm leading-6 text-zinc-400">Playit crea una dirección para que puedan entrar desde afuera de tu casa. Es gratis y no tenés que tocar la configuración de tu router.</p>
-    <ol class="mt-5 space-y-3 text-sm leading-6 text-zinc-300">
-      <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-400 font-bold text-emerald-950">1</span><span>Tocá <strong>“Abrir Playit y vincular”</strong>.</span></li>
-      <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-zinc-600 font-bold text-zinc-200">2</span><span>En la página que se abre, iniciá sesión o creá una cuenta y aprobá esta computadora.</span></li>
-      <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-zinc-600 font-bold text-zinc-200">3</span><span>Volvé a esta pestaña y tocá <strong>“Ya la vinculé: verificar”</strong>.</span></li>
-    </ol>
-    <p class="mt-5 text-xs leading-5 text-zinc-500">Tu contraseña se escribe solamente en Playit. El panel guarda una clave local para conectar este servidor.</p>
-    <button id="begin-playit-onboarding" type="button" class="v2-button mt-5 bg-emerald-400 text-emerald-950">1. Abrir Playit y vincular</button>
-    <div id="playit-claim" class="hidden mt-4 rounded-lg border border-sky-400/20 bg-sky-400/5 p-4 text-sm text-sky-100">
-      <p class="font-semibold">Paso 2 de 3: aprobá esta computadora en Playit.</p>
-      <p class="mt-2 leading-6 text-sky-100/80">Si todavía no tenés cuenta, podés crearla allí. Cuando Playit confirme la vinculación, volvé a esta pestaña.</p>
-      <a id="playit-claim-link" target="_blank" rel="noreferrer" class="mt-3 inline-flex font-semibold text-emerald-300 underline"></a>
-      <button id="complete-playit-claim" type="button" class="v2-button mt-4 border border-zinc-700 bg-zinc-900">3. Ya la vinculé: verificar</button>
+<section class="mx-auto max-w-2xl" aria-labelledby="onboarding-title">
+  <header class="pb-8">
+    {{ pixel('grass', 48) }}
+    <h1 id="onboarding-title" class="font-display mt-5 text-4xl font-semibold leading-tight text-zinc-50">Vamos a armar tu servidor</h1>
+    <p class="mt-3 text-lg leading-relaxed text-zinc-400">Son cuatro pasos. No borramos ni cambiamos nada que ya tengas.</p>
+  </header>
+
+  <ol class="mb-10 grid grid-cols-4 gap-2" aria-label="Pasos">
+    <li data-step-indicator="java" class="onboarding-progress"><span class="step-mark">1</span><span>Preparar</span></li>
+    <li data-step-indicator="server" class="onboarding-progress"><span class="step-mark">2</span><span>Elegir el juego</span></li>
+    <li data-step-indicator="connection" class="onboarding-progress"><span class="step-mark">3</span><span>Amigos</span></li>
+    <li data-step-indicator="ready" class="onboarding-progress"><span class="step-mark">4</span><span>Jugar</span></li>
+  </ol>
+
+  <p id="onboarding-loading" class="text-zinc-400" aria-live="polite">Revisando tu computadora…</p>
+  <p id="onboarding-error" class="hidden rounded-xl bg-[#ec7a6a]/10 p-4 text-[#f3a79b]" role="alert"></p>
+
+  <!-- Step 1 -->
+  <article data-step="java" class="onboarding-step hidden">
+    <h2 class="text-2xl font-semibold text-zinc-50">Preparar tu computadora</h2>
+    <p class="mt-2 leading-relaxed text-zinc-400">Minecraft necesita un programa llamado Java para funcionar. Lo descargamos por vos y queda dentro de esta carpeta, sin instalar nada en el sistema.</p>
+    <p id="java-message" class="mt-3 text-sm text-zinc-500"></p>
+    <div class="mt-6 flex flex-wrap items-center gap-3">
+      <button id="download-java" type="button" class="v2-button btn-primary">Descargar lo necesario</button>
+      <button data-refresh type="button" class="v2-button btn-quiet">Ya lo tengo instalado</button>
     </div>
-    <div class="mt-5"><button id="show-manual-playit" type="button" class="text-sm text-zinc-500 underline">¿Ya tenés un secreto de agente?</button><div id="manual-playit-secret" class="hidden mt-3 rounded-lg border border-zinc-800 p-4"><label class="block text-sm font-semibold" for="onboarding-playit-secret">Secreto del agente<input id="onboarding-playit-secret" type="password" autocomplete="off" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3" placeholder="Pegá el secreto de tu agente de Playit"></label><button id="connect-playit-onboarding" type="button" class="v2-button mt-4 border border-zinc-700 bg-zinc-900">Usar este secreto</button></div></div>
-    <details class="mt-5 rounded-lg border border-zinc-800 p-4"><summary class="cursor-pointer font-semibold">¿Solo van a jugar en esta red Wi-Fi?</summary><p class="mt-2 text-sm text-zinc-400">Podés saltear Playit. Los amigos que estén fuera de tu casa no van a poder entrar.</p><button id="local-only-onboarding" type="button" class="v2-button mt-3 border border-zinc-700 bg-zinc-900">Usar solo red local</button></details>
-    <p id="connection-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p>
+    <div id="java-progress" class="mt-5 hidden max-w-xl"></div>
+    <p id="java-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p>
+    <details class="mt-6 text-sm text-zinc-400">
+      <summary class="cursor-pointer hover:text-zinc-200">Prefiero instalar Java yo</summary>
+      <p class="mt-2 leading-relaxed">Descargá Java de <a class="link" href="https://adoptium.net/temurin/releases/" target="_blank" rel="noopener noreferrer">Adoptium</a> (Minecraft 1.20.5 o más nuevo usa Java 21) y descomprimilo dentro de <span class="font-mono text-zinc-300">tools/java</span>. Después tocá "Ya lo tengo instalado".</p>
+    </details>
   </article>
-  <article data-step="ready" class="onboarding-step hidden v2-card p-6"><h2 class="text-xl font-bold">Listo para jugar</h2><p class="mt-2 text-sm leading-6 text-zinc-400">Elegí la memoria y después iniciá. El primer inicio crea tu mundo. Luego, hacé una copia de seguridad antes de cambiar mods o ajustes.</p><label class="mt-5 block text-sm font-semibold" for="onboarding-ram">Memoria para Minecraft<select id="onboarding-ram" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3"></select><span id="onboarding-ram-hint" class="mt-2 block text-xs text-zinc-500"></span></label><div class="mt-5 rounded-lg border border-sky-400/20 bg-sky-400/5 p-4 text-sm text-sky-100"><strong>Cuidá a tus amigos.</strong> Dejá activadas las cuentas online o activá la lista blanca antes de compartir tu dirección.</div><button id="start-from-onboarding" type="button" class="v2-button mt-5 bg-emerald-400 text-emerald-950">Iniciar mi servidor</button><p id="ready-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p></article>
+
+  <!-- Step 2 -->
+  <article data-step="server" class="onboarding-step hidden">
+    <h2 class="text-2xl font-semibold text-zinc-50">¿Cómo quieren jugar?</h2>
+    <p class="mt-2 leading-relaxed text-zinc-400">Podés cambiar de idea más adelante. Esto solo descarga lo que hace falta.</p>
+    <fieldset class="mt-6 space-y-2">
+      <legend class="sr-only">Tipo de servidor</legend>
+      <label class="choice-row"><input type="radio" name="flavor" value="vanilla" checked><span><strong>Minecraft normal</strong><small>Sin mods, como lo conocés.</small></span></label>
+      <label class="choice-row"><input type="radio" name="flavor" value="neoforge"><span><strong>Con mods</strong><small>La opción más usada para modpacks. Usa NeoForge.</small></span></label>
+      <label class="choice-row"><input type="radio" name="flavor" value="fabric"><span><strong>Con mods livianos</strong><small>Para mods de Fabric, como los de rendimiento.</small></span></label>
+      <label class="choice-row"><input type="radio" name="flavor" value="import"><span><strong>Ya tengo un servidor</strong><small>Usá uno que armaste antes o que te pasaron.</small></span></label>
+    </fieldset>
+
+    <div id="install-new-server" class="mt-6">
+      <label class="block font-semibold text-zinc-100" for="minecraft-version">Versión de Minecraft</label>
+      <p class="mt-0.5 text-sm text-zinc-500">Tiene que ser la misma que usan tus amigos para jugar.</p>
+      <select id="minecraft-version" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none focus:border-emerald-400"></select>
+      <label class="mt-5 flex items-start gap-3 text-zinc-300"><input id="accept-eula" type="checkbox" class="mt-1 h-4 w-4"><span>Acepto las <a class="link" href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener noreferrer">reglas de uso de Minecraft (EULA)</a>.</span></label>
+      <button id="install-server" type="button" class="v2-button btn-primary mt-6">Instalar</button>
+      <div id="install-progress" class="mt-5 hidden max-w-xl"></div>
+    </div>
+
+    <div id="import-existing-server" class="mt-6 hidden">
+      <p class="leading-relaxed text-zinc-300">Copiá la carpeta de tu servidor dentro de la carpeta <span class="font-mono text-zinc-100">server</span> de Craft Panel. Tiene que tener su archivo de inicio (<span class="font-mono">run.bat</span> en Windows). No vamos a mover ni cambiar tus archivos.</p>
+      <button id="check-imported-server" type="button" class="v2-button btn-primary mt-5">Ya lo copié</button>
+    </div>
+    <p id="install-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p>
+  </article>
+
+  <!-- Step 3 -->
+  <article data-step="connection" class="onboarding-step hidden">
+    <h2 class="text-2xl font-semibold text-zinc-50">¿Quién puede entrar?</h2>
+    <p class="mt-2 leading-relaxed text-zinc-400">Escribí el nombre de Minecraft de cada amigo, y el tuyo también. Desde que agregues al primero, solo las personas de la lista van a poder entrar.</p>
+    <form id="friends-form" class="mt-5 flex gap-2">
+      <label for="friend-name" class="sr-only">Nombre de Minecraft</label>
+      <input id="friend-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Nombre de Minecraft" class="min-h-11 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400">
+      <button type="submit" class="v2-button btn-quiet">Agregar</button>
+    </form>
+    <p id="friends-feedback" class="mt-2 text-sm text-zinc-400" aria-live="polite"></p>
+    <ul id="friends-list" class="mt-3 flex flex-wrap gap-2"></ul>
+
+    <section id="internet-access" class="mt-10 border-t border-zinc-800 pt-8" aria-labelledby="internet-title">
+      <h3 id="internet-title" class="text-lg font-semibold text-zinc-50">Para jugar desde otras casas</h3>
+      <p class="mt-1 leading-relaxed text-zinc-400">Usamos Playit, un servicio gratis que le da a tu servidor una dirección para compartir. No hace falta tocar el router.</p>
+      <p id="playit-done" class="mt-4 hidden text-emerald-300">Listo, ya está conectado.</p>
+      <div id="playit-steps">
+        <ol class="mt-4 list-decimal space-y-1 pl-5 text-zinc-300">
+          <li>Tocá "Conectar con Playit".</li>
+          <li>En la página que se abre, entrá o creá una cuenta y aprobá esta computadora.</li>
+          <li>Volvé acá y tocá "Ya lo aprobé".</li>
+        </ol>
+        <button id="begin-playit-onboarding" type="button" class="v2-button btn-quiet mt-5">Conectar con Playit</button>
+        <div id="playit-claim" class="mt-4 hidden">
+          <a id="playit-claim-link" target="_blank" rel="noopener noreferrer" class="link"></a>
+          <div><button id="complete-playit-claim" type="button" class="v2-button btn-quiet mt-3">Ya lo aprobé</button></div>
+        </div>
+        <details class="mt-5 text-sm text-zinc-400">
+          <summary class="cursor-pointer hover:text-zinc-200">Otras opciones</summary>
+          <div class="mt-3 space-y-5">
+            <div>
+              <button id="show-manual-playit" type="button" class="link">Tengo una clave de agente de Playit</button>
+              <div id="manual-playit-secret" class="mt-3 hidden">
+                <label class="block" for="onboarding-playit-secret">Clave del agente</label>
+                <input id="onboarding-playit-secret" type="password" autocomplete="off" placeholder="Pegá la clave" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none focus:border-emerald-400">
+                <button id="connect-playit-onboarding" type="button" class="v2-button btn-quiet mt-3">Usar esta clave</button>
+              </div>
+            </div>
+            <div>
+              <p>¿Solo van a jugar conectados al mismo Wi-Fi? Podés saltear Playit; los amigos de otras casas no van a poder entrar.</p>
+              <button id="local-only-onboarding" type="button" class="v2-button btn-quiet mt-3">Jugar solo en esta casa</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+    <p id="connection-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p>
+    <div class="mt-10 border-t border-zinc-800 pt-6">
+      <button id="friends-continue" type="button" class="v2-button btn-primary">Seguir</button>
+    </div>
+  </article>
+
+  <!-- Step 4 -->
+  <article data-step="ready" class="onboarding-step hidden">
+    <h2 class="text-2xl font-semibold text-zinc-50">¡Todo listo para jugar!</h2>
+    <p class="mt-2 leading-relaxed text-zinc-400">La primera vez tarda un poco más porque se crea el mundo. Cuando termine, hacemos una copia automática.</p>
+    <label class="mt-6 block font-semibold text-zinc-100" for="onboarding-ram">Memoria para el juego</label>
+    <p id="onboarding-ram-hint" class="mt-0.5 text-sm text-zinc-500"></p>
+    <select id="onboarding-ram" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none focus:border-emerald-400"></select>
+    <button id="start-from-onboarding" type="button" class="v2-button btn-primary mt-6 px-6 text-base">Encender mi servidor</button>
+    <div id="start-progress" class="mt-5 hidden max-w-xl"></div>
+    <p id="ready-feedback" class="mt-4 leading-relaxed text-zinc-300" aria-live="polite"></p>
+    <a id="onboarding-done" href="/" class="link mt-2 hidden">Ir al inicio</a>
+  </article>
 </section>
 {% endblock %}
-{% block scripts %}<script defer src="/static/js/onboarding.js"></script>{% endblock %}
+{% block scripts %}<script defer src="/static/js/jobs.js"></script><script defer src="/static/js/onboarding.js"></script>{% endblock %}

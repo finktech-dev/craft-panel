@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+import asyncio
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 
 from app.core.security import get_current_admin
+from app.core.rate_limit import rate_limit
 from app.schemas.mod import (
     ClientPackExportResponse,
     ModBulkActionRequest,
     ModBulkActionResponse,
     ModEnvironmentResponse,
+    ModHistoryDetail,
+    ModHistoryEntry,
+    ModHistoryRestoreRequest,
+    ModHistoryRestoreResponse,
     ModInstallRequest,
     ModItem,
     ModrinthSearchHit,
     ModToggleResponse,
     ModUpdateItem,
 )
+from app.services.mod_history_service import ModHistoryError
 from app.services.mod_service import ModServiceError, mod_service
 
 router = APIRouter(prefix="/mods", tags=["mods"], dependencies=[Depends(get_current_admin)])
@@ -32,12 +40,14 @@ async def list_mods() -> list[ModItem]:
 async def get_mod_environment() -> ModEnvironmentResponse:
     env = mod_service.get_environment()
     return ModEnvironmentResponse(
-        loader=env["loader"],
-        minecraft_version=env["minecraft_version"],
+        loader=env["loader"] or None,
+        minecraft_version=env["minecraft_version"] or None,
+        loader_version=env["loader_version"] or None,
+        label=env["label"] or None,
     )
 
 
-@router.get("/updates", response_model=list[ModUpdateItem])
+@router.get("/updates", response_model=list[ModUpdateItem], dependencies=[Depends(rate_limit("mods-updates", 6, 60))])
 async def check_mod_updates() -> list[ModUpdateItem]:
     try:
         return await mod_service.check_updates()
@@ -45,11 +55,11 @@ async def check_mod_updates() -> list[ModUpdateItem]:
         _raise_mod_error(error)
 
 
-@router.get("/search", response_model=list[ModrinthSearchHit])
+@router.get("/search", response_model=list[ModrinthSearchHit], dependencies=[Depends(rate_limit("mods-search", 30, 60))])
 async def search_modrinth(
-    query: str,
-    loader: str | None = None,
-    game_version: str | None = None,
+    query: str = Query(max_length=100),
+    loader: str | None = Query(default=None, max_length=32),
+    game_version: str | None = Query(default=None, max_length=32),
 ) -> list[ModrinthSearchHit]:
     try:
         return await mod_service.search_modrinth(query, loader=loader, game_version=game_version)
@@ -73,7 +83,12 @@ async def upload_mod(file: UploadFile = File(...)) -> ModItem:
         _raise_mod_error(error)
 
 
-@router.post("/install", response_model=ModItem, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/install",
+    response_model=ModItem,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("mods-install", 20, 60))],
+)
 async def install_modrinth_mod(payload: ModInstallRequest) -> ModItem:
     try:
         return await mod_service.install_modrinth_mod(
@@ -82,12 +97,17 @@ async def install_modrinth_mod(payload: ModInstallRequest) -> ModItem:
             loader=payload.loader,
             game_version=payload.game_version,
             install_dependencies=payload.install_dependencies,
+            replace_filename=payload.replace_filename,
         )
     except ModServiceError as error:
         _raise_mod_error(error)
 
 
-@router.post("/export-client-pack", response_model=ClientPackExportResponse)
+@router.post(
+    "/export-client-pack",
+    response_model=ClientPackExportResponse,
+    dependencies=[Depends(rate_limit("mods-export", 6, 60))],
+)
 async def export_client_pack() -> ClientPackExportResponse:
     try:
         export_path = await mod_service.export_client_pack()
@@ -112,6 +132,43 @@ async def download_client_pack() -> FileResponse:
     )
 
 
+@router.get("/history", response_model=list[ModHistoryEntry])
+async def list_mod_history() -> list[ModHistoryEntry]:
+    try:
+        entries = await asyncio.to_thread(mod_service.history.list_history)
+    except ModHistoryError as error:
+        _raise_history_error(error)
+    return [ModHistoryEntry(**entry) for entry in entries]
+
+
+@router.get("/history/{snapshot_id}", response_model=ModHistoryDetail)
+async def get_mod_history(snapshot_id: str) -> ModHistoryDetail:
+    try:
+        entry = await asyncio.to_thread(mod_service.history.get_history, snapshot_id)
+    except ModHistoryError as error:
+        _raise_history_error(error)
+    return ModHistoryDetail(**entry)
+
+
+@router.post(
+    "/history/{snapshot_id}/restore",
+    response_model=ModHistoryRestoreResponse,
+    dependencies=[Depends(rate_limit("mods-history-restore", 6, 60))],
+)
+async def restore_mod_history(snapshot_id: str, payload: ModHistoryRestoreRequest) -> ModHistoryRestoreResponse:
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirmá que querés volver a este punto.",
+        )
+    # Synchronous on purpose: the rollback holds the history lock until the folder is consistent.
+    try:
+        result = await asyncio.to_thread(mod_service.history.restore, snapshot_id)
+    except ModHistoryError as error:
+        _raise_history_error(error)
+    return ModHistoryRestoreResponse(**result)
+
+
 # 2. RUTAS PARAMETRIZADAS DINÁMICAS AL FINAL
 @router.post("/{filename}/toggle", response_model=ModToggleResponse)
 async def toggle_mod(filename: str) -> ModToggleResponse:
@@ -130,4 +187,8 @@ async def delete_mod(filename: str) -> None:
 
 
 def _raise_mod_error(error: ModServiceError) -> None:
+    raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+def _raise_history_error(error: ModHistoryError) -> None:
     raise HTTPException(status_code=error.status_code, detail=str(error)) from error

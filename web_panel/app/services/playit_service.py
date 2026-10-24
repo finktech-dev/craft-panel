@@ -10,22 +10,23 @@ import re
 import secrets
 import subprocess
 import time
-import uuid
 from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-import aiofiles
 import httpx
 
 from app.core.config import Settings, settings
+from app.core.net_safety import PLAYIT_HOSTS, allowed_client, download_to_file
+from app.core.path_safety import write_private_text
 from app.schemas.runtime import TunnelLogLine, TunnelStatus
 from app.websocket.manager import ConnectionManager, connection_manager
 
 logger = logging.getLogger(__name__)
 _RELEASE_API_URL = "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
 _PLAYIT_API = "https://api.playit.gg"
+_MAX_AGENT_BYTES = 128 * 1024 * 1024
 _PUBLIC_ADDRESS: Final[re.Pattern[str]] = re.compile(
     r"\b(?:[a-z0-9-]+\.)+(?:joinmc\.link|playit\.gg|ply\.gg)(?::\d{2,5})?\b",
     re.IGNORECASE,
@@ -76,6 +77,8 @@ class PlayitService:
                 ("sc.exe", "query", "playitd"),
                 capture_output=True,
                 text=True,
+                # sc.exe prints localized text in the OEM code page.
+                errors="replace",
                 timeout=1,
                 check=False,
             )
@@ -148,7 +151,7 @@ class PlayitService:
                 return self.status()
             code = secrets.token_hex(16)
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+                async with allowed_client(PLAYIT_HOSTS, timeout=20.0, follow_redirects=False) as client:
                     response = await client.post(
                         f"{_PLAYIT_API}/claim/setup",
                         json={"code": code, "agent_type": "self-managed", "version": "minecraft-panel"},
@@ -170,7 +173,7 @@ class PlayitService:
             if not code:
                 raise PlayitServiceError("No hay una vinculación de Playit pendiente.")
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+                async with allowed_client(PLAYIT_HOSTS, timeout=20.0, follow_redirects=False) as client:
                     response = await client.post(f"{_PLAYIT_API}/claim/exchange", json={"code": code})
                     response.raise_for_status()
                     payload = response.json()
@@ -226,23 +229,19 @@ class PlayitService:
             return
         await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+            async with allowed_client(PLAYIT_HOSTS, timeout=120.0) as client:
                 release = await client.get(_RELEASE_API_URL, headers={"Accept": "application/vnd.github+json"})
                 release.raise_for_status()
-                download_url = self._select_asset(release.json())
-                temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.download")
-                try:
-                    async with client.stream("GET", download_url, follow_redirects=True, timeout=120.0) as response:
-                        response.raise_for_status()
-                        async with aiofiles.open(temporary, "wb") as file:
-                            async for chunk in response.aiter_bytes(64 * 1024):
-                                await file.write(chunk)
-                    await asyncio.to_thread(os.replace, temporary, target)
-                    if os.name != "nt":
-                        await asyncio.to_thread(os.chmod, target, 0o700)
-                finally:
-                    if temporary.exists():
-                        await asyncio.to_thread(temporary.unlink)
+                download_url, sha256 = self._select_asset(release.json())
+                await download_to_file(
+                    client,
+                    download_url,
+                    target,
+                    max_bytes=_MAX_AGENT_BYTES,
+                    expected_hash=("sha256", sha256) if sha256 else None,
+                )
+                if os.name != "nt":
+                    await asyncio.to_thread(os.chmod, target, 0o700)
         except (httpx.HTTPError, OSError, ValueError) as error:
             raise PlayitServiceError("No se pudo descargar Playit desde su release oficial.") from error
 
@@ -267,13 +266,10 @@ class PlayitService:
 
     @staticmethod
     def _write_secret(path: Path, secret: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(secret, encoding="utf-8")
-        os.replace(temporary, path)
+        write_private_text(path, secret)
 
     @staticmethod
-    def _select_asset(release: dict[str, object]) -> str:
+    def _select_asset(release: dict[str, object]) -> tuple[str, str | None]:
         """Pick the official portable agent for the current supported host."""
         assets = release.get("assets", [])
         if not isinstance(assets, list):
@@ -304,9 +300,12 @@ class PlayitService:
         if not candidates:
             raise ValueError(f"No hay un binario Playit compatible para {system} {architecture}.")
         url = candidates[0].get("browser_download_url")
-        if not isinstance(url, str) or not url.startswith("https://github.com/"):
+        if not isinstance(url, str) or not url.startswith("https://github.com/playit-cloud/"):
             raise ValueError("URL de descarga Playit inválida.")
-        return url
+        # GitHub publishes "sha256:<hex>" digests for release assets.
+        digest = candidates[0].get("digest")
+        sha256 = digest.removeprefix("sha256:") if isinstance(digest, str) and digest.startswith("sha256:") else None
+        return url, sha256 if sha256 and len(sha256) == 64 else None
 
     async def _read_output(self, stream: asyncio.StreamReader) -> None:
         async for raw_line in stream:

@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.security import get_current_admin
+from app.core.rate_limit import rate_limit
 from app.schemas.runtime import TunnelLogLine, TunnelSetupRequest, TunnelStatus
 from app.services.playit_service import PlayitServiceError, playit_service
 
@@ -20,7 +21,7 @@ async def tunnel_logs() -> tuple[TunnelLogLine, ...]:
     return playit_service.history
 
 
-@router.post("/begin-claim", response_model=TunnelStatus)
+@router.post("/begin-claim", response_model=TunnelStatus, dependencies=[Depends(rate_limit("playit-claim", 10, 300))])
 async def begin_tunnel_claim() -> TunnelStatus:
     try:
         return await playit_service.begin_claim()
@@ -28,7 +29,7 @@ async def begin_tunnel_claim() -> TunnelStatus:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
-@router.post("/complete-claim", response_model=TunnelStatus)
+@router.post("/complete-claim", response_model=TunnelStatus, dependencies=[Depends(rate_limit("playit-complete", 30, 300))])
 async def complete_tunnel_claim() -> TunnelStatus:
     try:
         return await playit_service.complete_claim()

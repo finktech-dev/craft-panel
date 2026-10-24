@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
+import re
 import tomllib
 import uuid
 import zipfile
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
@@ -17,7 +19,10 @@ import aiofiles
 import httpx
 from fastapi import UploadFile
 
+from app.core.archive_safety import read_member_capped
 from app.core.config import Settings, settings
+from app.core.net_safety import MODRINTH_HOSTS, allowed_client, download_to_file, is_allowed_url
+from app.core.path_safety import is_safe_component
 from app.schemas.mod import (
     ModBulkActionResponse,
     ModItem,
@@ -25,14 +30,21 @@ from app.schemas.mod import (
     ModToggleResponse,
     ModUpdateItem,
 )
+from app.services.mod_history_service import HistoryToken, ModHistoryService, is_mod_filename
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 from app.services.server_process import MinecraftServerManager, server_manager
+from app.services.server_version_service import ServerVersionService
 
 logger = logging.getLogger(__name__)
 _MEBIBYTE: Final = 1024 * 1024
 _MODRINTH_API: Final = "https://api.modrinth.com/v2"
 _MAX_UPLOAD_BYTES: Final = 1_024 * _MEBIBYTE
 _DOWNLOAD_CHUNK_SIZE: Final = 64 * 1024
+_MAX_METADATA_BYTES: Final = 1 * _MEBIBYTE
+_MAX_DEPENDENCY_INSTALLS: Final = 30
+# Modrinth project/version IDs are base62; slugs add "-", "_" and ".".
+_MODRINTH_ID: Final = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_ZIP_MAGIC: Final = (b"PK\x03\x04", b"PK\x05\x06")
 SERVER_ONLY_MODS: Final[frozenset[str]] = frozenset({
     "chunky",
     "bluemap",
@@ -74,12 +86,31 @@ class ModService:
     ) -> None:
         self._settings = configured_settings
         self._manager = manager
+        self._versions = ServerVersionService(configured_settings)
+        self.history = ModHistoryService(configured_settings, manager)
 
     def _require_server_stopped(self, operation: str) -> None:
         try:
             require_server_stopped(self._manager, operation)
         except ServerActiveError as error:
             raise ModConflictError(str(error)) from error
+
+    @contextlib.asynccontextmanager
+    async def _history_step(self, action: str, detail: dict[str, Any] | None = None) -> AsyncIterator[HistoryToken | None]:
+        """Snapshot the mods folder before a change; history problems never block the change."""
+        token: HistoryToken | None = None
+        try:
+            token = await asyncio.to_thread(self.history.begin, action, detail)
+        except Exception as error:
+            logger.warning("No se pudo guardar el historial de mods antes de %s: %s", action, error)
+        try:
+            yield token
+        finally:
+            if token is not None:
+                try:
+                    await asyncio.to_thread(self.history.finish, token)
+                except Exception as error:
+                    logger.warning("No se pudo completar el historial de mods: %s", error)
 
     @property
     def mods_directory(self) -> Path:
@@ -92,6 +123,10 @@ class ModService:
         return self._settings.client_pack_directory / self._settings.client_pack_filename
 
     async def list_mods(self) -> list[ModItem]:
+        try:
+            await asyncio.to_thread(self.history.record_external_changes)
+        except Exception as error:
+            logger.warning("No se pudo revisar si cambiaron los mods por fuera del panel: %s", error)
         if not self.mods_directory.is_dir():
             return []
         return await asyncio.to_thread(self._list_mods_sync)
@@ -109,7 +144,8 @@ class ModService:
             raise ModConflictError("Ya existe un mod con el nombre de destino.")
 
         try:
-            await asyncio.to_thread(source.rename, target)
+            async with self._history_step("toggle", {"filename": source.name}):
+                await asyncio.to_thread(source.rename, target)
         except FileExistsError as error:
             raise ModConflictError("Ya existe un mod con el nombre de destino.") from error
         except OSError as error:
@@ -138,11 +174,16 @@ class ModService:
         try:
             async with aiofiles.open(temporary_path, "wb") as target_file:
                 while chunk := await uploaded_file.read(_DOWNLOAD_CHUNK_SIZE):
+                    if written_bytes == 0 and not chunk.startswith(_ZIP_MAGIC):
+                        raise ModServiceError("El archivo no es un .jar válido.")
                     written_bytes += len(chunk)
                     if written_bytes > _MAX_UPLOAD_BYTES:
                         raise ModServiceError("El archivo supera el límite de 1024 MB.")
                     await target_file.write(chunk)
-            await asyncio.to_thread(temporary_path.rename, destination)
+            if not await asyncio.to_thread(zipfile.is_zipfile, temporary_path):
+                raise ModServiceError("El archivo no es un .jar válido.")
+            async with self._history_step("upload", {"filename": destination.name}):
+                await asyncio.to_thread(temporary_path.rename, destination)
         except FileExistsError as error:
             raise ModConflictError("Ya existe un mod con ese nombre.") from error
         except OSError as error:
@@ -160,13 +201,32 @@ class ModService:
         if not target.is_file():
             raise ModNotFoundError("No existe el mod indicado.")
         try:
-            await asyncio.to_thread(target.unlink)
+            async with self._history_step("delete", {"filename": target.name}):
+                await asyncio.to_thread(target.unlink)
         except OSError as error:
             raise ModServiceError(f"No se pudo eliminar el mod: {error}") from error
 
     async def bulk_action(self, action: str, filenames: list[str]) -> ModBulkActionResponse:
         """Aplica una acción en lote (enable, disable, delete) de forma segura."""
         self._require_server_stopped(f"operación en lote: {action}")
+        async with self._history_step(f"bulk_{action}", {"count": len(filenames)}):
+            affected, errors = await self._apply_bulk_action(action, filenames)
+
+        action_labels = {"enable": "habilitados", "disable": "deshabilitados", "delete": "eliminados"}
+        label = action_labels.get(action, action)
+        message = (
+            f"{affected} mods {label} correctamente."
+            if not errors
+            else f"{affected} mods {label}, con {len(errors)} advertencias."
+        )
+        return ModBulkActionResponse(
+            action=action,
+            affected_count=affected,
+            errors=errors,
+            message=message,
+        )
+
+    async def _apply_bulk_action(self, action: str, filenames: list[str]) -> tuple[int, list[str]]:
         affected = 0
         errors: list[str] = []
 
@@ -198,64 +258,20 @@ class ModService:
                     affected += 1
             except Exception as err:
                 errors.append(f"{name}: {err}")
-
-        action_labels = {"enable": "habilitados", "disable": "deshabilitados", "delete": "eliminados"}
-        label = action_labels.get(action, action)
-        message = (
-            f"{affected} mods {label} correctamente."
-            if not errors
-            else f"{affected} mods {label}, con {len(errors)} advertencias."
-        )
-        return ModBulkActionResponse(
-            action=action,
-            affected_count=affected,
-            errors=errors,
-            message=message,
-        )
+        return affected, errors
 
     def get_environment(self) -> dict[str, str]:
-        """Detecta dinámicamente el cargador de mods (loader) y versión de Minecraft del servidor."""
-        loader = "neoforge"
-        version = self._settings.minecraft_version or "1.21.1"
+        """Loader and Minecraft version of the installed server; empty strings when unknown.
 
-        server_root = self._settings.server_directory
-        if server_root and server_root.is_dir():
-            markers = {
-                "neoforge": server_root / "libraries" / "net" / "neoforged" / "neoforge",
-                "forge": server_root / "libraries" / "net" / "minecraftforge" / "forge",
-                "fabric": server_root / "fabric-server-launch.jar",
-                "paper": server_root / "paper.jar",
-                "vanilla": server_root / "server.jar",
-            }
-            for name, marker in markers.items():
-                if marker.exists():
-                    loader = name
-                    break
-
-            try:
-                neoforge_dir = server_root / "libraries" / "net" / "neoforged" / "neoforge"
-                if neoforge_dir.is_dir():
-                    versions = [p.name for p in neoforge_dir.iterdir() if p.is_dir()]
-                    if versions:
-                        latest_ver = sorted(versions)[-1]
-                        parts = latest_ver.split(".")
-                        if len(parts) >= 2 and parts[0].isdigit():
-                            loader = "neoforge"
-                            version = f"1.{parts[0]}.{parts[1]}" if parts[0] != "1" else latest_ver
-
-                forge_dir = server_root / "libraries" / "net" / "minecraftforge" / "forge"
-                if forge_dir.is_dir():
-                    versions = [p.name for p in forge_dir.iterdir() if p.is_dir()]
-                    if versions:
-                        latest_ver = sorted(versions)[-1]
-                        mc_part = latest_ver.split("-")[0]
-                        if mc_part.startswith("1."):
-                            loader = "forge"
-                            version = mc_part
-            except Exception:
-                pass
-
-        return {"loader": loader, "minecraft_version": version}
+        Empty values disable the matching Modrinth filter instead of guessing a version.
+        """
+        info = self._versions.detect()
+        return {
+            "loader": "" if info.loader == "unknown" else info.loader,
+            "minecraft_version": info.minecraft_version or "",
+            "loader_version": info.loader_version or "",
+            "label": info.label or "",
+        }
 
     async def search_modrinth(
         self,
@@ -285,7 +301,7 @@ class ModService:
             params["facets"] = json.dumps(facets)
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+            async with allowed_client(MODRINTH_HOSTS, timeout=20.0, follow_redirects=False) as client:
                 response = await client.get(f"{_MODRINTH_API}/search", params=params)
                 response.raise_for_status()
             hits = response.json().get("hits", [])
@@ -313,8 +329,44 @@ class ModService:
         game_version: str | None = None,
         install_dependencies: bool = True,
         visited_projects: set[str] | None = None,
+        replace_filename: str | None = None,
     ) -> ModItem:
+        """Install a Modrinth project (and its required dependencies).
+
+        ``replace_filename`` turns the install into an update: the old jar is
+        removed once the new one is in place. The whole step is one history entry.
+        """
         self._require_server_stopped("instalar mods")
+        if visited_projects is not None:
+            return await self._install_modrinth_mod(
+                project_id, version_id, loader, game_version, install_dependencies, visited_projects
+            )
+        replaced = self._resolve_mod_path(replace_filename) if replace_filename else None
+        action = "update" if replaced is not None else "install"
+        async with self._history_step(action, {"project_id": project_id}) as token:
+            item = await self._install_modrinth_mod(
+                project_id, version_id, loader, game_version, install_dependencies, None
+            )
+            if token is not None:
+                token.detail["filename"] = item.filename
+            if replaced is not None and replaced.name != item.filename and replaced.is_file():
+                try:
+                    await asyncio.to_thread(replaced.unlink)
+                except OSError as error:
+                    logger.warning("No se pudo quitar la versión anterior %s: %s", replaced.name, error)
+        return item
+
+    async def _install_modrinth_mod(
+        self,
+        project_id: str,
+        version_id: str | None,
+        loader: str | None,
+        game_version: str | None,
+        install_dependencies: bool,
+        visited_projects: set[str] | None,
+    ) -> ModItem:
+        if visited_projects is not None and len(visited_projects) > _MAX_DEPENDENCY_INSTALLS:
+            raise ModServiceError("El mod tiene demasiadas dependencias para instalarlas automáticamente.")
         version = await self._get_compatible_version(project_id, version_id, loader, game_version)
         file_data = self._select_download_file(version)
         filename = self._validate_filename(str(file_data.get("filename", "")))
@@ -327,24 +379,24 @@ class ModService:
             raise ModConflictError("Ese archivo ya está instalado.")
 
         download_url = file_data.get("url")
-        if not isinstance(download_url, str) or not download_url.startswith("https://"):
+        if not isinstance(download_url, str) or not is_allowed_url(download_url, MODRINTH_HOSTS):
             raise ModrinthServiceError("Modrinth no entregó una URL de descarga segura.")
+        expected_hash = self._expected_hash(file_data)
+        declared_size = file_data.get("size")
+        max_bytes = (
+            declared_size
+            if isinstance(declared_size, int) and 0 < declared_size <= _MAX_UPLOAD_BYTES
+            else _MAX_UPLOAD_BYTES
+        )
 
-        temporary_path = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.downloading")
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(90.0), follow_redirects=True) as client:
-                async with client.stream("GET", download_url) as response:
-                    response.raise_for_status()
-                    async with aiofiles.open(temporary_path, "wb") as target_file:
-                        async for chunk in response.aiter_bytes(_DOWNLOAD_CHUNK_SIZE):
-                            await target_file.write(chunk)
-            await asyncio.to_thread(temporary_path.rename, destination)
+            async with allowed_client(MODRINTH_HOSTS, timeout=90.0) as client:
+                await download_to_file(
+                    client, download_url, destination, max_bytes=max_bytes, expected_hash=expected_hash
+                )
         except (httpx.HTTPError, OSError) as error:
             logger.warning("Falló la descarga de %s: %s", project_id, error)
             raise ModrinthServiceError("No se pudo descargar el mod desde Modrinth.") from error
-        finally:
-            if temporary_path.exists():
-                await asyncio.to_thread(temporary_path.unlink)
 
         # Resolución automática de dependencias requeridas
         if install_dependencies:
@@ -357,14 +409,16 @@ class ModService:
                 for dep in dependencies:
                     if dep.get("dependency_type") == "required" and dep.get("project_id"):
                         dep_proj = dep["project_id"]
-                        if dep_proj not in visited_projects:
+                        if dep_proj not in visited_projects and len(visited_projects) <= _MAX_DEPENDENCY_INSTALLS:
                             visited_projects.add(dep_proj)
                             try:
-                                await self.install_modrinth_mod(
+                                await self._install_modrinth_mod(
                                     dep_proj,
-                                    version_id=dep.get("version_id"),
-                                    install_dependencies=True,
-                                    visited_projects=visited_projects,
+                                    dep.get("version_id"),
+                                    None,
+                                    None,
+                                    True,
+                                    visited_projects,
                                 )
                                 logger.info("Dependencia requerida %s instalada con éxito", dep_proj)
                             except ModConflictError:
@@ -377,7 +431,10 @@ class ModService:
     async def check_updates(self) -> list[ModUpdateItem]:
         """Comprueba de forma asíncrona si hay versiones más nuevas en Modrinth para los mods instalados."""
         installed = await self.list_mods()
-        candidates = [m for m in installed if m.is_enabled and (m.mod_id or m.name)]
+        candidates = [
+            m for m in installed
+            if m.is_enabled and (m.mod_id or m.name) and _MODRINTH_ID.match(m.mod_id or m.name)
+        ]
         if not candidates:
             return []
 
@@ -407,7 +464,7 @@ class ModService:
             )
             async with semaphore:
                 try:
-                    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+                    async with allowed_client(MODRINTH_HOSTS, timeout=10.0, follow_redirects=False) as client:
                         resp = await client.get(
                             f"{_MODRINTH_API}/project/{target_id}/version",
                             params=query_params or None,
@@ -456,6 +513,9 @@ class ModService:
         loader: str | None = None,
         game_version: str | None = None,
     ) -> dict[str, Any]:
+        for identifier in (project_id, version_id):
+            if identifier is not None and not _MODRINTH_ID.match(identifier):
+                raise ModServiceError("El identificador de Modrinth no es válido.")
         env = self.get_environment()
         effective_loader = (loader if loader is not None else env["loader"]).lower()
         effective_version = (game_version if game_version is not None else env["minecraft_version"]).lower()
@@ -464,7 +524,7 @@ class ModService:
         versions_filter = [effective_version] if effective_version not in ("all", "any", "") else []
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+            async with allowed_client(MODRINTH_HOSTS, timeout=20.0, follow_redirects=False) as client:
                 if version_id:
                     response = await client.get(f"{_MODRINTH_API}/version/{version_id}")
                     response.raise_for_status()
@@ -508,6 +568,17 @@ class ModService:
 
 
     @staticmethod
+    def _expected_hash(file_data: dict[str, Any]) -> tuple[str, str] | None:
+        hashes = file_data.get("hashes")
+        if not isinstance(hashes, dict):
+            return None
+        for algorithm, length in (("sha512", 128), ("sha1", 40)):
+            value = hashes.get(algorithm)
+            if isinstance(value, str) and len(value) == length:
+                return algorithm, value
+        return None
+
+    @staticmethod
     def _select_download_file(version: dict[str, Any]) -> dict[str, Any]:
         files = version.get("files", [])
         if not isinstance(files, list) or not files:
@@ -518,7 +589,7 @@ class ModService:
         with zipfile.ZipFile(destination, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             written_names: set[str] = set()
             for mod_file in self._iter_active_mod_files():
-                if self._is_server_only_mod(mod_file):
+                if mod_file.is_symlink() or self._is_server_only_mod(mod_file):
                     continue
                 archive.write(mod_file, arcname=Path("mods") / mod_file.name)
                 written_names.add(mod_file.name.lower())
@@ -526,21 +597,24 @@ class ModService:
             client_mods_dir = self._settings.server_directory / "client_only_mods"
             if client_mods_dir.is_dir():
                 for client_mod in client_mods_dir.glob("*.jar"):
-                    if client_mod.name.lower() not in written_names:
+                    if not client_mod.is_symlink() and client_mod.name.lower() not in written_names:
                         archive.write(client_mod, arcname=Path("mods") / client_mod.name)
                         written_names.add(client_mod.name.lower())
             extra_directories = getattr(self._settings, "client_pack_extra_directories", []) or []
             pack_directories = ("config", "defaultconfigs", *extra_directories)
             for directory_name in pack_directories:
+                # Extra directories come from settings; keep them inside server/.
+                if not is_safe_component(directory_name):
+                    continue
                 source_directory = self._settings.server_directory / directory_name
-                if source_directory.is_dir():
+                if source_directory.is_dir() and not source_directory.is_symlink():
                     self._add_directory_to_archive(archive, source_directory, Path(directory_name))
 
     @staticmethod
     def _add_directory_to_archive(archive: zipfile.ZipFile, source: Path, archive_root: Path) -> None:
         server_only_dirs = frozenset({"luckperms", "bluemap", "spark", "chunky", "worldedit", "skinrestorer"})
         for file_path in source.rglob("*"):
-            if file_path.is_file():
+            if file_path.is_file() and not file_path.is_symlink():
                 rel = file_path.relative_to(source)
                 if any(part.lower() in server_only_dirs for part in rel.parts):
                     continue
@@ -582,7 +656,10 @@ class ModService:
                         break
 
                 if toml_candidate:
-                    raw_toml = archive.read(toml_candidate).decode("utf-8", errors="replace")
+                    raw_bytes = read_member_capped(archive, toml_candidate, _MAX_METADATA_BYTES)
+                    if raw_bytes is None:
+                        return result
+                    raw_toml = raw_bytes.decode("utf-8", errors="replace")
                     data = tomllib.loads(raw_toml)
                     mods = data.get("mods")
                     if isinstance(mods, list) and mods:
@@ -603,7 +680,10 @@ class ModService:
 
                 # 2. Fabric / Quilt fabric.mod.json
                 if "fabric.mod.json" in namelist:
-                    raw_json = archive.read("fabric.mod.json").decode("utf-8", errors="replace")
+                    raw_bytes = read_member_capped(archive, "fabric.mod.json", _MAX_METADATA_BYTES)
+                    if raw_bytes is None:
+                        return result
+                    raw_json = raw_bytes.decode("utf-8", errors="replace")
                     data = json.loads(raw_json)
                     result["mod_id"] = data.get("id")
                     result["display_name"] = data.get("name")
@@ -707,9 +787,9 @@ class ModService:
 
     @staticmethod
     def _validate_filename(filename: str) -> str:
-        if not filename or Path(filename).name != filename:
+        if not filename or Path(filename).name != filename or not is_safe_component(filename):
             raise ModServiceError("El nombre del archivo no es válido.")
-        if not (filename.endswith(".jar") or filename.endswith(".jar.disabled")):
+        if not is_mod_filename(filename):
             raise ModServiceError("El archivo debe terminar en .jar o .jar.disabled.")
         return filename
 

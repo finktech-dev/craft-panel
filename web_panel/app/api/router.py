@@ -6,6 +6,7 @@ from app.api.endpoints_auth import router as auth_router
 from app.api.endpoints_cloudflare import router as cloudflare_router
 from app.api.endpoints_backups import crash_router, router as backups_router
 from app.api.endpoints_installer import router as installer_router
+from app.api.endpoints_jobs import router as jobs_router
 from app.api.endpoints_onboarding import router as onboarding_router
 from app.api.endpoints_runtime import router as runtime_router
 from app.api.endpoints_mods import router as mods_router
@@ -33,6 +34,7 @@ router.include_router(cloudflare_router)
 router.include_router(backups_router)
 router.include_router(crash_router)
 router.include_router(installer_router)
+router.include_router(jobs_router)
 router.include_router(onboarding_router)
 router.include_router(runtime_router)
 router.include_router(mods_router)

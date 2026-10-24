@@ -6,22 +6,44 @@
   const initAdminConfigs = () => {
     // Helpers
     const $ = (s) => document.querySelector(s);
-    const esc = (s) => (window.Panel && window.Panel.escapeHtml) ? window.Panel.escapeHtml(s) : String(s);
+    const esc = (s) => (window.Panel && window.Panel.escapeHtml)
+      ? window.Panel.escapeHtml(s)
+      // Fail closed: escape locally if the shared helper is missing.
+      : String(s ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[c]);
     const label = (s) => String(s).replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
     // State
     let files = [];
     let current;
 
+    // On/off switch, same markup as the mods list. The checkbox keeps its data-* hooks.
+    const SWITCH_TRACK = `<span aria-hidden="true" class="block h-6 w-11 rounded-full bg-zinc-700 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-zinc-200 after:transition-all after:content-[''] peer-checked:bg-emerald-400 peer-checked:after:translate-x-full peer-checked:after:bg-[#16250c] peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-200"></span>`;
+    const switchControl = (attrs, checked) =>
+      `<span class="relative inline-flex shrink-0 items-center"><input ${attrs} type="checkbox" ${checked ? 'checked' : ''} class="peer sr-only">${SWITCH_TRACK}</span>`;
+    const ROW = 'border-b border-zinc-800 py-4';
+    // Plain names for the game rules the panel exposes; the technical name stays as small text.
+    const GAMERULE_LABELS = {
+      keepInventory: 'Conservar el inventario al morir',
+      naturalRegeneration: 'Recuperar vida con el tiempo',
+      mobGriefing: 'Las criaturas rompen bloques',
+      doFireTick: 'El fuego se propaga',
+      doDaylightCycle: 'Pasan el día y la noche',
+      doWeatherCycle: 'Cambia el clima',
+      randomTickSpeed: 'Velocidad a la que crecen las plantas',
+      maxEntityCramming: 'Máximo de criaturas en un mismo lugar',
+    };
+    const ruleLabel = (name) => (Object.prototype.hasOwnProperty.call(GAMERULE_LABELS, name) ? GAMERULE_LABELS[name] : name);
+    const NUMBER_INPUT ='min-h-11 w-32 shrink-0 rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none focus:border-emerald-400';
+
     // Configs tree renderer: node(n) handling 'section', 'boolean', 'number', 'list', etc.
     const node = (n) =>
       n.type === 'section'
-        ? `<details class="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3" open><summary class="cursor-pointer text-sm font-semibold">${esc(label(n.key))}</summary><div class="mt-3 space-y-3">${n.children.map(node).join('')}</div></details>`
+        ? `<details class="${ROW}" open><summary class="cursor-pointer font-semibold text-zinc-100">${esc(label(n.key))}</summary><div class="mt-2 border-l border-zinc-800 pl-4">${n.children.map(node).join('')}</div></details>`
         : n.type === 'boolean'
-        ? `<label class="flex justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3"><span><b class="text-sm">${esc(label(n.key))}</b><small class="mt-1 block text-zinc-500">${esc(n.comment || 'Activar o desactivar')}</small></span><input data-path="${esc(n.path)}" type="checkbox" ${n.value ? 'checked' : ''} class="h-5 w-5 accent-emerald-400"></label>`
+        ? `<label class="flex cursor-pointer items-center justify-between gap-4 ${ROW}"><span class="min-w-0"><span class="block font-medium text-zinc-100">${esc(label(n.key))}</span>${n.comment ? `<span class="mt-0.5 block text-sm leading-relaxed text-zinc-500">${esc(n.comment)}</span>` : ''}</span>${switchControl(`data-path="${esc(n.path)}"`, n.value)}</label>`
         : n.type === 'number'
-        ? `<label class="block rounded-lg border border-zinc-800 bg-zinc-950/40 p-3"><b class="text-sm">${esc(label(n.key))}</b><small class="mt-1 block text-zinc-500">${esc(n.comment || '')}</small><input data-path="${esc(n.path)}" type="number" value="${n.value}" ${n.minimum !== null ? `min="${n.minimum}"` : ''} ${n.maximum !== null ? `max="${n.maximum}"` : ''} class="mt-2 min-h-10 w-full rounded bg-zinc-900 px-3"></label>`
-        : `<div class="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3"><b class="text-sm">${esc(label(n.key))}</b><small class="mt-1 block text-zinc-500">${n.type === 'list' ? 'Editalo en modo avanzado.' : esc(n.comment || '')}</small></div>`;
+        ? `<label class="flex flex-wrap items-center justify-between gap-4 ${ROW}"><span class="min-w-0 flex-1"><span class="block font-medium text-zinc-100">${esc(label(n.key))}</span>${n.comment ? `<span class="mt-0.5 block text-sm leading-relaxed text-zinc-500">${esc(n.comment)}</span>` : ''}</span><input data-path="${esc(n.path)}" type="number" value="${esc(n.value)}" ${n.minimum !== null ? `min="${esc(n.minimum)}"` : ''} ${n.maximum !== null ? `max="${esc(n.maximum)}"` : ''} class="${NUMBER_INPUT}"></label>`
+        : `<div class="${ROW}"><span class="block font-medium text-zinc-100">${esc(label(n.key))}</span><span class="mt-0.5 block text-sm leading-relaxed text-zinc-500">${n.type === 'list' ? 'Esto se cambia editando el archivo como texto, en Opciones avanzadas.' : esc(n.comment || '')}</span></div>`;
 
     // showFiles(): search filter on #config-search and rendering into #config-picker
     function showFiles() {
@@ -34,9 +56,9 @@
         xs
           .map(
             (x) =>
-              `<button data-file="${esc(x.path)}" class="choice rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 text-left hover:border-emerald-400/60"><small class="block text-emerald-300">${esc(x.category)}</small><b class="mt-1 block truncate text-sm">${esc(x.title)}</b><small class="mt-1 block text-zinc-500">${x.format.toUpperCase()} · ${x.size_kb} KB</small></button>`
+              `<button type="button" data-file="${esc(x.path)}" class="choice group flex w-full items-center gap-4 border-b border-zinc-800 py-4 text-left"><span class="min-w-0 flex-1"><span class="block truncate font-semibold text-zinc-50">${esc(x.title)}</span><span class="mt-0.5 block truncate text-sm text-zinc-500">${esc(x.category)} · ${esc(String(x.format).toUpperCase())} · ${esc(x.size_kb)} KB</span></span><span class="link shrink-0 text-sm group-hover:underline">Abrir</span></button>`
           )
-          .join('') || '<p class="text-sm text-zinc-500">No encontré ese mod.</p>';
+          .join('') || '<p class="py-6 text-zinc-500">No encontramos ningún archivo con ese nombre.</p>';
     }
 
     // load(path): fetching /api/configs/... and setting up tree or raw view in #config-workspace
@@ -53,14 +75,14 @@
         if (helpEl) {
           helpEl.textContent =
             current.format === 'toml'
-              ? 'Usá los controles: se conserva el formato y los comentarios.'
-              : 'Abrí modo avanzado para no alterar este formato.';
+              ? 'Cada cambio se guarda al momento y respeta los comentarios del archivo.'
+              : 'Este tipo de archivo se cambia editándolo como texto, en Opciones avanzadas.';
         }
         if (formEl) {
           formEl.innerHTML =
             current.format === 'toml'
               ? node(current.tree)
-              : '<p class="rounded bg-amber-400/10 p-3 text-sm text-amber-100">Este archivo se edita desde modo avanzado.</p>';
+              : '<p class="py-4 text-zinc-400">Abrí «Opciones avanzadas» más abajo para editar este archivo como texto.</p>';
         }
         if (codeEl) codeEl.value = current.raw_content;
         if (workspaceEl) workspaceEl.classList.remove('hidden');
@@ -123,7 +145,7 @@
             method: 'POST',
             body: { content: codeEl ? codeEl.value : '' },
           });
-          Panel.toast('Configuración validada y guardada.');
+          Panel.toast('Archivo revisado y guardado.');
         } catch (e) {
           Panel.toast(e.message, 'error');
         }
@@ -139,9 +161,9 @@
           gamerulesEl.innerHTML = r
             .map(
               (x) =>
-                `<label class="flex justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 p-3"><span><b class="text-sm">${esc(x.name)}</b><small class="mt-1 block text-zinc-500">${x.kind === 'boolean' ? 'Activar o desactivar' : 'Valor numérico'}</small></span>${x.kind === 'boolean' ? `<input data-rule="${x.name}" type="checkbox" ${x.value === 'true' ? 'checked' : ''} class="h-5 w-5 accent-emerald-400">` : `<input data-rule="${x.name}" type="number" value="${x.value}" class="w-20 rounded bg-zinc-900 p-2">`}</label>`
+                `<label class="flex cursor-pointer items-center justify-between gap-4 ${ROW}"><span class="min-w-0"><span class="block font-medium text-zinc-100">${esc(ruleLabel(x.name))}</span><span class="mt-0.5 block truncate font-mono text-xs text-zinc-500">${esc(x.name)}</span></span>${x.kind === 'boolean' ? switchControl(`data-rule="${esc(x.name)}"`, x.value === 'true') : `<input data-rule="${esc(x.name)}" type="number" value="${esc(x.value)}" aria-label="${esc(ruleLabel(x.name))}" class="${NUMBER_INPUT}">`}</label>`
             )
-            .join('');
+            .join('') || '<p class="py-6 text-zinc-500">No hay reglas del juego para mostrar.</p>';
         }
 
         const playersEl = $('#players-list');
@@ -150,9 +172,9 @@
             p
               .map(
                 (x) =>
-                  `<div class="flex justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 p-3"><span><b class="text-sm">${esc(x.username)}</b><small class="mt-1 block text-zinc-500">${x.is_op ? 'Operador' : x.is_whitelisted ? 'En whitelist' : x.is_banned ? 'Baneado' : 'Registrado'}</small></span><div><button data-action="spawn" data-player="${x.username}" class="text-xs text-emerald-200">Spawn</button><button data-action="${x.is_op ? 'deop' : 'op'}" data-player="${x.username}" class="ml-3 text-xs text-zinc-300">${x.is_op ? 'Quitar OP' : 'Dar OP'}</button></div></div>`
+                  `<div class="flex flex-wrap items-center gap-x-4 gap-y-2 ${ROW}"><div class="min-w-0 flex-1"><p class="truncate font-semibold text-zinc-50">${esc(x.username)}</p><p class="mt-0.5 text-sm text-zinc-500">${x.is_op ? 'Administrador' : x.is_whitelisted ? 'Invitado' : x.is_banned ? 'Bloqueado' : 'Entró alguna vez'}</p></div><div class="flex shrink-0 items-center gap-1"><button type="button" data-action="spawn" data-player="${esc(x.username)}" class="rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100">Mandar al inicio</button><button type="button" data-action="${x.is_op ? 'deop' : 'op'}" data-player="${esc(x.username)}" class="v2-button btn-quiet min-h-0 py-1.5 text-sm">${x.is_op ? 'Quitar admin' : 'Hacer admin'}</button></div></div>`
               )
-              .join('') || '<p class="text-sm text-zinc-500">Aún no hay jugadores registrados.</p>';
+              .join('') || '<p class="py-6 text-zinc-500">Todavía no entró nadie.</p>';
         }
       } catch (err) {
         Panel.toast(err.message, 'error');
@@ -218,8 +240,8 @@
           const hours = hoursInput ? hoursInput.value : '6';
           await Panel.api('/api/scheduler/backup/' + hours, { method: 'POST' });
           const statusEl = $('#schedule-status');
-          if (statusEl) statusEl.textContent = 'Copias automáticas activadas.';
-          Panel.toast('Programación guardada.');
+          if (statusEl) statusEl.textContent = 'Copias automáticas encendidas.';
+          Panel.toast('Listo: las copias se hacen solas.');
         } catch (e) {
           Panel.toast(e.message, 'error');
         }

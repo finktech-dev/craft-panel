@@ -8,10 +8,10 @@ import os
 import secrets
 import sys
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     client_pack_directory: Path | None = None
     client_config_directory: Path | None = None
     client_pack_filename: str = "modpack.zip"
-    client_pack_extra_directories: list[str] = Field(
+    client_pack_extra_directories: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
         description="Directorios adicionales del servidor a empaquetar en el cliente (ej. resourcepacks, datapacks)"
     )
@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     local_secrets_path: Path | None = None
 
     panel_host: str = "127.0.0.1"
+    allowed_hosts: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="Extra domain names allowed in the Host header (e.g. a reverse proxy domain or *.example.com)",
+    )
     panel_port: int = Field(default=8080, ge=1, le=65535)
     panel_mode: Literal["local", "internet"] = "local"
     admin_pin: SecretStr | None = Field(default=None, min_length=12, max_length=128)
@@ -70,8 +74,9 @@ class Settings(BaseSettings):
     banner_title: str = "Minecraft server status"
     banner_subtitle: str = ""
     server_public_address: str | None = None
-    minecraft_version: str = "1.21.1"
-    neoforge_version: str = "21.1.250"
+    # Optional overrides; by default the panel reads both from the installed server.
+    minecraft_version: str | None = None
+    neoforge_version: str | None = None
     allocated_ram_gb: int = Field(default=5, ge=1, le=64)
     playit_enabled: bool = True
     graceful_stop_timeout_seconds: int = Field(default=30, ge=1, le=300)
@@ -79,9 +84,12 @@ class Settings(BaseSettings):
     auto_backup_interval_hours: int = Field(default=6, ge=1, le=168)
     backup_retention_count: int = Field(default=4, ge=1, le=100)
     backup_max_disk_gb: int = Field(default=15, ge=1, le=10_000)
+    backup_min_free_disk_gb: int = Field(default=10, ge=0, le=10_000)
     backup_integrity_check_interval_hours: int = Field(default=168, ge=24, le=8760)
 
     _admin_pin_generated_this_start: bool = PrivateAttr(default=False)
+    _admin_password_hash: str | None = PrivateAttr(default=None)
+    _initial_admin_password: str | None = PrivateAttr(default=None)
 
     aikar_g1gc_flags: tuple[str, ...] = (
         "-XX:+UseG1GC",
@@ -104,7 +112,7 @@ class Settings(BaseSettings):
         "-XX:MaxTenuringThreshold=1",
     )
 
-    @field_validator("client_pack_extra_directories", mode="before")
+    @field_validator("client_pack_extra_directories", "allowed_hosts", mode="before")
     @classmethod
     def _parse_client_pack_extra_directories(cls, v: Any) -> list[str]:
         if isinstance(v, str):
@@ -152,42 +160,86 @@ class Settings(BaseSettings):
         return self
 
     def _load_or_create_local_secrets(self) -> None:
-        """Mantiene secretos persistentes, fuera de Git, sin un PIN débil por defecto."""
+        """Mantiene secretos persistentes, fuera de Git, sin un PIN débil por defecto.
+
+        The administrator password is only ever stored as a scrypt hash
+        (``admin_password_hash``). A password generated on first run is kept in
+        plain text in memory only, so the login page can show it once to a
+        browser on this PC; it is forgotten after the first successful login.
+        If the panel restarts before anyone signed in with a generated
+        password, a new one is generated (nobody can be using the old one yet).
+        A plain ``admin_pin`` left by an older version is hashed and removed
+        from the file on startup. ``MINECRAFT_ADMIN_PIN`` is hashed in memory
+        and never written to disk.
+        """
+        from app.core.passwords import hash_password, is_password_hash
+
         assert self.local_secrets_path is not None
-        stored: dict[str, str] = {}
+        stored: dict[str, object] = {}
         if self.local_secrets_path.is_file():
             try:
                 raw = json.loads(self.local_secrets_path.read_text(encoding="utf-8"))
                 if isinstance(raw, dict):
-                    stored = {key: value for key, value in raw.items() if isinstance(value, str)}
+                    stored = {key: value for key, value in raw.items() if isinstance(value, (str, bool))}
             except (OSError, json.JSONDecodeError) as error:
                 raise ValueError("No se pudo leer web_panel/.panel_secrets.json.") from error
 
         changed = False
-        if self.admin_pin is None:
-            saved_pin = stored.get("admin_pin")
-            if saved_pin and len(saved_pin) >= 12:
-                self.admin_pin = SecretStr(saved_pin)
+        legacy_pin = stored.pop("admin_pin", None)
+        if legacy_pin is not None:
+            changed = True  # never leave a plain-text password on disk
+            if isinstance(legacy_pin, str) and len(legacy_pin) >= 12:
+                # A plain value only comes from an older version or a manual
+                # edit; either way it is the password the owner expects.
+                stored["admin_password_hash"] = hash_password(legacy_pin)
+                stored.pop("admin_password_unclaimed", None)
+
+        if self.admin_pin is not None:
+            # Environment override: hash it and drop the plain value.
+            self._admin_password_hash = hash_password(self.admin_pin.get_secret_value())
+            self.admin_pin = None
+        else:
+            saved_hash = stored.get("admin_password_hash")
+            if is_password_hash(saved_hash) and stored.get("admin_password_unclaimed") is not True:
+                self._admin_password_hash = str(saved_hash)
             else:
-                self.admin_pin = SecretStr(secrets.token_urlsafe(18))
+                generated = secrets.token_urlsafe(18)
+                self._initial_admin_password = generated
+                self._admin_password_hash = hash_password(generated)
                 self._admin_pin_generated_this_start = True
+                stored["admin_password_hash"] = self._admin_password_hash
+                stored["admin_password_unclaimed"] = True
                 changed = True
 
         if self.session_secret is None:
             saved_session_secret = stored.get("session_secret")
-            if saved_session_secret and len(saved_session_secret) >= 32:
+            if isinstance(saved_session_secret, str) and len(saved_session_secret) >= 32:
                 self.session_secret = SecretStr(saved_session_secret)
             else:
                 self.session_secret = SecretStr(secrets.token_urlsafe(48))
+                stored["session_secret"] = self.session_secret.get_secret_value()
                 changed = True
 
         if changed:
-            stored.update(
-                {
-                    "admin_pin": self.admin_pin.get_secret_value(),
-                    "session_secret": self.session_secret.get_secret_value(),
-                }
-            )
+            self._write_local_secrets(stored)
+
+    def _read_local_secrets(self) -> dict[str, object]:
+        assert self.local_secrets_path is not None
+        try:
+            raw = json.loads(self.local_secrets_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return raw if isinstance(raw, dict) else {}
+
+    def mark_admin_password_claimed(self) -> None:
+        """Forget the first-run password after the owner signed in with it."""
+        self._initial_admin_password = None
+        if not self._admin_pin_generated_this_start:
+            return
+        self._admin_pin_generated_this_start = False
+        assert self.local_secrets_path is not None
+        stored = self._read_local_secrets()
+        if stored.pop("admin_password_unclaimed", None) is not None:
             self._write_local_secrets(stored)
 
     def _load_launch_settings(self) -> None:
@@ -208,14 +260,11 @@ class Settings(BaseSettings):
                 self.playit_enabled = enabled
         except (OSError, json.JSONDecodeError):
             return
-    def _write_local_secrets(self, values: dict[str, str]) -> None:
+    def _write_local_secrets(self, values: dict[str, object]) -> None:
+        from app.core.path_safety import write_private_text
+
         assert self.local_secrets_path is not None
-        self.local_secrets_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.local_secrets_path.with_suffix(".tmp")
-        temporary_path.write_text(json.dumps(values, indent=2), encoding="utf-8")
-        with contextlib.suppress(OSError):
-            os.chmod(temporary_path, 0o600)
-        os.replace(temporary_path, self.local_secrets_path)
+        write_private_text(self.local_secrets_path, json.dumps(values, indent=2))
 
     @property
     def effective_cookie_secure(self) -> bool:
@@ -224,6 +273,15 @@ class Settings(BaseSettings):
     @property
     def admin_pin_generated_this_start(self) -> bool:
         return self._admin_pin_generated_this_start
+
+    @property
+    def admin_password_hash(self) -> str | None:
+        return self._admin_password_hash
+
+    @property
+    def initial_admin_password(self) -> str | None:
+        """Generated first-run password, in memory only until the first login."""
+        return self._initial_admin_password
 
     def _project_path(self, configured_path: Path | None, default_name: str) -> Path:
         return self._child_path(
@@ -285,6 +343,8 @@ class Settings(BaseSettings):
     def server_start_command(self) -> tuple[str, ...]:
         """Run the native generated script without relying on a Windows-only shell."""
         if self.server_start_script.suffix.casefold() == ".bat":
-            return ("cmd.exe", "/d", "/s", "/c", "call run.bat nogui")
+            # An explicit .\ path works even when NoDefaultCurrentDirectoryInExePath stops
+            # cmd.exe from looking for commands in the current folder.
+            return ("cmd.exe", "/d", "/s", "/c", "call .\\run.bat nogui")
         return ("sh", "./run.sh", "nogui")
 settings = Settings()

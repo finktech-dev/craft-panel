@@ -13,7 +13,7 @@ This project is not affiliated with, endorsed by, or associated with Mojang Stud
 ## Start in three steps
 
 1. Clone this repository and open its folder.
-2. Run `iniciar_panel.bat` on Windows, or `./iniciar_panel.sh` on Linux/macOS. It creates the local Python environment and installs panel dependencies the first time. On Windows, the launcher can install Python through Windows Package Manager if it is missing. On Linux/macOS it uses Homebrew, apt, dnf, or pacman when one is available.
+2. Run `iniciar_panel.bat`. It creates the local Python environment and installs panel dependencies the first time, and can install Python through Windows Package Manager if it is missing.
 3. The browser opens when the panel is ready. Save the one-time admin password shown on the first screen, then follow the guided setup to install Vanilla, NeoForge, or Fabric; choose RAM; and start playing.
 
 The panel detects Java and the server installation before it starts Minecraft. If Java is missing, the wizard can download a compatible Adoptium runtime into `tools/java` without touching the global installation. You can also download one yourself, unpack it there so `tools/java/bin/java` (or `java.exe`) exists, and return to the panel. This does not touch worlds, backups, or player data.
@@ -38,6 +38,7 @@ This repository contains no webhook URLs, player names, world names, or machine-
 - Keep Playit agent keys, Discord webhooks, passwords, worlds, backups, logs, and player data out of Git.
 - Test a restore with a disposable copy before relying on a backup in an emergency. This project can contain bugs and does not replace an external backup.
 - Review pull requests carefully when they change server lifecycle, restore, deletion, or public-access behavior.
+- Read [docs/SECURITY.md](docs/SECURITY.md) before exposing the panel beyond this computer, and to report a vulnerability.
 
 ## Requirements
 
@@ -47,11 +48,12 @@ This repository contains no webhook URLs, player names, world names, or machine-
 
 ## Compatibility
 
-- **Panel bootstrap:** Windows, Linux, and macOS with Python 3.11+.
+- **Supported and tested:** Windows 10 and Windows 11, with Python 3.11+.
+- **macOS and Linux:** not tested and not officially supported. `iniciar_panel.sh` and the POSIX code paths exist and may work, but nobody verifies them before a release; reports and pull requests are welcome.
 - **Guided installation:** a clean clone can install Vanilla, NeoForge, or Fabric from the local wizard. It writes only the selected runtime files inside `server/`; it refuses to overwrite an existing runtime.
-- **Existing servers:** copy a compatible existing server into `server/`, including `run.bat` on Windows or `run.sh` on Linux/macOS. The wizard detects it without moving, changing, or uploading worlds, settings, mods, or backups.
-- **Server control:** Vanilla and Fabric receive native Windows and POSIX launch scripts. NeoForge uses its official installer-generated scripts. The panel launches the script native to the host OS.
-- **Automatic Playit agent download:** Windows, Linux, and macOS on supported AMD64 or ARM64 hardware. The agent is downloaded from the official Playit release after you link your account.
+- **Existing servers:** copy a compatible existing server, including its `run.bat`, into `server/`. The wizard detects it without moving, changing, or uploading worlds, settings, mods, or backups.
+- **Server control:** NeoForge uses its official installer-generated scripts; Vanilla and Fabric get a generated `run.bat`.
+- **Automatic Playit agent download:** Windows on AMD64 or ARM64. The agent is downloaded from the official Playit release after you link your account.
 - **Modpacks:** bring an existing modpack through the import flow. The wizard does not infer a modpack version or replace its files.
 
 ## Sharing with friends

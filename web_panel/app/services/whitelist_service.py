@@ -3,21 +3,38 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
+
+import httpx
 
 from app.core.config import Settings, settings
 from app.services.server_process import MinecraftServerManager, ServerProcessError, server_manager
 from app.services.server_properties_service import server_properties_service
 
+_MOJANG_PROFILE_URL = "https://api.mojang.com/users/profiles/minecraft/{name}"
+
+
+def offline_uuid(name: str) -> str:
+    """Minecraft's offline-mode UUID: Java's UUID.nameUUIDFromBytes("OfflinePlayer:" + name).
+
+    It is a version-3 UUID of the raw MD5, with no namespace (uuid.uuid3 would add one).
+    """
+    digest = bytearray(hashlib.md5(f"OfflinePlayer:{name}".encode("utf-8")).digest())
+    digest[6] = (digest[6] & 0x0F) | 0x30
+    digest[8] = (digest[8] & 0x3F) | 0x80
+    return str(uuid.UUID(bytes=bytes(digest)))
+
 
 class WhitelistPlayer:
     def __init__(self, name: str, player_uuid: str | None = None) -> None:
         self.name = name
-        self.uuid = player_uuid or str(uuid.uuid3(uuid.NAMESPACE_DNS, f"OfflinePlayer:{name}"))
-        self.avatar_url = f"https://mc-heads.net/avatar/{name}/64"
+        self.uuid = player_uuid or offline_uuid(name)
+        self.avatar_url = f"https://mc-heads.net/avatar/{quote(name, safe='')}/64"
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -57,6 +74,50 @@ class WhitelistService:
             return json.loads(self.file_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return []
+
+    def _cached_uuid(self, name: str) -> str | None:
+        """UUID the server itself recorded when this player joined (usercache.json)."""
+        assert self._settings.server_directory
+        try:
+            entries = json.loads((self._settings.server_directory / "usercache.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(entries, list):
+            return None
+        for entry in entries:
+            if isinstance(entry, dict) and str(entry.get("name", "")).lower() == name.lower() and entry.get("uuid"):
+                return str(entry["uuid"])
+        return None
+
+    async def _mojang_uuid(self, name: str) -> tuple[str, str]:
+        """Official account UUID and exact name, required when online-mode is on."""
+        try:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=False) as client:
+                response = await client.get(_MOJANG_PROFILE_URL.format(name=name))
+        except httpx.HTTPError as error:
+            raise WhitelistServiceError(
+                "No pudimos comprobar ese nombre con Minecraft. Revisá la conexión a Internet e intentá de nuevo."
+            ) from error
+        if response.status_code in {204, 404}:
+            raise ValueError(f"No existe una cuenta de Minecraft con el nombre {name}.")
+        if response.status_code != 200:
+            raise WhitelistServiceError("Minecraft no respondió al comprobar el nombre. Probá de nuevo en un rato.")
+        data = response.json()
+        raw = str(data.get("id", ""))
+        if len(raw) != 32:
+            raise WhitelistServiceError("Minecraft devolvió una respuesta inesperada al comprobar el nombre.")
+        return str(uuid.UUID(raw)), str(data.get("name") or name)
+
+    async def resolve_player(self, name: str) -> WhitelistPlayer:
+        """Pick the UUID the server will actually check for this player."""
+        cached = await asyncio.to_thread(self._cached_uuid, name)
+        if cached:
+            return WhitelistPlayer(name, cached)
+        properties = server_properties_service.read_properties()
+        if properties.get("online-mode", "true").lower() == "true":
+            player_uuid, exact_name = await self._mojang_uuid(name)
+            return WhitelistPlayer(exact_name, player_uuid)
+        return WhitelistPlayer(name)
 
     def _write_file(self, data: list[dict[str, Any]]) -> None:
         temporary = self.file_path.with_name(f".{self.file_path.name}.{uuid.uuid4().hex}.tmp")
@@ -133,7 +194,7 @@ class WhitelistService:
                     "player": WhitelistPlayer(cleaned).to_dict(),
                 }
 
-            p = WhitelistPlayer(cleaned)
+            p = await self.resolve_player(cleaned)
             current.append({"name": p.name, "uuid": p.uuid})
             await asyncio.to_thread(self._write_file, current)
 

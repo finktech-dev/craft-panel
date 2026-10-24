@@ -9,7 +9,7 @@ import logging
 import os
 import re
 from collections import deque
-from collections.abc import Coroutine
+from collections.abc import AsyncIterator, Coroutine
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -18,6 +18,8 @@ from typing import Any, Final
 from app.core.config import Settings, settings
 from app.services.crash_analyzer import crash_analyzer
 from app.services.discord_service import discord_service
+from app.services.external_server_service import ExternalServerDetector
+from app.services.progress import ProgressCallback, StepPlan, report
 from app.websocket.manager import ConnectionManager, connection_manager
 
 logger = logging.getLogger(__name__)
@@ -44,6 +46,28 @@ _SERVER_READY_RE: Final = re.compile(
 )
 
 
+# Steps announced through ``progress`` callbacks. ``ready`` is reported by the
+# caller while it waits for Minecraft's "Done" line, outside the lifecycle lock.
+_READY_STEP: Final = ("ready", "Esperando a que cargue el mundo")
+START_STEPS: Final[StepPlan] = (
+    ("connect", "Preparando la dirección para tus amigos"),
+    ("start", "Encendiendo el servidor"),
+    _READY_STEP,
+)
+RESTART_STEPS: Final[StepPlan] = (
+    ("stop", "Apagando el servidor"),
+    ("start", "Encendiendo el servidor"),
+    _READY_STEP,
+)
+GRACEFUL_RESTART_STEPS: Final[StepPlan] = (
+    ("notice", "Avisando a los jugadores"),
+    ("save", "Guardando el mundo"),
+    ("stop", "Apagando el servidor"),
+    ("start", "Encendiendo el servidor"),
+    _READY_STEP,
+)
+
+
 class ServerState(StrEnum):
     STOPPED = "STOPPED"
     STARTING = "STARTING"
@@ -53,6 +77,26 @@ class ServerState(StrEnum):
 
 class ServerProcessError(RuntimeError):
     """Error de operación del proceso Java."""
+
+    status_code = 503
+
+
+class ServerBusyError(ServerProcessError):
+    """Another start/stop/restart operation is already in progress."""
+
+    status_code = 409
+
+
+class ServerStartTimeoutError(ServerProcessError):
+    """The process is alive but Minecraft has not reported it is ready yet."""
+
+    status_code = 504
+
+
+class ExternalServerRunningError(ServerProcessError):
+    """A server the panel did not start is already running (run.bat, previous session...)."""
+
+    status_code = 409
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,11 +134,16 @@ class MinecraftServerManager:
 
         self._settings = configured_settings or settings
         self._websocket_manager = websocket_manager or connection_manager
+        self._external_detector = ExternalServerDetector(self._settings)
         self._process: asyncio.subprocess.Process | None = None
         self._state = ServerState.STOPPED
         self._online_players: dict[str, str] = {}
         self._log_buffer: deque[TerminalLine] = deque(maxlen=self._settings.log_buffer_size)
         self._lock = asyncio.Lock()
+        # Serializes whole lifecycle operations; _lock only guards process creation.
+        self._lifecycle_lock = asyncio.Lock()
+        self._lifecycle_operation: str | None = None
+        self._restart_cancelled = False
         self._reader_tasks: set[asyncio.Task[None]] = set()
         self._watcher_task: asyncio.Task[None] | None = None
         self._stop_requested = False
@@ -119,6 +168,25 @@ class MinecraftServerManager:
         return self._process is not None and self._process.returncode is None
 
     @property
+    def lifecycle_operation(self) -> str | None:
+        """Name of the lifecycle operation in progress, if any."""
+        return self._lifecycle_operation
+
+    @contextlib.asynccontextmanager
+    async def _exclusive_lifecycle(self, operation: str) -> AsyncIterator[None]:
+        # Reject instead of queueing: a queued stop must never hit a freshly restarted server.
+        if self._lifecycle_lock.locked():
+            raise ServerBusyError(
+                f"Ya hay una operación en curso ({self._lifecycle_operation}). Esperá a que termine."
+            )
+        async with self._lifecycle_lock:
+            self._lifecycle_operation = operation
+            try:
+                yield
+            finally:
+                self._lifecycle_operation = None
+
+    @property
     def process_pid(self) -> int | None:
         """PID del lanzador; MetricsService resuelve Java cuando es un hijo."""
         return self._process.pid if self.is_running and self._process is not None else None
@@ -140,8 +208,13 @@ class MinecraftServerManager:
             for name, since in self._online_players.items()
         ]
 
-    async def start(self, dev_mode: bool = False) -> bool:
+    async def start(self, dev_mode: bool = False, progress: ProgressCallback | None = None) -> bool:
         """Inicia el servidor y retorna ``False`` si ya había un proceso vivo."""
+        async with self._exclusive_lifecycle("inicio"):
+            report(progress, "start", "Abriendo el servidor de Minecraft.")
+            return await self._start_process(dev_mode)
+
+    async def _start_process(self, dev_mode: bool) -> bool:
         async with self._lock:
             if self.is_running:
                 return False
@@ -157,6 +230,10 @@ class MinecraftServerManager:
                 raise ServerProcessError(
                     f"No existe el script de inicio del servidor: {self._settings.server_start_script}"
                 )
+
+            external = await asyncio.to_thread(self._external_detector.detect)
+            if external is not None:
+                raise ExternalServerRunningError(external.message)
 
             self._state = ServerState.STARTING
             self._stop_requested = False
@@ -187,6 +264,7 @@ class MinecraftServerManager:
             self._watcher_task = asyncio.create_task(
                 self._watch_process(self._process), name="minecraft-process-watcher"
             )
+            await asyncio.to_thread(self._external_detector.remember_panel_process, self._process.pid)
             await self._broadcast_status()
             if not self._dev_mode:
                 asyncio.create_task(discord_service.send_server_starting(), name="discord-server-starting")
@@ -194,25 +272,50 @@ class MinecraftServerManager:
 
     async def stop(self) -> bool:
         """Solicita una detención limpia mediante la consola de Minecraft."""
+        async with self._exclusive_lifecycle("detención"):
+            return await self._request_stop()
+
+    async def _request_stop(self) -> bool:
         if not self.is_running:
             return False
         self._stop_requested = True
         await self.send_command("/stop")
         return True
 
-    async def graceful_restart(self, countdown_seconds: int = 10, dev_mode: bool | None = None) -> None:
-        """Reinicia el servidor avisando a los jugadores en el chat y guardando el mundo."""
-        target_dev_mode = self._dev_mode if dev_mode is None else dev_mode
-        if not self.is_running:
-            await self.start(dev_mode=target_dev_mode)
-            return
+    async def restart(self, dev_mode: bool | None = None, progress: ProgressCallback | None = None) -> bool:
+        """Stop (forcing it after the grace period) and start again as one atomic operation.
 
+        Returns ``False`` when a kill cancelled the restart before the new start.
+        ``progress`` receives the ``stop`` and ``start`` steps of :data:`RESTART_STEPS`.
+        """
+        async with self._exclusive_lifecycle("reinicio"):
+            return await self._restart_process(self._dev_mode if dev_mode is None else dev_mode, progress)
+
+    async def graceful_restart(
+        self,
+        countdown_seconds: int = 10,
+        dev_mode: bool | None = None,
+        progress: ProgressCallback | None = None,
+    ) -> bool:
+        """Reinicia el servidor avisando a los jugadores en el chat y guardando el mundo.
+
+        ``progress`` receives the steps of :data:`GRACEFUL_RESTART_STEPS` except ``ready``.
+        """
+        async with self._exclusive_lifecycle("reinicio suave"):
+            target_dev_mode = self._dev_mode if dev_mode is None else dev_mode
+            if self.is_running:
+                await self._announce_restart(countdown_seconds, progress)
+            return await self._restart_process(target_dev_mode, progress)
+
+    async def _announce_restart(self, countdown_seconds: int, progress: ProgressCallback | None = None) -> None:
         try:
+            report(progress, "notice", f"Avisamos en el chat: reinicio en {countdown_seconds} segundos.")
             await self.send_command(
                 f"/say §c[Servidor] El servidor se reiniciará en {countdown_seconds} segundos para aplicar cambios. ¡Guarden sus cosas!"
             )
             if countdown_seconds > 5:
                 await asyncio.sleep(countdown_seconds - 5)
+                report(progress, "notice", "Avisamos en el chat: reinicio en 5 segundos.")
                 await self.send_command("/say §e[Servidor] Reinicio en 5 segundos...")
                 await asyncio.sleep(4)
                 await self.send_command("/say §4[Servidor] Reiniciando ahora...")
@@ -220,41 +323,67 @@ class MinecraftServerManager:
             else:
                 await asyncio.sleep(countdown_seconds)
 
+            report(progress, "save", "Guardando el mundo en el disco.")
             with contextlib.suppress(Exception):
                 await self.send_command("/save-all flush")
                 await asyncio.sleep(1.5)
         except Exception:
             pass
 
-        await self.stop()
-        try:
-            await asyncio.wait_for(
-                self.wait_until_stopped(), timeout=self._settings.graceful_stop_timeout_seconds
-            )
-        except TimeoutError:
-            await self.kill()
-            await self.wait_until_stopped()
-
-        await self.start(dev_mode=target_dev_mode)
+    async def _restart_process(self, dev_mode: bool, progress: ProgressCallback | None = None) -> bool:
+        self._restart_cancelled = False
+        if self.is_running:
+            report(progress, "stop", "Esperando a que el servidor se apague.")
+            await self._request_stop()
+            try:
+                await asyncio.wait_for(
+                    self.wait_until_stopped(), timeout=self._settings.graceful_stop_timeout_seconds
+                )
+            except TimeoutError:
+                report(progress, "stop", "No respondió a tiempo; forzamos el cierre.")
+                await self._kill_process()
+                await self.wait_until_stopped()
+        if self._restart_cancelled:
+            await self._record_log("system", "Reinicio cancelado: se forzó la detención del servidor.")
+            return False
+        report(progress, "start", "Abriendo el servidor de Minecraft.")
+        if not await self._start_process(dev_mode):
+            raise ServerProcessError("El servidor seguía en ejecución y no pudo reiniciarse.")
+        return True
 
     async def kill(self) -> bool:
-        """Finaliza el árbol de procesos cuando el cierre limpio no responde."""
+        """Finaliza el árbol de procesos cuando el cierre limpio no responde.
+
+        Deliberately bypasses the lifecycle lock so it always works as an emergency
+        stop; if a restart is in progress, its pending start is cancelled.
+        """
+        if self._lifecycle_lock.locked():
+            self._restart_cancelled = True
+        return await self._kill_process()
+
+    async def _kill_process(self) -> bool:
         process = self._process
         if process is None or process.returncode is not None:
             return False
 
         self._stop_requested = True
         if os.name == "nt":
-            taskkill = await asyncio.create_subprocess_exec(
-                "taskkill",
-                "/PID",
-                str(process.pid),
-                "/T",
-                "/F",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await taskkill.wait()
+            # Use the absolute path: a damaged PATH must not break the emergency stop.
+            system_root = os.environ.get("SystemRoot", r"C:\Windows")
+            try:
+                taskkill = await asyncio.create_subprocess_exec(
+                    os.path.join(system_root, "System32", "taskkill.exe"),
+                    "/PID",
+                    str(process.pid),
+                    "/T",
+                    "/F",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await taskkill.wait()
+            except OSError as error:
+                logger.warning("taskkill unavailable (%s); killing only the launcher process.", error)
+                process.kill()
         else:
             process.kill()
         return True
@@ -308,17 +437,19 @@ class MinecraftServerManager:
 
     async def shutdown(self) -> None:
         """Cierra ordenadamente el proceso al apagar FastAPI."""
+        # The panel is going away: never let an in-flight restart start a new process.
+        self._restart_cancelled = True
         if not self.is_running:
             return
 
-        await self.stop()
         process = self._process
         assert process is not None
+        await self._request_stop()
         try:
             await asyncio.wait_for(process.wait(), timeout=self._settings.graceful_stop_timeout_seconds)
         except TimeoutError:
             logger.warning("El servidor no respondió a /stop; se forzará su cierre.")
-            await self.kill()
+            await self._kill_process()
             await process.wait()
 
     async def wait_until_ready(self, timeout_seconds: float = 120.0) -> None:
@@ -328,9 +459,10 @@ class MinecraftServerManager:
             if self._state == ServerState.RUNNING:
                 return
             if not self.is_running:
-                raise ServerProcessError("The server stopped before it finished starting.")
+                raise ServerProcessError("El servidor se cerró antes de terminar de encender.")
             await asyncio.sleep(0.2)
-        raise ServerProcessError("The server did not finish starting in time.")
+        raise ServerStartTimeoutError("El servidor todavía no terminó de encender.")
+
     async def wait_until_stopped(self) -> None:
         """Espera de forma cooperativa a que el proceso actual finalice."""
         process = self._process
@@ -365,6 +497,7 @@ class MinecraftServerManager:
             self._last_death_notified.clear()
             self._state = ServerState.STOPPED if self._stop_requested else ServerState.CRASHED
 
+        await asyncio.to_thread(self._external_detector.forget_panel_process)
         await self._record_log("system", f"Proceso del servidor finalizado con código {exit_code}.")
         await self._broadcast_status()
         if not self._dev_mode:

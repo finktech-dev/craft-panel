@@ -9,7 +9,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Helpers
   const $ = s => document.querySelector(s);
-  const esc = (s) => (window.Panel && window.Panel.escapeHtml) ? window.Panel.escapeHtml(s) : String(s);
+  const esc = (s) => (window.Panel && window.Panel.escapeHtml)
+    ? window.Panel.escapeHtml(s)
+    // Fail closed: escape locally if the shared helper is missing.
+    : String(s ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[c]);
 
   // If ranks section is not present on this page, exit early
   if (!$('#ranks') && !$('#lp-ranks-grid')) {
@@ -218,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const c = $('#lp-output-console'); if (!c) return;
     const time = new Date().toLocaleTimeString();
     const p = document.createElement('p');
-    p.className = isCmd ? 'text-amber-300 font-semibold' : 'text-emerald-300';
+    p.className = isCmd ? 'text-zinc-500' : 'text-zinc-200';
     p.innerHTML = `<span class="text-zinc-500">[${time}]</span> ${esc(msg)}`;
     c.appendChild(p);
     c.scrollTop = c.scrollHeight;
@@ -266,10 +269,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (avatar) avatar.src = `https://mc-heads.net/avatar/${encodeURIComponent(name)}/40`;
     const badge = $('#lp-selected-online-badge');
     if (badge) {
-      badge.textContent = isOnline ? 'ONLINE' : 'REGISTRADO';
-      badge.className = isOnline
-        ? 'rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-500/30'
-        : 'rounded bg-zinc-800 px-1.5 py-0.2 text-[10px] font-bold text-zinc-400';
+      badge.textContent = isOnline ? 'conectado' : 'ya entró antes';
+      badge.className = 'text-sm text-zinc-500';
     }
     const card = $('#lp-selected-card');
     if (card) {
@@ -277,71 +278,56 @@ document.addEventListener('DOMContentLoaded', () => {
       card.classList.add('flex');
     }
     const infoText = $('#lp-selected-info-text');
-    if (infoText) infoText.textContent = 'Hacé clic en cualquier rango de abajo para asignárselo a ' + name + '.';
+    if (infoText) infoText.textContent = 'Elegí un rango de abajo para dárselo a ' + name + '.';
   }
 
-  // 7. Rank Cards Rendering
+  // 7. Rank rows rendering (one row per rank, hairline separators like the mods list).
+  // Decorative fields stored with a rank (icon, border, bg, badge colours) are not rendered.
+  const QUIET_SM = 'v2-button btn-quiet min-h-0 py-1.5 text-sm';
+  const TEXT_ACTION = 'rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100';
+  const DELETE_ACTION = 'rounded-lg px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-[#f3a79b]';
+
+  function rankDetails(r) {
+    return `
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-baseline gap-x-2">
+          <h3 class="font-semibold text-zinc-50">${esc(r.name)}</h3>
+          ${r.perm ? `<span class="text-sm text-zinc-500">${esc(r.perm)}</span>` : ''}
+        </div>
+        ${r.desc ? `<p class="mt-0.5 text-sm leading-relaxed text-zinc-400">${esc(r.desc)}</p>` : ''}
+        ${r.tag ? `<p class="mt-1.5 text-sm text-zinc-500">Se ve así: <span class="rounded bg-zinc-950 px-2 py-0.5 font-mono">${renderMinecraftText(r.tag)}</span></p>` : ''}
+      </div>
+    `;
+  }
+
   function renderRanksCards() {
     const grid = $('#lp-ranks-grid');
     if (grid) {
       const allPrimary = getAllPrimaryRanks();
       grid.innerHTML = allPrimary.map(r => `
-        <div class="rounded-xl border ${r.border} ${r.bg} p-4 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 shadow-md relative group">
-          <div>
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2">
-                <span class="text-xl">${r.icon}</span>
-                <b class="text-sm text-zinc-100">${esc(r.name)}</b>
-              </div>
-              <div class="flex items-center gap-1">
-                ${r.isCustom ? `<button type="button" data-delete-custom="${esc(r.id)}" data-rank-name="${esc(r.name)}" class="rounded p-1 text-zinc-500 hover:text-rose-400 transition" title="Eliminar rango">🗑️</button>` : ''}
-                <span class="rounded px-2 py-0.5 text-[10px] font-bold border ${r.permColor}">${esc(r.perm)}</span>
-              </div>
-            </div>
-            <div class="mt-3 flex items-center gap-2">
-              <span class="text-[11px] text-zinc-500">Prefijo:</span>
-              <span class="rounded-lg px-2.5 py-1 text-sm font-mono tracking-wide ${r.badge}">${renderMinecraftText(r.tag)}</span>
-            </div>
-            <p class="mt-2 text-xs text-zinc-400 leading-relaxed">${esc(r.desc)}</p>
-          </div>
-          <div class="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between gap-2">
-            <span class="text-[10px] font-mono text-zinc-500">Peso: ${r.weight}</span>
-            <button type="button" data-set-rank="${esc(r.id)}" data-rank-name="${esc(r.name)}" class="rounded-lg bg-amber-400 hover:bg-amber-300 text-zinc-950 px-3 py-1.5 text-xs font-bold transition shadow-sm flex items-center gap-1">
-              <span>⭐</span> Asignar Rango
-            </button>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-800 py-4">
+          ${rankDetails(r)}
+          <div class="flex shrink-0 items-center gap-1">
+            <button type="button" data-set-rank="${esc(r.id)}" data-rank-name="${esc(r.name)}" class="${QUIET_SM}">Dar este rango</button>
+            ${r.isCustom ? `<button type="button" data-delete-custom="${esc(r.id)}" data-rank-name="${esc(r.name)}" class="${DELETE_ACTION}" title="Borrar este rango del servidor">Borrar</button>` : ''}
           </div>
         </div>
-      `).join('');
+      `).join('') || '<p class="py-6 text-zinc-500">Todavía no hay rangos. Creá uno con «Crear un rango».</p>';
     }
 
     const rolesGrid = $('#lp-roles-grid');
     if (rolesGrid) {
       const allSecondary = getAllSecondaryRoles();
       rolesGrid.innerHTML = allSecondary.map(role => `
-        <div class="rounded-xl border ${role.border} bg-zinc-950/80 p-4 flex flex-col justify-between transition hover:-translate-y-0.5 shadow relative">
-          <div>
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2">
-                <span class="text-lg">${role.icon}</span>
-                <b class="text-sm text-zinc-100">${esc(role.name)}</b>
-              </div>
-              ${role.isCustom ? `<button type="button" data-delete-custom="${esc(role.id)}" data-rank-name="${esc(role.name)}" class="rounded p-1 text-zinc-500 hover:text-rose-400 transition" title="Eliminar rol">🗑️</button>` : ''}
-            </div>
-            <div class="mt-2.5 flex items-center gap-2">
-              <span class="rounded-lg px-2.5 py-1 text-sm font-mono ${role.badge}">${renderMinecraftText(role.tag)}</span>
-            </div>
-            <p class="mt-2 text-xs text-zinc-400 leading-relaxed">${esc(role.desc)}</p>
-          </div>
-          <div class="mt-4 pt-3 border-t border-zinc-800 flex items-center gap-2">
-            <button type="button" data-add-role="${esc(role.id)}" data-role-name="${esc(role.name)}" class="flex-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 hover:bg-emerald-500/30 text-emerald-200 py-1.5 text-xs font-bold transition">
-              + Dar Rol
-            </button>
-            <button type="button" data-remove-role="${esc(role.id)}" data-role-name="${esc(role.name)}" class="flex-1 rounded-lg bg-rose-500/20 border border-rose-500/40 hover:bg-rose-500/30 text-rose-200 py-1.5 text-xs font-bold transition">
-              - Quitar
-            </button>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-800 py-4">
+          ${rankDetails(role)}
+          <div class="flex shrink-0 items-center gap-1">
+            <button type="button" data-add-role="${esc(role.id)}" data-role-name="${esc(role.name)}" class="${QUIET_SM}">Dar</button>
+            <button type="button" data-remove-role="${esc(role.id)}" data-role-name="${esc(role.name)}" class="${TEXT_ACTION}">Quitar</button>
+            ${role.isCustom ? `<button type="button" data-delete-custom="${esc(role.id)}" data-rank-name="${esc(role.name)}" class="${DELETE_ACTION}" title="Borrar este rol del servidor">Borrar</button>` : ''}
           </div>
         </div>
-      `).join('');
+      `).join('') || '<p class="py-6 text-zinc-500">Todavía no hay roles extra.</p>';
     }
   }
 
@@ -355,25 +341,24 @@ document.addEventListener('DOMContentLoaded', () => {
       ]);
       const onlineList = (onlineData && onlineData.players) || [];
       const countEl = $('#lp-online-count');
-      if (countEl) countEl.textContent = `${onlineList.length} en línea (${(onlineData && onlineData.count) || 0}/${(onlineData && onlineData.max_players) || 10})`;
+      if (countEl) countEl.textContent = `${onlineList.length} conectados ahora · lugar para ${(onlineData && onlineData.max_players) || 10}`;
       const chipsEl = $('#lp-online-chips');
       if (chipsEl) {
         if (onlineList.length === 0) {
-          chipsEl.innerHTML = '<span class="text-xs text-zinc-500 italic">No hay jugadores conectados en este momento. Podés escribir el nombre abajo.</span>';
+          chipsEl.innerHTML = '<p class="text-sm text-zinc-500">No hay nadie conectado. Podés escribir el nombre abajo.</p>';
         } else {
           chipsEl.innerHTML = onlineList.map(p => `
-            <button type="button" data-online-player="${esc(p.username)}" class="flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/60 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition shadow-sm">
-              <img src="${esc(p.avatar_url || `https://mc-heads.net/avatar/${encodeURIComponent(p.username)}/24`)}" class="h-5 w-5 rounded object-cover" onerror="this.src='https://mc-heads.net/avatar/steve/24'">
+            <button type="button" data-online-player="${esc(p.username)}" class="flex items-center gap-2 rounded-full border border-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800">
+              <img src="${esc(p.avatar_url || `https://mc-heads.net/avatar/${encodeURIComponent(p.username)}/24`)}" alt="" class="h-5 w-5 rounded-sm object-cover" data-fallback-src="https://mc-heads.net/avatar/steve/24">
               <span>${esc(p.username)}</span>
-              <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
             </button>
           `).join('');
         }
       }
       const sel = $('#lp-known-players');
       if (sel && Array.isArray(allPlayers)) {
-        sel.innerHTML = '<option value="">-- Seleccionar de registrados (' + allPlayers.length + ') --</option>' +
-          allPlayers.map(p => `<option value="${esc(p.username)}">${esc(p.username)} (${p.is_op ? 'OP' : p.is_whitelisted ? 'Whitelist' : 'Jugador'})</option>`).join('');
+        sel.innerHTML = '<option value="">Elegí entre los ' + allPlayers.length + ' que ya entraron</option>' +
+          allPlayers.map(p => `<option value="${esc(p.username)}">${esc(p.username)}${p.is_op ? ' · admin' : p.is_whitelisted ? ' · invitado' : ''}</option>`).join('');
       }
       // Pre-seleccionar al primer jugador conectado si el campo está vacío
       const targetInput = $('#lp-target-player');
@@ -503,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const idEl = $('#lp-new-id');
       const rawId = idEl ? idEl.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') : '';
       if (!rawId) {
-        if (window.Panel && window.Panel.toast) window.Panel.toast('Ingresá un identificador válido (ej. vip, streamer).', 'error');
+        if (window.Panel && window.Panel.toast) window.Panel.toast('Escribí un nombre interno: una palabra en minúsculas, por ejemplo vip.', 'error');
         if (idEl) idEl.focus();
         return;
       }
@@ -514,7 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const type = $('#lp-new-type') ? $('#lp-new-type').value : 'primary';
       const weight = parseInt($('#lp-new-weight') ? $('#lp-new-weight').value : '50') || 50;
 
-      if (window.Panel && window.Panel.toast) window.Panel.toast(`Creando rango '${name}' en LuckPerms...`);
+      if (window.Panel && window.Panel.toast) window.Panel.toast(`Creando el rango '${name}'…`);
       btnSubmitCreate.disabled = true;
       try {
         await runLP(`creategroup ${rawId}`, `Creando grupo ${rawId}`);
@@ -540,13 +525,8 @@ document.addEventListener('DOMContentLoaded', () => {
           name,
           weight,
           tag: prefix,
-          border: type === 'primary' ? 'border-amber-500/50 hover:border-amber-400' : 'border-purple-500/40 hover:border-purple-400',
-          bg: type === 'primary' ? 'bg-gradient-to-br from-amber-950/30 via-zinc-900 to-zinc-900' : 'bg-gradient-to-br from-purple-950/30 via-zinc-900 to-zinc-900',
-          badge: 'bg-zinc-800 text-amber-300 font-bold border border-amber-500/40',
-          icon: type === 'primary' ? '⭐' : '✨',
-          desc: `Rango personalizado '${name}' creado desde el panel web.`,
+          desc: `Creado desde el panel.`,
           perm: `${permsToSet.length} permisos`,
-          permColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
           type,
           isCustom: true
         };
@@ -559,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const panel = $('#lp-create-rank-panel');
         if (panel) panel.classList.add('hidden');
-        if (window.Panel && window.Panel.toast) window.Panel.toast(`¡Rango '${name}' creado exitosamente!`);
+        if (window.Panel && window.Panel.toast) window.Panel.toast(`Rango '${name}' creado. Ya se lo podés dar a alguien.`);
       } catch (err) {
         if (window.Panel && window.Panel.toast) window.Panel.toast(err.message, 'error');
       } finally {
@@ -575,7 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const curVal = sel.value;
     const all = getAllRanksCombined();
     sel.innerHTML = all.map(r => `
-      <option value="${esc(r.id)}">${r.icon || '⭐'} ${esc(r.name)} (${esc(r.id)}) · Peso: ${r.weight || 10} [${r.isSecondary ? 'Rol Secundario' : 'Jerarquía'}]</option>
+      <option value="${esc(r.id)}">${esc(r.name)} · ${r.isSecondary ? 'rol extra' : 'rango principal'}</option>
     `).join('');
     if (curVal && all.some(r => r.id === curVal)) {
       sel.value = curVal;
@@ -590,10 +570,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const rank = getAllRanksCombined().find(r => r.id === rankId);
     if (!rank) return;
 
-    const iconEl = $('#lp-inspect-icon'); if (iconEl) iconEl.textContent = rank.icon || '⭐';
+    const iconEl = $('#lp-inspect-icon'); if (iconEl) iconEl.textContent = rank.icon || '';
     const nameEl = $('#lp-inspect-name'); if (nameEl) nameEl.textContent = rank.name;
     const idEl = $('#lp-inspect-id-badge'); if (idEl) idEl.textContent = rank.id;
-    const typeEl = $('#lp-inspect-type-badge'); if (typeEl) typeEl.textContent = rank.isSecondary ? 'Rol Secundario' : 'Jerarquía Principal';
+    const typeEl = $('#lp-inspect-type-badge'); if (typeEl) typeEl.textContent = rank.isSecondary ? '· rol extra' : '· rango principal';
     const wEl = $('#lp-inspect-weight'); if (wEl) wEl.textContent = rank.weight || 10;
     const pfxEl = $('#lp-inspect-prefix-badge'); if (pfxEl) pfxEl.innerHTML = renderMinecraftText(rank.tag || rank.name);
   }
@@ -628,7 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const sel = $('#lp-inspect-select');
       const rankId = sel ? sel.value : '';
       if (!rankId) return;
-      if (!confirm(`¿Estás seguro de que querés eliminar el rango '${rankId}' de LuckPerms?`)) return;
+      if (!confirm(`¿Borrar el rango '${rankId}'? Se quita del servidor y quienes lo tengan lo pierden.`)) return;
       await runLP(`deletegroup ${rankId}`, `Eliminando grupo ${rankId}`);
       removeCustomRank(rankId);
       renderRanksCards();
@@ -645,7 +625,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const sel = $('#lp-inspect-select');
         const rankId = sel ? sel.value : '';
         if (!rankId) {
-          if (window.Panel && window.Panel.toast) window.Panel.toast('Seleccioná un rango primero.', 'error');
+          if (window.Panel && window.Panel.toast) window.Panel.toast('Primero elegí un rango.', 'error');
           return;
         }
         const permKey = b.dataset.cmdPerm;
@@ -723,7 +703,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (delCustomBtn) {
         const rankId = delCustomBtn.dataset.deleteCustom;
         const rankName = delCustomBtn.dataset.rankName || rankId;
-        if (confirm(`¿Estás seguro de que querés borrar el rango '${rankName}' (${rankId}) del servidor?`)) {
+        if (confirm(`¿Borrar el rango '${rankName}'? Se quita del servidor y quienes lo tengan lo pierden.`)) {
           runLP(`deletegroup ${rankId}`, `Eliminando grupo ${rankId}`);
           removeCustomRank(rankId);
           renderRanksCards();
@@ -736,7 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const targetInput = $('#lp-target-player');
       const target = targetInput ? targetInput.value.trim() : '';
       if (!target) {
-        if (window.Panel && window.Panel.toast) window.Panel.toast('Seleccioná o escribí un jugador en el Paso 1 primero.', 'error');
+        if (window.Panel && window.Panel.toast) window.Panel.toast('Primero elegí un jugador, arriba de todo.', 'error');
         if (targetInput) targetInput.focus();
         return;
       }
@@ -756,7 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (delCustomBtn) {
         const roleId = delCustomBtn.dataset.deleteCustom;
         const roleName = delCustomBtn.dataset.rankName || roleId;
-        if (confirm(`¿Estás seguro de que querés borrar el rol '${roleName}' (${roleId}) del servidor?`)) {
+        if (confirm(`¿Borrar el rol '${roleName}'? Se quita del servidor y quienes lo tengan lo pierden.`)) {
           runLP(`deletegroup ${roleId}`, `Eliminando rol ${roleId}`);
           removeCustomRank(roleId);
           renderRanksCards();
@@ -769,7 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const targetInput = $('#lp-target-player');
       const target = targetInput ? targetInput.value.trim() : '';
       if (!target) {
-        if (window.Panel && window.Panel.toast) window.Panel.toast('Seleccioná o escribí un jugador en el Paso 1 primero.', 'error');
+        if (window.Panel && window.Panel.toast) window.Panel.toast('Primero elegí un jugador, arriba de todo.', 'error');
         if (targetInput) targetInput.focus();
         return;
       }
@@ -818,8 +798,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const badge = $('#lp-selected-online-badge');
         if (badge) {
-          badge.textContent = 'MANUAL';
-          badge.className = 'rounded bg-zinc-800 px-1.5 py-0.2 text-[10px] font-bold text-zinc-400';
+          badge.textContent = 'escrito a mano';
+          badge.className = 'text-sm text-zinc-500';
         }
       } else {
         if (card) {
@@ -927,7 +907,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnClearLog) {
     btnClearLog.onclick = () => {
       const c = $('#lp-output-console');
-      if (c) c.innerHTML = '<p class="text-zinc-500 italic">Terminal limpia. Listo para nuevas acciones.</p>';
+      if (c) c.innerHTML = '<p class="text-zinc-500">Vacío. Acá aparece lo que conteste el servidor.</p>';
     };
   }
 
@@ -939,7 +919,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ws = new WebSocket(wsUrl);
     ws.onopen = () => {
       const dot = $('#lp-terminal-dot');
-      if (dot) dot.className = 'h-2 w-2 rounded-full bg-emerald-400 animate-pulse';
+      if (dot) dot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-400';
     };
     ws.onmessage = e => {
       try {
@@ -966,7 +946,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     ws.onclose = () => {
       const dot = $('#lp-terminal-dot');
-      if (dot) dot.className = 'h-2 w-2 rounded-full bg-zinc-600';
+      if (dot) dot.className = 'inline-block h-2 w-2 rounded-full bg-zinc-600';
     };
   } catch (_) {}
 
@@ -975,11 +955,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.location.hash === '#ranks') {
       setTimeout(() => {
         const el = document.getElementById('ranks');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-          el.classList.add('ring-4', 'ring-amber-400/50');
-          setTimeout(() => el.classList.remove('ring-4', 'ring-amber-400/50'), 2500);
-        }
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     }
   };
@@ -1005,7 +981,7 @@ document.addEventListener('DOMContentLoaded', () => {
           body: { enabled: true, preset: '', primary_ranks: [], secondary_roles: [] }
         });
       }
-      if (window.Panel && window.Panel.toast) window.Panel.toast('Gestión de LuckPerms activada.', 'success');
+      if (window.Panel && window.Panel.toast) window.Panel.toast('Rangos activados.', 'success');
       await initRanks();
     } catch (e) {
       if (window.Panel && window.Panel.toast) window.Panel.toast(e.message || 'Error al activar', 'error');

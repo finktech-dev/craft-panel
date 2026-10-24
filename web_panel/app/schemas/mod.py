@@ -53,6 +53,8 @@ class ModInstallRequest(BaseModel):
     loader: str | None = None
     game_version: str | None = None
     install_dependencies: bool = True
+    # Set when updating: the installed jar to remove once the new version is in place.
+    replace_filename: str | None = Field(default=None, min_length=1, max_length=255)
 
 
 class ModUpdateItem(BaseModel):
@@ -72,5 +74,64 @@ class ClientPackExportResponse(BaseModel):
 
 
 class ModEnvironmentResponse(BaseModel):
-    loader: str
-    minecraft_version: str
+    """Installed server as detected from its files; ``None`` means unknown."""
+
+    loader: str | None
+    minecraft_version: str | None
+    loader_version: str | None = None
+    label: str | None = None
+
+
+class ModHistoryRef(BaseModel):
+    filename: str
+    name: str
+    version: str | None = None
+
+
+class ModHistoryVersionChange(BaseModel):
+    name: str
+    from_filename: str
+    to_filename: str
+    from_version: str | None = None
+    to_version: str | None = None
+
+
+class ModHistoryChanges(BaseModel):
+    """What going back to a snapshot would do to the current mods folder."""
+
+    added: list[ModHistoryRef] = []
+    removed: list[ModHistoryRef] = []
+    updated: list[ModHistoryVersionChange] = []
+    enabled: list[ModHistoryRef] = []
+    disabled: list[ModHistoryRef] = []
+
+
+class ModHistoryEntry(BaseModel):
+    """A moment of the mods folder and what changed right after it."""
+
+    id: str
+    created_at: str
+    action: str
+    summary: str
+    added: int = Field(ge=0)
+    removed: int = Field(ge=0)
+    updated: int = Field(ge=0)
+    toggled: int = Field(ge=0)
+    mod_count: int = Field(ge=0)
+    restorable: bool
+
+
+class ModHistoryDetail(ModHistoryEntry):
+    changes: ModHistoryChanges
+    lines: list[str]
+    missing: list[ModHistoryRef] = []
+
+
+class ModHistoryRestoreRequest(BaseModel):
+    confirm: bool = False
+
+
+class ModHistoryRestoreResponse(BaseModel):
+    message: str
+    undo_id: str | None = None
+    restored_count: int = Field(ge=0)

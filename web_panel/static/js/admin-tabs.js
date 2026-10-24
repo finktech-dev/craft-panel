@@ -44,10 +44,11 @@
 
       if (btn) {
         btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        // Underline tabs, same look as the mods page.
         if (isActive) {
-          btn.className = 'master-tab-btn tab-pill rounded-xl bg-emerald-400 px-4 py-2 text-xs sm:text-sm font-bold text-zinc-950 shadow-sm transition';
+          btn.className = 'master-tab-btn tab-pill -mb-px border-b-2 border-emerald-400 pb-3 font-semibold text-zinc-50';
         } else {
-          btn.className = 'master-tab-btn tab-pill rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs sm:text-sm font-semibold text-zinc-400 hover:text-zinc-200 transition';
+          btn.className = 'master-tab-btn tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200';
         }
       }
 

@@ -11,14 +11,14 @@ from app.core.security import get_current_admin
 @pytest.fixture
 def client():
     # TestClient unauthenticated
-    return TestClient(app, raise_server_exceptions=True)
+    return TestClient(app, base_url="http://127.0.0.1", raise_server_exceptions=True)
 
 
 @pytest.fixture
 def auth_client():
     # TestClient authenticated via dependency override
     app.dependency_overrides[get_current_admin] = lambda: "session"
-    client = TestClient(app, raise_server_exceptions=True)
+    client = TestClient(app, base_url="http://127.0.0.1", raise_server_exceptions=True)
     yield client
     app.dependency_overrides.pop(get_current_admin, None)
 

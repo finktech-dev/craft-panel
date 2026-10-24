@@ -43,4 +43,4 @@ def test_manual_address_is_explicitly_unverified() -> None:
 
     assert result.source == "manual"
     assert result.is_custom is True
-    assert "no verifica" in result.message
+    assert "No podemos comprobar" in result.message

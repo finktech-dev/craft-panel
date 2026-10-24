@@ -1,0 +1,5 @@
+# Windows batch files must keep CRLF line endings, even in ZIP downloads.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+# Shell scripts must keep LF line endings, even in Windows checkouts.
+*.sh text eol=lf
