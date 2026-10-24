@@ -115,10 +115,31 @@ def _describe_countdown(seconds: int) -> str:
     return f"{seconds} segundos"
 
 
+def server_java_bin_directory(configured: Settings) -> Path | None:
+    """Folder of the Java the server should use: craftpanel.txt's, else the best one found.
+
+    "Best" is the lowest installed Java that is new enough for the server's Minecraft
+    version (tools/java, JAVA_HOME, PATH, the registry, Program Files or the Minecraft
+    Launcher's own runtime), so a Java that is not on PATH still works.
+    """
+    if (chosen := configured.server_java_executable) is not None:
+        return chosen.parent
+    from app.services.runtime_discovery import RuntimeDiscoveryService  # noqa: PLC0415 - avoids an import cycle
+
+    try:
+        status = RuntimeDiscoveryService(configured).server_java()
+    except Exception:  # noqa: BLE001 - detection must never block a start; PATH still applies
+        logger.warning("Java detection failed; using the Java on PATH.", exc_info=True)
+        status = None
+    if status is not None and status.state == "available" and status.executable:
+        return Path(status.executable).parent
+    return configured.server_java_bin_directory
+
+
 def server_environment(configured: Settings) -> dict[str, str]:
     """Environment for the server process: the chosen Java goes first on PATH."""
     environment = os.environ.copy()
-    java_bin = configured.server_java_bin_directory
+    java_bin = server_java_bin_directory(configured)
     if java_bin is not None:
         environment["PATH"] = f"{java_bin}{os.pathsep}{environment.get('PATH', '')}"
     return environment
@@ -266,7 +287,7 @@ class MinecraftServerManager:
                 raise ServerSettingsFileError(problem)
             if file_settings.java and not Path(file_settings.java).is_file():
                 raise ServerSettingsFileError(
-                    f"No encontramos el Java elegido para este servidor ({file_settings.java}). "
+                    "No encontramos el Java elegido en craftpanel.txt. "
                     "Corregilo en Ajustes › Tu servidor o dejalo vacío."
                 )
             if (memory := file_settings.value("memory")) is not None:
@@ -286,7 +307,7 @@ class MinecraftServerManager:
             self._start_requested_time = asyncio.get_running_loop().time()
             self._ready_notified = False
             try:
-                environment = server_environment(self._settings)
+                environment = await asyncio.to_thread(server_environment, self._settings)
                 self._process = await asyncio.create_subprocess_exec(
                     *self._settings.server_start_command,
                     cwd=str(self._settings.server_directory),

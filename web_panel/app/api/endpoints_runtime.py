@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 
@@ -56,7 +57,8 @@ def _settings_file():
 
 @router.get("/discovery", response_model=HostRuntimeDiscovery)
 async def discover_host_runtime() -> HostRuntimeDiscovery:
-    return runtime_discovery_service.discover()
+    # Each Java found is run once (java -version), so keep that off the event loop.
+    return await asyncio.to_thread(runtime_discovery_service.discover)
 
 
 @router.get("/launch-settings", response_model=LaunchSettings)

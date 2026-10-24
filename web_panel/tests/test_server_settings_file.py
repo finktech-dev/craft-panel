@@ -352,7 +352,7 @@ def test_chosen_java_is_the_one_checked_for_versions(tmp_path: Path) -> None:
 
     service = RuntimeDiscoveryService(configured, environ={"JAVA_HOME": str(tmp_path / "other")}, which=lambda _: "x")
 
-    assert service._java_candidates() == (java,)
+    assert [(candidate.path, candidate.source) for candidate in service._java_candidates()] == [(java, "craftpanel.txt")]
 
 
 @pytest.mark.asyncio

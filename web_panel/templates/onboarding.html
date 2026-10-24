@@ -6,7 +6,7 @@
   <header class="pb-8">
     {{ pixel('grass', 48) }}
     <h1 id="onboarding-title" class="font-display mt-5 text-4xl font-semibold leading-tight text-zinc-50">Vamos a armar tu servidor</h1>
-    <p class="mt-3 text-lg leading-relaxed text-zinc-400">Son cuatro pasos. No borramos ni cambiamos nada que ya tengas.</p>
+    <p class="mt-3 text-lg leading-relaxed text-zinc-400">Son cuatro pasos cortos. No borramos nada que ya tengas.</p>
   </header>
 
   <ol class="mb-10 grid grid-cols-4 gap-2" aria-label="Pasos">
@@ -22,24 +22,20 @@
   <!-- Step 1 -->
   <article data-step="java" class="onboarding-step hidden">
     <h2 class="text-2xl font-semibold text-zinc-50">Preparar tu computadora</h2>
-    <p class="mt-2 leading-relaxed text-zinc-400">Minecraft necesita un programa llamado Java para funcionar. Lo descargamos por vos y queda dentro de esta carpeta, sin instalar nada en el sistema.</p>
+    <p class="mt-2 leading-relaxed text-zinc-400">Minecraft necesita un programa que se llama Java. Lo bajamos por vos y queda dentro de la carpeta del panel. No se instala nada en Windows.</p>
     <p id="java-message" class="mt-3 text-sm text-zinc-500"></p>
     <div class="mt-6 flex flex-wrap items-center gap-3">
-      <button id="download-java" type="button" class="v2-button btn-primary">Descargar lo necesario</button>
-      <button data-refresh type="button" class="v2-button btn-quiet">Ya lo tengo instalado</button>
+      <button id="download-java" type="button" class="v2-button btn-primary">Descargar Java</button>
+      <button data-refresh type="button" class="v2-button btn-quiet">Ya lo instalé, revisar otra vez</button>
     </div>
     <div id="java-progress" class="mt-5 hidden max-w-xl"></div>
     <p id="java-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p>
-    <details class="mt-6 text-sm text-zinc-400">
-      <summary class="cursor-pointer hover:text-zinc-200">Prefiero instalar Java yo</summary>
-      <p class="mt-2 leading-relaxed">Descargá Java de <a class="link" href="https://adoptium.net/temurin/releases/" target="_blank" rel="noopener noreferrer">Adoptium</a> (Minecraft 1.20.5 o más nuevo usa Java 21) y descomprimilo dentro de <span class="font-mono text-zinc-300">tools/java</span>. Después tocá "Ya lo tengo instalado".</p>
-    </details>
   </article>
 
   <!-- Step 2 -->
   <article data-step="server" class="onboarding-step hidden">
     <h2 class="text-2xl font-semibold text-zinc-50">¿Cómo quieren jugar?</h2>
-    <p class="mt-2 leading-relaxed text-zinc-400">Podés cambiar de idea más adelante. Esto solo descarga lo que hace falta.</p>
+    <p class="mt-2 leading-relaxed text-zinc-400">Podés cambiar de idea más adelante. Solo bajamos lo que hace falta.</p>
     <fieldset class="mt-6 space-y-2">
       <legend class="sr-only">Tipo de servidor</legend>
       <label class="choice-row"><input type="radio" name="flavor" value="vanilla" checked><span><strong>Minecraft normal</strong><small>Sin mods, como lo conocés.</small></span></label>
@@ -58,7 +54,7 @@
     </div>
 
     <div id="import-existing-server" class="mt-6 hidden">
-      <p class="leading-relaxed text-zinc-300">Copiá la carpeta de tu servidor dentro de la carpeta <span class="font-mono text-zinc-100">server</span> de Craft Panel. Tiene que tener su archivo de inicio (<span class="font-mono">run.bat</span> en Windows). No vamos a mover ni cambiar tus archivos.</p>
+      <p class="leading-relaxed text-zinc-300">Copiá los archivos de tu servidor dentro de la carpeta <span class="font-mono text-zinc-100">server</span> del panel. Tiene que estar el archivo que lo enciende (<span class="font-mono">run.bat</span>). No movemos ni cambiamos nada.</p>
       <button id="check-imported-server" type="button" class="v2-button btn-primary mt-5">Ya lo copié</button>
     </div>
     <p id="install-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p>
@@ -78,22 +74,57 @@
 
     <section id="internet-access" class="mt-10 border-t border-zinc-800 pt-8" aria-labelledby="internet-title">
       <h3 id="internet-title" class="text-lg font-semibold text-zinc-50">Para jugar desde otras casas</h3>
-      <p class="mt-1 leading-relaxed text-zinc-400">Usamos Playit, un servicio gratis que le da a tu servidor una dirección para compartir. No hace falta tocar el router.</p>
-      <p id="playit-done" class="mt-4 hidden text-emerald-300">Listo, ya está conectado.</p>
-      <div id="playit-steps">
-        <ol class="mt-4 list-decimal space-y-1 pl-5 text-zinc-300">
-          <li>Tocá "Conectar con Playit".</li>
-          <li>En la página que se abre, entrá o creá una cuenta y aprobá esta computadora.</li>
-          <li>Volvé acá y tocá "Ya lo aprobé".</li>
+      <p class="mt-1 leading-relaxed text-zinc-400">Usamos Playit, un programa gratis que le da a tu servidor una dirección para compartir. No hace falta tocar el router.</p>
+
+      <p id="playit-done" class="mt-4 hidden text-emerald-300">Listo, Playit ya está conectado.</p>
+
+      <!-- The official Playit app is running. -->
+      <div id="playit-running" class="mt-4 hidden">
+        <p class="text-emerald-300">Playit ya está instalado y funcionando.</p>
+      </div>
+
+      <!-- The official Playit app is installed but turned off. -->
+      <div id="playit-stopped" class="mt-4 hidden">
+        <p class="text-zinc-200">Playit está instalado, pero apagado.</p>
+        <p class="mt-1 leading-relaxed text-zinc-400">No pasa nada: cuando toques "Encender", lo prendemos nosotros. Si querés prenderlo ahora, tocá el botón o abrí <strong class="text-zinc-200">Playit.gg</strong> desde el menú Inicio.</p>
+        <button id="start-playit" type="button" class="v2-button btn-quiet mt-4">Encender Playit</button>
+        <details id="playit-autostart-help" class="mt-4 hidden text-sm text-zinc-400">
+          <summary class="cursor-pointer hover:text-zinc-200">¿Querés que Playit se prenda solo con Windows?</summary>
+          <ol class="mt-2 list-decimal space-y-1 pl-5 leading-relaxed">
+            <li>En el menú Inicio, buscá <strong class="text-zinc-200">Servicios</strong> y abrilo.</li>
+            <li>Hacé doble clic en <strong class="text-zinc-200">playitd</strong>.</li>
+            <li>En "Tipo de inicio" elegí <strong class="text-zinc-200">Automático</strong> y tocá Aceptar. Windows te puede pedir permiso.</li>
+          </ol>
+        </details>
+      </div>
+
+      <!-- The official Playit app is installed but its background part is missing. -->
+      <div id="playit-broken" class="mt-4 hidden">
+        <p class="text-zinc-200">Playit está instalado, pero le falta una parte.</p>
+        <p class="mt-1 leading-relaxed text-zinc-400">Volvé a instalarlo desde la <a class="link" href="https://playit.gg/download" target="_blank" rel="noopener noreferrer">página de Playit</a> y después tocá "Ya lo instalé".</p>
+        <button data-refresh type="button" class="v2-button btn-quiet mt-4">Ya lo instalé</button>
+      </div>
+
+      <!-- No Playit at all: install the official app, or link the panel's own agent. -->
+      <div id="playit-missing" class="mt-4 hidden">
+        <ol class="list-decimal space-y-1 pl-5 leading-relaxed text-zinc-300">
+          <li>Bajá Playit desde su <a class="link" href="https://playit.gg/download" target="_blank" rel="noopener noreferrer">página oficial</a> (elegí Windows).</li>
+          <li>Instalalo y abrilo. Te va a pedir que entres o crees una cuenta.</li>
+          <li>Volvé acá y tocá "Ya lo instalé".</li>
         </ol>
-        <button id="begin-playit-onboarding" type="button" class="v2-button btn-quiet mt-5">Conectar con Playit</button>
-        <div id="playit-claim" class="mt-4 hidden">
-          <a id="playit-claim-link" target="_blank" rel="noopener noreferrer" class="link"></a>
-          <div><button id="complete-playit-claim" type="button" class="v2-button btn-quiet mt-3">Ya lo aprobé</button></div>
-        </div>
+        <button data-refresh type="button" class="v2-button btn-quiet mt-4">Ya lo instalé</button>
         <details class="mt-5 text-sm text-zinc-400">
           <summary class="cursor-pointer hover:text-zinc-200">Otras opciones</summary>
           <div class="mt-3 space-y-5">
+            <div>
+              <p>Conectar el panel con tu cuenta de Playit, sin instalar el programa:</p>
+              <button id="begin-playit-onboarding" type="button" class="v2-button btn-quiet mt-3">Conectar con Playit</button>
+              <div id="playit-claim" class="mt-4 hidden">
+                <p>En la página que se abre, entrá con tu cuenta y aprobá esta computadora.</p>
+                <a id="playit-claim-link" target="_blank" rel="noopener noreferrer" class="link"></a>
+                <div><button id="complete-playit-claim" type="button" class="v2-button btn-quiet mt-3">Ya lo aprobé</button></div>
+              </div>
+            </div>
             <div>
               <button id="show-manual-playit" type="button" class="link">Tengo una clave de agente de Playit</button>
               <div id="manual-playit-secret" class="mt-3 hidden">
@@ -103,11 +134,24 @@
               </div>
             </div>
             <div>
-              <p>¿Solo van a jugar conectados al mismo Wi-Fi? Podés saltear Playit; los amigos de otras casas no van a poder entrar.</p>
+              <p>¿Van a jugar todos conectados al mismo wifi? Podés saltear Playit. Los amigos de otras casas no van a poder entrar.</p>
               <button id="local-only-onboarding" type="button" class="v2-button btn-quiet mt-3">Jugar solo en esta casa</button>
             </div>
           </div>
         </details>
+      </div>
+
+      <!-- The address friends type in Minecraft, read from Playit or pasted. -->
+      <div id="friend-address" class="mt-6 hidden">
+        <p id="friend-address-current" class="leading-relaxed text-zinc-300"></p>
+        <button id="use-playit-address" type="button" class="v2-button btn-primary mt-4">Usar la dirección de mi Playit</button>
+        <form id="friend-address-form" class="mt-5">
+          <label for="friend-address-input" class="block text-sm text-zinc-400">Pegá la dirección que te muestra Playit</label>
+          <div class="mt-2 flex gap-2">
+            <input id="friend-address-input" type="text" maxlength="260" autocomplete="off" spellcheck="false" placeholder="mi-servidor.joinmc.link" class="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 font-mono text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400">
+            <button type="submit" class="v2-button btn-quiet">Guardar</button>
+          </div>
+        </form>
       </div>
     </section>
     <p id="connection-feedback" class="mt-3 text-sm text-zinc-400" aria-live="polite"></p>
@@ -119,11 +163,11 @@
   <!-- Step 4 -->
   <article data-step="ready" class="onboarding-step hidden">
     <h2 class="text-2xl font-semibold text-zinc-50">¡Todo listo para jugar!</h2>
-    <p class="mt-2 leading-relaxed text-zinc-400">La primera vez tarda un poco más porque se crea el mundo. Cuando termine, hacemos una copia automática.</p>
+    <p class="mt-2 leading-relaxed text-zinc-400">La primera vez tarda un poco más porque se crea el mundo. Cuando termine, guardamos una copia sola.</p>
     <label class="mt-6 block font-semibold text-zinc-100" for="onboarding-ram">Memoria para el juego</label>
     <p id="onboarding-ram-hint" class="mt-0.5 text-sm text-zinc-500"></p>
     <select id="onboarding-ram" class="mt-2 min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 outline-none focus:border-emerald-400"></select>
-    <button id="start-from-onboarding" type="button" class="v2-button btn-primary mt-6 px-6 text-base">Encender mi servidor</button>
+    <button id="start-from-onboarding" type="button" class="v2-button btn-primary mt-6 px-6 text-base">Encender</button>
     <div id="start-progress" class="mt-5 hidden max-w-xl"></div>
     <p id="ready-feedback" class="mt-4 leading-relaxed text-zinc-300" aria-live="polite"></p>
     <a id="onboarding-done" href="/" class="link mt-2 hidden">Ir al inicio</a>

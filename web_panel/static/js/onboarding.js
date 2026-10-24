@@ -50,11 +50,26 @@
     return whitelist;
   };
 
+  const show = (selector, visible) => $(selector)?.classList.toggle('hidden', !visible);
+
+  // One block per Playit situation: running, installed but off, broken, or not installed.
   const renderInternet = () => {
-    const done = internetReady();
-    $('#playit-done')?.classList.toggle('hidden', !done);
-    $('#playit-steps')?.classList.toggle('hidden', done);
-    if (state && !state.playit_enabled) say('#playit-done', 'Elegiste jugar solo en esta casa. Lo podés cambiar después en Ajustes.');
+    if (!state) return;
+    const enabled = state.playit_enabled;
+    const playit = state.playit_state || 'not_installed';
+    const broken = playit === 'stopped' && !state.playit_connected;
+    const ownAgent = playit === 'not_installed' && state.playit_connected;
+    show('#playit-done', !enabled || ownAgent);
+    say('#playit-done', enabled ? 'Listo, Playit ya está conectado.' : 'Elegiste jugar solo en esta casa. Lo podés cambiar después en Ajustes.');
+    show('#playit-running', enabled && playit === 'running');
+    show('#playit-stopped', enabled && playit === 'stopped' && !broken);
+    show('#playit-autostart-help', state.playit_autostart === false);
+    show('#playit-broken', enabled && broken);
+    show('#playit-missing', enabled && playit === 'not_installed' && !ownAgent);
+    show('#friend-address', enabled && (playit === 'running' || (playit === 'stopped' && !broken)));
+    say('#friend-address-current', state.friend_address
+      ? `Tus amigos entran con: ${state.friend_address}`
+      : 'Todavía no tenemos la dirección para tus amigos. Tocá el botón y la buscamos en Playit.');
   };
 
   const refresh = async () => {
@@ -77,15 +92,30 @@
     } catch (error) { showError(error.message); }
   };
 
-  const waitForPublicAddress = async () => {
+  // After starting, wait for an address friends can use. With the official Playit app it is
+  // asked from the app's local status (never its key) until one shows up.
+  const waitForFriendAddress = async () => {
     say('#ready-feedback', 'Buscando la dirección para tus amigos.');
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      await sleep(1000);
-      const tunnel = await Panel.api('/api/tunnel/status');
-      if (tunnel.public_address) return tunnel.public_address;
-      if (tunnel.last_error) throw new Error(tunnel.last_error);
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const info = await Panel.api('/api/server/connection-info').catch(() => null);
+      if (info?.can_share_with_friends) return info.public_address;
+      const tunnel = await Panel.api('/api/tunnel/status').catch(() => null);
+      if (tunnel?.last_error) throw new Error(tunnel.last_error);
+      if (tunnel?.external_agent === 'running') {
+        await Panel.api('/api/tunnel/external/address?use_agent_key=false', { method: 'POST' }).catch(() => null);
+      }
+      await sleep(1500);
     }
     return null;
+  };
+
+  // A new server may need a newer Java than the one found: download it first, in the same click.
+  const ensureJavaFor = async (version, button) => {
+    const check = await Panel.api(`/api/onboarding/status?minecraft_version=${encodeURIComponent(version)}`);
+    if (check.java_ready) return true;
+    say('#install-feedback', `${check.java_message} Primero bajamos Java, después el juego.`);
+    const job = await PanelJobs.start('/api/onboarding/java', { mount: '#install-progress', button, body: { minecraft_version: version } });
+    return job.status === 'succeeded';
   };
 
   const withButton = async (button, pendingLabel, task) => {
@@ -115,16 +145,17 @@
       say('#install-feedback', 'Revisando la carpeta…');
       try {
         const status = await Panel.api('/api/onboarding/status');
-        if (!status.server_ready) throw new Error('Todavía no encontramos el archivo de inicio (run.bat) dentro de la carpeta server.');
-        say('#install-feedback', 'Encontramos tu servidor. No tocamos nada.');
+        if (!status.server_ready) throw new Error('Todavía no encontramos el archivo que lo enciende (run.bat) dentro de la carpeta server.');
+        say('#install-feedback', 'Encontramos tu servidor. No cambiamos nada.');
         await refresh();
       } catch (error) { say('#install-feedback', error.message); }
     });
 
     $('#install-server')?.addEventListener('click', async ({ currentTarget }) => {
       if (!$('#accept-eula').checked) { say('#install-feedback', 'Para seguir tenés que aceptar las reglas de uso de Minecraft.'); return; }
-      say('#install-feedback', 'Con mods puede tardar varios minutos. Si cerrás esta ventana, la instalación sigue.');
       try {
+        if (!(await ensureJavaFor($('#minecraft-version').value, currentTarget))) return;
+        say('#install-feedback', 'Con mods puede tardar varios minutos. Si cerrás esta ventana, la instalación sigue.');
         const job = await PanelJobs.start('/api/onboarding/install', {
           mount: '#install-progress',
           button: currentTarget,
@@ -209,10 +240,37 @@
       } catch (error) { say('#connection-feedback', error.message); }
     });
 
+    // The official Playit app: turn it on, read its address, or save one pasted by hand.
+    $('#start-playit')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, 'Encendiendo…', async () => {
+      try {
+        await Panel.api('/api/tunnel/external/start', { method: 'POST' });
+        say('#connection-feedback', 'Listo, Playit está encendido.');
+        await refresh();
+      } catch (error) { say('#connection-feedback', error.message); }
+    }));
+    $('#use-playit-address')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, 'Buscando…', async () => {
+      try {
+        const result = await Panel.api('/api/tunnel/external/address', { method: 'POST' });
+        say('#connection-feedback', result.message);
+        await refresh();
+      } catch (error) { say('#connection-feedback', `${error.message} También podés pegar la dirección abajo.`); }
+    }));
+    $('#friend-address-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const input = $('#friend-address-input');
+      if (!input.value.trim()) { say('#connection-feedback', 'Pegá la dirección que te muestra Playit.'); return; }
+      try {
+        const result = await Panel.api('/api/tunnel/address', { method: 'POST', body: { public_address: input.value } });
+        input.value = '';
+        say('#connection-feedback', result.message);
+        await refresh();
+      } catch (error) { say('#connection-feedback', error.message); }
+    });
+
     $('#friends-continue')?.addEventListener('click', async () => {
       state = await Panel.api('/api/onboarding/status');
       if (!internetReady()) {
-        say('#connection-feedback', 'Conectá Playit o elegí "Jugar solo en esta casa" en Otras opciones.');
+        say('#connection-feedback', 'Primero instalá Playit, o elegí "Jugar solo en esta casa" en Otras opciones.');
         return;
       }
       if (!state.whitelist_enabled) {
@@ -228,11 +286,11 @@
       if (!job || job.status !== 'succeeded') { say('#ready-feedback', ''); return; }
       let address = null;
       if (playitEnabled) {
-        try { address = await waitForPublicAddress(); } catch (error) { say('#ready-feedback', error.message); }
+        try { address = await waitForFriendAddress(); } catch (error) { say('#ready-feedback', error.message); }
       }
       say('#ready-feedback', address
         ? `¡Listo! Pasales esta dirección a tus amigos: ${address}`
-        : 'Tu servidor está encendido. En el inicio vas a ver la dirección para compartir.');
+        : 'Tu servidor está encendido. En el Inicio vas a ver la dirección para tus amigos.');
       $('#onboarding-done')?.classList.remove('hidden');
     };
 
