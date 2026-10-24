@@ -81,6 +81,8 @@
 .back-link { display:inline-flex; align-items:center; min-height:2.5rem; color:var(--text-muted); font-weight:500; }
 .back-link:hover { color:var(--text); }
 .screen-title { font-size:1.875rem; line-height:1.2; font-weight:600; letter-spacing:-.02em; color:var(--text); }
+/* Headings get focus only so screen readers announce the new screen; no ring for that. */
+.panel-shell [tabindex="-1"]:focus { outline:none; }
 .screen-lead { margin-top:.5rem; max-width:36rem; font-size:1.05rem; line-height:1.6; color:var(--text-muted); }
 /* Secondary underline tabs inside a sub-screen. */
 .subtabs { display:flex; flex-wrap:wrap; gap:.5rem 1.5rem; border-bottom:1px solid var(--line); }

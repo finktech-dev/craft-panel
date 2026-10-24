@@ -320,9 +320,11 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const renderCategoryList = () => {
-    $('#props-categories-nav').innerHTML = propertiesData.categories.map((cat) => {
+    const countOf = (cat) => propertiesData.properties.filter((p) => p.category === cat).length;
+    // Empty groups (for example no extra settings in the file) are left out of the list.
+    $('#props-categories-nav').innerHTML = propertiesData.categories.filter((cat) => countOf(cat) > 0).map((cat) => {
       const info = infoFor(cat);
-      const count = propertiesData.properties.filter((p) => p.category === cat).length;
+      const count = countOf(cat);
       const detail = [info.lead, `${count} ${count === 1 ? 'ajuste' : 'ajustes'}`].filter(Boolean).join(' · ');
       return `<button type="button" data-cat="${esc(cat)}" class="settings-row"><span><strong>${esc(info.title)}</strong><small>${esc(detail)}</small></span></button>`;
     }).join('');
