@@ -158,7 +158,8 @@ class PlayitService:
                 )
             except OSError as error:
                 self._last_error = "No se pudo iniciar el ejecutable de Playit."
-                await self._record(f"Error al iniciar Playit: {error}", level="error")
+                # strerror only: str(error) would include this PC's folders.
+                await self._record(f"Error al iniciar Playit: {error.strerror or 'error desconocido'}", level="error")
                 raise PlayitServiceError(self._last_error) from error
             assert self._process.stdout is not None
             self._reader_task = asyncio.create_task(self._read_output(self._process.stdout), name="playit-output")
@@ -326,7 +327,7 @@ class PlayitService:
             secret = (await asyncio.to_thread(path.read_text, encoding="utf-8")).strip()
         except OSError as error:
             self._last_error = "No se pudo leer la clave local de Playit."
-            await self._record(f"Error de lectura de la clave de Playit: {error}", level="error")
+            await self._record(f"Error de lectura de la clave de Playit: {error.strerror or 'error desconocido'}", level="error")
             raise PlayitServiceError(self._last_error) from error
         if len(secret) < 16:
             self._last_error = "La clave local de Playit no es válida. Pegala nuevamente desde tu cuenta de Playit."
