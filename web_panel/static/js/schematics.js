@@ -480,6 +480,8 @@
         await loadSchematics();
         banner.src = `/api/server/banner.png?updated=${Date.now()}`;
         if (targetFilename) {
+          // The 3D preview lives in "Tus construcciones"; show it there.
+          window.Panel.openPageTab?.('construcciones');
           loadSchematicPreview(targetFilename);
         }
       } catch (error) {

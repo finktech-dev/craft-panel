@@ -8,7 +8,15 @@
     <p class="mt-3 max-w-2xl text-lg leading-relaxed text-zinc-400">Construcciones listas para copiar a tu mundo con el Schematicannon del mod Create. Mirá cómo quedan en 3D antes de descargarlas.</p>
   </header>
 
-  <section class="border-t border-zinc-800 py-9" aria-labelledby="viewer-title">
+  {#- One part of the page at a time (app.js keeps the open one in the hash: #crear, #cartel). -#}
+  <div class="subtabs" role="tablist" aria-label="Partes de esquemáticos" data-page-tabs>
+    <button type="button" role="tab" id="page-tab-construcciones" class="subtab" data-page-tab="construcciones" aria-controls="page-panel-construcciones" aria-selected="true">Tus construcciones</button>
+    <button type="button" role="tab" id="page-tab-crear" class="subtab" data-page-tab="crear" aria-controls="page-panel-crear" aria-selected="false">Crear una nueva</button>
+    <button type="button" role="tab" id="page-tab-cartel" class="subtab" data-page-tab="cartel" aria-controls="page-panel-cartel" aria-selected="false">Cartel del servidor</button>
+  </div>
+
+  <div id="page-panel-construcciones" role="tabpanel" aria-labelledby="page-tab-construcciones" data-page-panel="construcciones">
+  <section class="py-9" aria-labelledby="viewer-title">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h2 id="viewer-title" class="text-lg font-semibold text-zinc-50">Vista previa <span id="viewer-badge" class="font-normal text-zinc-500">en 3D</span></h2>
@@ -47,7 +55,22 @@
     </div>
   </section>
 
-  <section class="border-t border-zinc-800 py-9" aria-labelledby="generate-title">
+  <section class="border-t border-zinc-800 py-9" aria-labelledby="files-title">
+    <div class="flex items-baseline justify-between gap-3">
+      <h2 id="files-title" class="text-lg font-semibold text-zinc-50">Tus archivos</h2>
+      <span id="schematic-count" class="text-sm text-zinc-500">—</span>
+    </div>
+    <p class="mt-1 text-zinc-400">Descargá el archivo y ponelo en la carpeta <span class="font-mono text-zinc-300">schematics</span> de tu juego para usarlo con el Schematicannon.</p>
+    <label for="schematics-search" class="sr-only">Buscar un archivo</label>
+    <input id="schematics-search" type="search" data-list-filter="#schematics-list" placeholder="Buscar por nombre" class="mt-4 min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400 sm:max-w-sm">
+    <div id="schematics-list" class="mt-3 border-t border-zinc-800" aria-live="polite">
+      <p class="py-12 text-center text-zinc-500">Buscando archivos…</p>
+    </div>
+  </section>
+  </div>
+
+  <div id="page-panel-crear" role="tabpanel" aria-labelledby="page-tab-crear" data-page-panel="crear" hidden>
+  <section class="py-9" aria-labelledby="generate-title">
     <h2 id="generate-title" class="text-lg font-semibold text-zinc-50">Crear una construcción nueva</h2>
     <p class="mt-1 text-zinc-400">El panel arma el archivo por vos y lo muestra en la vista previa.</p>
 
@@ -71,24 +94,16 @@
       </article>
     </div>
   </section>
+  </div>
 
-  <section class="border-t border-zinc-800 py-9" aria-labelledby="files-title">
-    <div class="flex items-baseline justify-between gap-3">
-      <h2 id="files-title" class="text-lg font-semibold text-zinc-50">Tus archivos</h2>
-      <span id="schematic-count" class="text-sm text-zinc-500">—</span>
-    </div>
-    <p class="mt-1 text-zinc-400">Descargá el archivo y ponelo en la carpeta <span class="font-mono text-zinc-300">schematics</span> de tu juego para usarlo con el Schematicannon.</p>
-    <div id="schematics-list" class="mt-3 border-t border-zinc-800" aria-live="polite">
-      <p class="py-12 text-center text-zinc-500">Buscando archivos…</p>
-    </div>
-  </section>
-
-  <section class="border-t border-zinc-800 py-9" aria-labelledby="banner-title">
+  <div id="page-panel-cartel" role="tabpanel" aria-labelledby="page-tab-cartel" data-page-panel="cartel" hidden>
+  <section class="py-9" aria-labelledby="banner-title">
     <h2 id="banner-title" class="text-lg font-semibold text-zinc-50">Cartel del servidor</h2>
     <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Una imagen que muestra si el servidor está encendido. Podés ponerla en Discord o en un foro; se ve sin necesidad de entrar al panel.</p>
     <img id="status-banner" src="/api/server/banner.png" alt="Cartel con el estado del servidor" class="mt-5 w-full max-w-xl rounded-lg bg-zinc-900" width="600" height="160">
-    <button id="copy-banner-markdown" type="button" class="v2-button btn-quiet mt-4">Copiar el enlace</button>
+    <button id="copy-banner-markdown" type="button" class="v2-button btn-primary mt-4">Copiar el enlace</button>
   </section>
+  </div>
 </section>
 {% endblock %}
 

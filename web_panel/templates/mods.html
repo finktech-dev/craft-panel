@@ -117,7 +117,9 @@
   <section id="panel-history" class="hidden pt-6" aria-labelledby="history-heading">
     <h2 id="history-heading" class="sr-only">Historial</h2>
     <p class="max-w-xl leading-relaxed text-zinc-400">Antes de cada cambio guardamos cómo estaban tus mods. Si algo dejó de andar, volvé a un punto anterior: se deshace ese cambio y todos los que vinieron después.</p>
-    <div id="history-list" class="mt-5 border-t border-zinc-800" aria-live="polite">
+    <label for="history-search" class="sr-only">Buscar en el historial</label>
+    <input id="history-search" type="search" data-list-filter="#history-list" placeholder="Buscar un cambio, por ejemplo el nombre de un mod" class="mt-5 min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400">
+    <div id="history-list" class="mt-4 border-t border-zinc-800" aria-live="polite">
       <p class="py-12 text-center text-zinc-500">Cargando el historial…</p>
     </div>
     <div id="history-empty" class="hidden border-t border-zinc-800 py-14 text-center">

@@ -202,6 +202,41 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+// Simple page sections shown one at a time: a [data-page-tabs] row of [data-page-tab="key"]
+// buttons and matching [data-page-panel="key"] panels. The open one is kept in the hash (#key),
+// so reloads and links land on it; the first one is the default.
+document.addEventListener('DOMContentLoaded', () => {
+  const bar = document.querySelector('[data-page-tabs]');
+  if (!bar) return;
+  const buttons = [...bar.querySelectorAll('[data-page-tab]')];
+  const keys = buttons.map((button) => button.dataset.pageTab);
+  const open = (key, remember = true) => {
+    const target = keys.includes(key) ? key : keys[0];
+    buttons.forEach((button) => button.setAttribute('aria-selected', button.dataset.pageTab === target ? 'true' : 'false'));
+    document.querySelectorAll('[data-page-panel]').forEach((panel) => { panel.hidden = panel.dataset.pagePanel !== target; });
+    if (remember) {
+      const hash = target === keys[0] ? window.location.pathname : `#${target}`;
+      try { history.replaceState(null, '', hash); } catch { /* the panel still switches */ }
+    }
+  };
+  bar.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-page-tab]');
+    if (button) open(button.dataset.pageTab);
+  });
+  bar.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+    const index = buttons.indexOf(event.target);
+    if (index < 0) return;
+    const next = buttons[(index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length];
+    next.focus();
+    open(next.dataset.pageTab);
+  });
+  const fromHash = () => open(window.location.hash.slice(1), false);
+  window.addEventListener('hashchange', fromHash);
+  fromHash();
+  window.Panel.openPageTab = open;
+});
+
 // Header menus are <details> elements: close them on outside click or Escape.
 document.addEventListener('DOMContentLoaded', () => {
   const menus = [...document.querySelectorAll('details[data-menu]')];
