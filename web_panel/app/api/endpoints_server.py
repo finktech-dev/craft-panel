@@ -20,7 +20,8 @@ from app.schemas.server import ServerActionResponse, ServerMetrics
 from app.schemas.runtime import FriendConnectionInfo, TunnelStatus
 from app.services import job_service as job_service_module
 from app.services.backup_service import BACKUP_STEPS, backup_service
-from app.services.job_service import JobReporter
+from app.services.crash_guard import crash_guard
+from app.services.job_service import Job, JobReporter
 from app.services.metrics_service import metrics_service
 from app.services.player_crash_service import player_crash_service
 from app.services.playit_service import PlayitServiceError, playit_service
@@ -87,11 +88,16 @@ async def _create_first_backup_after_ready() -> None:
         logger.warning("The first automatic backup was not created: %s", error)
 
 
+def _ready_timeout_seconds() -> float:
+    """``startup_timeout`` from craftpanel.txt (5 minutes when not set)."""
+    return float(read_server_settings(settings).value("startup_timeout") or READY_TIMEOUT_SECONDS)
+
+
 async def _wait_until_ready(reporter: JobReporter) -> bool:
     """Final ``ready`` step shared by start and restart jobs."""
     reporter("ready", "Esperando a que el servidor termine de cargar el mundo.")
     try:
-        await server_manager.wait_until_ready(timeout_seconds=READY_TIMEOUT_SECONDS)
+        await server_manager.wait_until_ready(timeout_seconds=_ready_timeout_seconds())
     except ServerStartTimeoutError:
         reporter.done_message = (
             "El servidor sigue cargando. Con muchos mods puede tardar más; "
@@ -115,6 +121,14 @@ async def _launch_first_backup_if_missing() -> None:
 
 @router.post("/start", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED)
 async def start_server(dev_mode: bool = False) -> JobAccepted:
+    job = await launch_start_job(dev_mode=dev_mode)
+    # Starting by hand means someone is looking: automatic crash restarts may run again.
+    crash_guard.reset()
+    return accepted(job, "Encendiendo el servidor.")
+
+
+async def launch_start_job(*, dev_mode: bool = False, title: str = "Encender el servidor") -> Job:
+    """Run every check, then start the server as a job; shared by the button and the automations."""
     if server_manager.is_running:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El servidor ya está en ejecución.")
     _raise_if_busy()
@@ -146,8 +160,7 @@ async def start_server(dev_mode: bool = False) -> JobAccepted:
             job_service_module.job_service.spawn(_create_first_backup_after_ready(), "first-world-backup")
         return {"state": str(server_manager.state)}
 
-    job = start_job("start", "Encender el servidor", START_STEPS, work)
-    return accepted(job, "Encendiendo el servidor.")
+    return start_job("start", title, START_STEPS, work)
 
 
 @router.post("/stop", response_model=ServerActionResponse)
@@ -224,19 +237,24 @@ async def restart_server() -> JobAccepted:
 async def graceful_restart_server(countdown: int = 10) -> JobAccepted:
     if countdown < 3 or countdown > 60:
         countdown = 10
+    job = await launch_graceful_restart_job(countdown)
+    return accepted(job, f"Avisamos a los jugadores y reiniciamos en {countdown} segundos.")
+
+
+async def launch_graceful_restart_job(countdown: int, *, title: str = "Reiniciar avisando a los jugadores") -> Job:
+    """Warn in the chat, save and restart as a job; also used by the daily restart."""
     _raise_if_busy()
     await _raise_if_settings_file_blocks_start()
     await _raise_if_external_server()
     _require_playit_ready()
-    job = start_job(
+    return start_job(
         "graceful_restart",
-        "Reiniciar avisando a los jugadores",
+        title,
         GRACEFUL_RESTART_STEPS,
         _restart_work(
             lambda reporter: server_manager.graceful_restart(countdown_seconds=countdown, progress=reporter)
         ),
     )
-    return accepted(job, f"Avisamos a los jugadores y reiniciamos en {countdown} segundos.")
 
 
 @router.post("/kill", response_model=ServerActionResponse)

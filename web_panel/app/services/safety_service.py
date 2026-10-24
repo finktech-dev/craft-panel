@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from app.core.config import Settings, settings
+from app.services.crash_guard import crash_guard
 from app.services.external_server_service import ExternalServer, ExternalServerDetector
 
 Level = Literal["ok", "warn", "danger", "unknown"]
@@ -120,6 +121,15 @@ def diagnostics_item(external: ExternalServer | None, newest_crash_age_seconds: 
                       detail="No hubo problemas en la última semana.", action_label="Ver historial", action_href="/crashes")
 
 
+def auto_restart_items(paused_message: str | None) -> list[SafetyItem]:
+    """Only when restart_on_crash gave up after too many crashes in a row."""
+    if not paused_message:
+        return []
+    return [SafetyItem(key="auto_restart", label="Reinicio automático", level="warn",
+                       title="Dejamos de volver a encenderlo solo", detail=paused_message,
+                       action_label="Ver qué pasó", action_href="/crashes")]
+
+
 def summarize(items: list[SafetyItem]) -> SafetySummary:
     level = max((item.level for item in items), key=_LEVEL_ORDER.__getitem__, default="unknown")
     headline = {
@@ -157,6 +167,7 @@ class SafetyService:
                 world.is_dir(),
             ),
             diagnostics_item(self._detector.detect(own_pid), self._newest_crash_age()),
+            *auto_restart_items(crash_guard.paused_message),
         ])
 
     def _panel_backups(self) -> list[Path]:

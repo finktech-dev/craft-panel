@@ -9,7 +9,7 @@ import logging
 import os
 import re
 from collections import deque
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -107,6 +107,13 @@ class ServerSettingsFileError(ServerProcessError):
     status_code = 409
 
 
+def _describe_countdown(seconds: int) -> str:
+    """"90 segundos", "2 minutos": how long until a restart, for the chat."""
+    if seconds >= 120 and seconds % 60 == 0:
+        return f"{seconds // 60} minutos"
+    return f"{seconds} segundos"
+
+
 def server_environment(configured: Settings) -> dict[str, str]:
     """Environment for the server process: the chosen Java goes first on PATH."""
     environment = os.environ.copy()
@@ -170,6 +177,7 @@ class MinecraftServerManager:
         self._last_join_notified: dict[str, float] = {}
         self._last_leave_notified: dict[str, float] = {}
         self._last_death_notified: dict[str, float] = {}
+        self._crash_listeners: list[Callable[[], Coroutine[Any, Any, None]]] = []
         self._initialized = True
 
     @property
@@ -207,6 +215,15 @@ class MinecraftServerManager:
     def process_pid(self) -> int | None:
         """PID del lanzador; MetricsService resuelve Java cuando es un hijo."""
         return self._process.pid if self.is_running and self._process is not None else None
+
+    def add_crash_listener(self, listener: Callable[[], Coroutine[Any, Any, None]]) -> None:
+        """Run ``listener`` each time the server ends on its own (not a requested stop or kill)."""
+        if listener not in self._crash_listeners:
+            self._crash_listeners.append(listener)
+
+    async def log_system(self, message: str) -> None:
+        """Show a panel message in the console, like the panel's own start/stop notes."""
+        await self._record_log("system", message)
 
     @property
     def history(self) -> list[dict[str, str]]:
@@ -348,9 +365,10 @@ class MinecraftServerManager:
 
     async def _announce_restart(self, countdown_seconds: int, progress: ProgressCallback | None = None) -> None:
         try:
-            report(progress, "notice", f"Avisamos en el chat: reinicio en {countdown_seconds} segundos.")
+            when = _describe_countdown(countdown_seconds)
+            report(progress, "notice", f"Avisamos en el chat: reinicio en {when}.")
             await self.send_command(
-                f"/say §c[Servidor] El servidor se reiniciará en {countdown_seconds} segundos para aplicar cambios. ¡Guarden sus cosas!"
+                f"/say §c[Servidor] El servidor se reiniciará en {when}. ¡Guarden sus cosas!"
             )
             if countdown_seconds > 5:
                 await asyncio.sleep(countdown_seconds - 5)
@@ -545,7 +563,12 @@ class MinecraftServerManager:
             else:
                 report = await crash_analyzer.get_latest_crash_report()
                 asyncio.create_task(discord_service.send_crash(report), name="discord-server-crashed")
+        # Test runs (dev mode) never trigger automatic restarts.
+        crashed = self._state == ServerState.CRASHED and not self._dev_mode
         self._dev_mode = False
+        if crashed:
+            for listener in tuple(self._crash_listeners):
+                asyncio.create_task(listener(), name="server-crash-listener")
 
     async def _record_log(self, stream: str, message: str) -> None:
         line = TerminalLine(

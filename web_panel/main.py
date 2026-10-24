@@ -13,6 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.api import server_automation
 from app.api.router import router as api_router
 from app.core.config import settings
 from app.core.security import (
@@ -41,7 +42,9 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Conserva el proceso de Minecraft consistente al apagar el panel."""
+    server_automation.install()
     scheduler_service.start()
+    asyncio.create_task(server_automation.start_with_panel(), name="start-with-panel")
     try:
         yield
     except asyncio.CancelledError:
