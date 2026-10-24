@@ -123,6 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (restore) {
       selectedBackup = decodeURIComponent(restore.dataset.file);
       restoreName.textContent = selectedBackup;
+      const restoreFiles = document.querySelector('#restore-server-files');
+      if (restoreFiles) restoreFiles.checked = false;
       dialog.showModal();
     }
     if (remove) {
@@ -147,6 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // The dialog closes as soon as the job exists; progress continues on the page.
       const job = await PanelJobs.start(`/api/backups/${encodeURIComponent(selectedBackup)}/restore`, {
         mount: '#restore-progress',
+        body: { restore_server_files: Boolean(document.querySelector('#restore-server-files')?.checked) },
         onAccepted: () => dialog.close(),
       });
       await finishJob(job, '#restore-progress');

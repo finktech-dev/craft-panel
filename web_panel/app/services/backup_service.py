@@ -23,6 +23,7 @@ from app.services.discord_service import DiscordService, discord_service
 from app.services.progress import ProgressCallback, StepPlan, format_megabytes, report
 from app.services.server_process import MinecraftServerManager, ServerProcessError, server_manager
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
+from app.services.protected_paths import ProtectedPathError, is_protected, require_tree_not_protected
 from app.services.server_settings_file import BackupIgnore, read_server_settings
 
 logger = logging.getLogger("backups")
@@ -40,6 +41,8 @@ _IGNORED_BACKUP_EXTENSIONS = {
     ".lck",
 }
 _TEMPORARY_BACKUP_SUFFIXES = ("*.tmp", "*.part")
+# Files from [backup_include] live under this folder inside the zip, apart from world/.
+SERVER_FILES_PREFIX = "server_files"
 _FINGERPRINT_FILENAME = ".last_backup_fingerprint.json"
 # Headroom over the last backup: the world only grows between copies.
 _BACKUP_SIZE_SAFETY_FACTOR = 1.2
@@ -90,6 +93,11 @@ class BackupService:
 
     @property
     def backups_directory(self) -> Path:
+        """Where new copies go: ``backup_location`` from craftpanel.txt, else the panel's folder."""
+        return self._settings.effective_backups_directory
+
+    @property
+    def _default_backups_directory(self) -> Path:
         assert self._settings.backups_directory is not None
         return self._settings.backups_directory
 
@@ -192,8 +200,14 @@ class BackupService:
             except OSError as error:
                 raise BackupServiceError(f"No se pudo eliminar el backup: {error}") from error
 
-    async def restore_backup(self, filename: str, progress: ProgressCallback | None = None) -> BackupItem:
-        """Replace the active world with a backup; ``progress`` gets :data:`RESTORE_STEPS`."""
+    async def restore_backup(
+        self, filename: str, progress: ProgressCallback | None = None, *, restore_server_files: bool = False
+    ) -> BackupItem:
+        """Replace the active world with a backup; ``progress`` gets :data:`RESTORE_STEPS`.
+
+        With ``restore_server_files`` the [backup_include] files saved in the copy
+        are put back too, except the ones under [protected].
+        """
         try:
             require_server_stopped(self._manager, "restaurar un backup")
         except ServerActiveError as error:
@@ -202,10 +216,14 @@ class BackupService:
         backup_path = self.get_backup_path(filename)
         if not backup_path.is_file():
             raise BackupNotFoundError("No existe el backup indicado.")
+        try:
+            await asyncio.to_thread(require_tree_not_protected, self.world_directory, self._settings)
+        except ProtectedPathError as error:
+            raise BackupConflictError(str(error)) from error
 
         async with self._operation_lock:
             try:
-                await asyncio.to_thread(self._restore_archive_sync, backup_path, progress)
+                await asyncio.to_thread(self._restore_archive_sync, backup_path, progress, restore_server_files)
             except ArchiveSafetyError as error:
                 raise BackupServiceError(f"El backup no es seguro para restaurar: {error}") from error
             except (OSError, zipfile.BadZipFile) as error:
@@ -231,24 +249,64 @@ class BackupService:
             and path.suffix.lower() not in _IGNORED_BACKUP_EXTENSIONS
         ]
 
-    def _archive_candidates_sync(self) -> list[tuple[Path, int]]:
-        candidates: list[tuple[Path, int]] = []
-        for path in self._world_files_sync():
+    def _included_server_files_sync(self) -> list[tuple[Path, Path]]:
+        """[backup_include] files as (path, name inside the zip), never the world or other copies."""
+        server = self._settings.server_directory
+        if server is None:
+            return []
+        world = os.path.normcase(str(self.world_directory.resolve()))
+        skipped_roots = {
+            os.path.normcase(str(directory.resolve()))
+            for directory in (self.backups_directory, self._default_backups_directory, server / "simplebackups")
+        }
+        found: dict[str, tuple[Path, Path]] = {}
+
+        def add(path: Path) -> None:
+            resolved = os.path.normcase(str(path.resolve()))
+            if resolved == world or resolved.startswith(world + os.sep):
+                return
+            if any(resolved == root or resolved.startswith(root + os.sep) for root in skipped_roots):
+                return
+            if path.name.lower() in _IGNORED_BACKUP_FILENAMES or path.suffix.lower() in _IGNORED_BACKUP_EXTENSIONS:
+                return
+            found.setdefault(resolved, (path, Path(SERVER_FILES_PREFIX) / path.relative_to(server)))
+
+        for entry in read_server_settings(self._settings).items("backup_include"):
+            target = server.joinpath(*[part for part in entry.strip("/").split("/") if part])
+            if target.is_symlink() or not target.exists():
+                continue
+            if target.is_file():
+                add(target)
+                continue
+            for directory, folders, files in os.walk(target, followlinks=False):
+                base = Path(directory)
+                folders[:] = [folder for folder in folders if not (base / folder).is_symlink()]
+                for name in files:
+                    path = base / name
+                    if not path.is_symlink() and path.is_file():
+                        add(path)
+        return list(found.values())
+
+    def _archive_candidates_sync(self) -> list[tuple[Path, int, Path]]:
+        """Everything a copy holds as (path, size, name inside the zip)."""
+        candidates: list[tuple[Path, int, Path]] = []
+        entries = [(path, Path("world") / path.relative_to(self.world_directory)) for path in self._world_files_sync()]
+        entries.extend(self._included_server_files_sync())
+        for path, arcname in entries:
             try:
-                candidates.append((path, path.stat().st_size))
+                candidates.append((path, path.stat().st_size, arcname))
             except OSError:
-                candidates.append((path, 0))
+                candidates.append((path, 0, arcname))
         return candidates
 
     def _create_archive_sync(self, backup_path: Path, progress: ProgressCallback | None = None) -> None:
         candidates = self._archive_candidates_sync()
         total_files = len(candidates)
-        total_bytes = sum(size for _, size in candidates) or 1
+        total_bytes = sum(size for _, size, _ in candidates) or 1
         done_bytes = 0
         last_report = 0.0
         with zipfile.ZipFile(backup_path, mode="x", compression=zipfile.ZIP_DEFLATED) as archive:
-            for done_files, (path, size) in enumerate(candidates, start=1):
-                arcname = Path("world") / path.relative_to(self.world_directory)
+            for done_files, (path, size, arcname) in enumerate(candidates, start=1):
                 for attempt in range(3):
                     try:
                         archive.write(path, arcname=arcname)
@@ -274,7 +332,38 @@ class BackupService:
                         done_bytes * 100 / total_bytes,
                     )
 
-    def _restore_archive_sync(self, backup_path: Path, progress: ProgressCallback | None = None) -> None:
+    def _restore_server_files_sync(self, staged: Path) -> list[str]:
+        """Copy [backup_include] files from a staged copy into the server folder; returns what was skipped."""
+        server = self._settings.server_directory
+        assert server is not None
+        world = os.path.normcase(str(self.world_directory.resolve()))
+        skipped: list[str] = []
+        for directory, folders, files in os.walk(staged, followlinks=False):
+            base = Path(directory)
+            folders[:] = [folder for folder in folders if not (base / folder).is_symlink()]
+            for name in files:
+                source = base / name
+                relative = source.relative_to(staged)
+                target = server.joinpath(*relative.parts)
+                resolved = os.path.normcase(str(target.resolve()))
+                inside_server = resolved.startswith(os.path.normcase(str(server.resolve())) + os.sep)
+                if not inside_server or resolved == world or resolved.startswith(world + os.sep):
+                    skipped.append(relative.as_posix())
+                    continue
+                if is_protected(target, self._settings, is_directory=False):
+                    skipped.append(relative.as_posix())
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.restore")
+                shutil.copy2(source, temporary)
+                os.replace(temporary, target)
+        if skipped:
+            logger.info("Restore left these files untouched (protected or outside the server): %s", ", ".join(skipped))
+        return skipped
+
+    def _restore_archive_sync(
+        self, backup_path: Path, progress: ProgressCallback | None = None, restore_server_files: bool = False
+    ) -> None:
         assert self._settings.server_directory is not None
         staging_root = self._settings.server_directory / f".world-restore-{uuid.uuid4().hex}"
         staged_world = staging_root / "world"
@@ -299,6 +388,9 @@ class BackupService:
                 raise
             if previous_world.exists():
                 shutil.rmtree(previous_world)
+            staged_files = staging_root / SERVER_FILES_PREFIX
+            if restore_server_files and staged_files.is_dir():
+                self._restore_server_files_sync(staged_files)
         finally:
             if staging_root.exists():
                 shutil.rmtree(staging_root)
@@ -315,7 +407,7 @@ class BackupService:
         reserve = self._settings.backup_min_free_disk_gb * _GIBIBYTE
         limits = ArchiveLimits(max_total_bytes=max(0, free_bytes - reserve))
         for _, parts in check_zip(archive, limits):
-            if parts[0] != "world":
+            if parts[0] not in {"world", SERVER_FILES_PREFIX}:
                 raise BackupServiceError("El backup contiene archivos fuera de world/.")
         last_report = 0.0
 
@@ -380,17 +472,18 @@ class BackupService:
             restore_warning=(
                 "Restaurar reemplaza el mundo actual. El panel nunca debe hacerlo sin una confirmación explícita."
             ),
-            retention_count=self._settings.backup_retention_count,
-            max_disk_gb=self._settings.backup_max_disk_gb,
+            retention_count=self._settings.effective_backup_retention_count,
+            max_disk_gb=self._settings.effective_backup_max_disk_gb,
         )
 
     def _backup_provenance(self, path: Path) -> Literal["panel", "simplebackups", "external"]:
         """Clasifica sólo por ubicación conocida, sin asumir quién creó un ZIP externo."""
-        try:
-            path.resolve().relative_to(self.backups_directory.resolve())
-            return "panel"
-        except ValueError:
-            pass
+        for directory in (self.backups_directory, self._default_backups_directory):
+            try:
+                path.resolve().relative_to(directory.resolve())
+                return "panel"
+            except (ValueError, OSError):
+                pass
         if self._settings.server_directory:
             simplebackups = self._settings.server_directory / "simplebackups"
             try:
@@ -401,17 +494,33 @@ class BackupService:
         return "external"
 
     def _backup_paths_sync(self) -> list[Path]:
-        paths: list[Path] = []
+        paths: dict[str, Path] = {}
         for directory in self._backup_directories():
             if directory.is_dir():
-                paths.extend(path for path in directory.rglob("*.zip") if path.is_file())
-        return paths
+                for path in directory.rglob("*.zip"):
+                    if path.is_file():
+                        paths.setdefault(os.path.normcase(str(path.resolve())), path)
+        return list(paths.values())
 
     def _backup_directories(self) -> list[Path]:
+        """Where copies are listed from: the current location first, then older places.
+
+        After ``backup_location`` changes, copies left in the panel's own folder stay
+        visible and restorable; only the current location is ever purged.
+        """
         directories = [self.backups_directory]
+        if os.path.normcase(str(self._default_backups_directory)) != os.path.normcase(str(self.backups_directory)):
+            directories.append(self._default_backups_directory)
         if self._settings.server_directory:
             directories.append(self._settings.server_directory / "simplebackups")
         return directories
+
+    def _in_current_location(self, path: Path) -> bool:
+        try:
+            path.resolve().relative_to(self.backups_directory.resolve())
+        except (ValueError, OSError):
+            return False
+        return True
 
     @staticmethod
     def _verify_archive_sync(path: Path) -> str | None:
@@ -438,7 +547,8 @@ class BackupService:
             (valid_paths if error is None else corrupt_paths).append(path)
 
         # SimpleBackups enforces its own retention; the panel only purges what it created.
-        panel_valid_paths = [path for path in valid_paths if self._backup_provenance(path) == "panel"]
+        # Copies left in an earlier backup_location are only listed, never purged.
+        panel_valid_paths = [path for path in valid_paths if self._in_current_location(path)]
         deleted: list[str] = []
         for path in self._select_purge_candidates(panel_valid_paths):
             path.unlink()
@@ -453,10 +563,11 @@ class BackupService:
     def _select_purge_candidates(self, paths: list[Path]) -> list[Path]:
         """Apply count and disk-cap limits, always keeping the newest copy."""
         ordered = sorted(paths, key=lambda path: path.stat().st_mtime, reverse=True)
-        kept = ordered[:self._settings.backup_retention_count]
-        purge_candidates = ordered[self._settings.backup_retention_count:]
+        keep = self._settings.effective_backup_retention_count
+        kept = ordered[:keep]
+        purge_candidates = ordered[keep:]
         total_bytes = sum(path.stat().st_size for path in kept)
-        max_bytes = self._settings.backup_max_disk_gb * _GIBIBYTE
+        max_bytes = self._settings.effective_backup_max_disk_gb * _GIBIBYTE
         while total_bytes > max_bytes and len(kept) > 1:
             path = kept.pop()
             total_bytes -= path.stat().st_size

@@ -89,7 +89,7 @@ def disk_item(free_bytes: int, last_backup_bytes: int | None, reserve_bytes: int
                       detail="Alcanza para las copias automáticas.", **action)
 
 
-def backup_item(newest_backup_age_seconds: float | None, interval_hours: int, world_exists: bool) -> SafetyItem:
+def backup_item(newest_backup_age_seconds: float | None, interval_hours: float, world_exists: bool) -> SafetyItem:
     action = {"action_label": "Ver copias", "action_href": "/backups"}
     if newest_backup_age_seconds is None:
         level: Level = "danger" if world_exists else "unknown"
@@ -99,7 +99,7 @@ def backup_item(newest_backup_age_seconds: float | None, interval_hours: int, wo
     if hours > 2 * interval_hours + 1:
         return SafetyItem(key="backups", label="Copias", level="warn",
                           title=f"La última copia es de {_ago(newest_backup_age_seconds)}",
-                          detail=f"Deberían hacerse cada {interval_hours} horas. Revisá que el panel haya estado abierto.",
+                          detail=f"Deberían hacerse cada {interval_hours:g} horas. Revisá que el panel haya estado abierto.",
                           **action)
     return SafetyItem(key="backups", label="Copias", level="ok",
                       title=f"Última copia {_ago(newest_backup_age_seconds)}",
@@ -141,7 +141,9 @@ class SafetyService:
         backups = self._panel_backups()
         newest = max(backups, key=lambda path: path.stat().st_mtime, default=None)
         world = self._settings.server_directory / properties.get("level-name", "world")
-        disk_root = self._settings.backups_directory if self._settings.backups_directory.is_dir() else self._settings.server_directory
+        # The "Espacio" item looks at the drive where copies are written (backup_location).
+        backups_directory = self._settings.effective_backups_directory
+        disk_root = backups_directory if backups_directory.is_dir() else self._settings.server_directory
         return summarize([
             access_item(properties, self._whitelisted_players(), public_tunnel),
             disk_item(
@@ -158,10 +160,11 @@ class SafetyService:
         ])
 
     def _panel_backups(self) -> list[Path]:
-        assert self._settings.backups_directory is not None
-        if not self._settings.backups_directory.is_dir():
-            return []
-        return [path for path in self._settings.backups_directory.rglob("*.zip") if path.is_file()]
+        found: list[Path] = []
+        for directory in {self._settings.effective_backups_directory, self._settings.backups_directory}:
+            if directory is not None and directory.is_dir():
+                found.extend(path for path in directory.rglob("*.zip") if path.is_file())
+        return found
 
     def _whitelisted_players(self) -> int:
         assert self._settings.server_directory is not None
@@ -171,7 +174,12 @@ class SafetyService:
             return 0
         return len(entries) if isinstance(entries, list) else 0
 
-    def _backup_interval_hours(self) -> int:
+    def _backup_interval_hours(self) -> float:
+        from app.services.server_settings_file import read_server_settings
+
+        seconds = read_server_settings(self._settings).value("backup_interval")
+        if seconds:
+            return seconds / 3600
         assert self._settings.panel_directory is not None
         try:
             value = json.loads((self._settings.panel_directory / ".scheduled_tasks.json").read_text(encoding="utf-8"))

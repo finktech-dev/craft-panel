@@ -347,6 +347,32 @@ class Settings(BaseSettings):
             return self.local_java_executable_path.parent
         return None
 
+    # craftpanel.txt values that replace a panel setting when they are written in the file.
+
+    @property
+    def effective_backups_directory(self) -> Path:
+        """``backup_location`` from craftpanel.txt, else the panel's backups folder."""
+        assert self.backups_directory is not None
+        location = self._server_file_settings().value("backup_location")
+        return Path(location) if location else self.backups_directory
+
+    @property
+    def effective_backup_retention_count(self) -> int:
+        return self._server_file_settings().value("backup_keep") or self.backup_retention_count
+
+    @property
+    def effective_backup_max_disk_gb(self) -> int:
+        return self._server_file_settings().value("backup_max_size") or self.backup_max_disk_gb
+
+    @property
+    def effective_ram_gb(self) -> int:
+        """``memory`` from craftpanel.txt, else the RAM chosen in the panel."""
+        return self._server_file_settings().value("memory") or self.allocated_ram_gb
+
+    @property
+    def effective_server_name(self) -> str | None:
+        return self._server_file_settings().value("server_name") or None
+
     @property
     def local_java_executable_path(self) -> Path:
         """Optional portable Java unpacked at tools/java/bin inside this clone."""
