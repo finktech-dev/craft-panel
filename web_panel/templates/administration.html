@@ -19,6 +19,21 @@
 {%- set sub_tab_on = "tab-btn active -mb-px border-b-2 border-emerald-400 pb-3 text-sm font-semibold text-zinc-50" -%}
 {%- set sub_tab_off = "tab-btn -mb-px border-b-2 border-transparent pb-3 text-sm font-semibold text-zinc-400 hover:text-zinc-200" -%}
 
+{#- Secondary underline tabs that split a section into short sub-screens (wired by admin-tabs.js).
+    The first sub-screen is the default; the URL hash keeps the open one, e.g. #myserver/copias. -#}
+{%- macro subtabs(group, label, items) -%}
+<div class="subtabs" role="tablist" aria-label="{{ label }}" data-subtabs="{{ group }}">
+  {%- for key, text in items %}
+  <button type="button" role="tab" id="subtab-{{ group }}-{{ key }}" class="subtab" data-subtab="{{ key }}" aria-controls="sub-{{ group }}-{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}">{{ text }}</button>
+  {%- endfor %}
+</div>
+{%- endmacro -%}
+
+{#- Opening tag of one sub-screen; the first one starts visible. -#}
+{%- macro subpanel(group, key, first=false, cls='') -%}
+<div id="sub-{{ group }}-{{ key }}" class="subpanel {{ cls }}" role="tabpanel" aria-labelledby="subtab-{{ group }}-{{ key }}" data-subpanel="{{ group }}" data-subpanel-key="{{ key }}"{% if not first %} hidden{% endif %}>
+{%- endmacro -%}
+
 {#- One command a rank can be given or denied (wired by data-cmd-perm in admin-ranks.js). -#}
 {%- macro perm_row(key, title, command, desc, danger=false) -%}
 <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-800 py-4">
@@ -62,15 +77,35 @@
 {%- endmacro -%}
 
 <section class="administration-page" aria-labelledby="admin-title">
-  <header class="mx-auto max-w-3xl pb-8">
-    <h1 id="admin-title" class="font-display text-4xl font-semibold text-zinc-50">Ajustes</h1>
-    <p class="mt-3 max-w-xl text-lg leading-relaxed text-zinc-400">Acá cambiás cómo entran tus amigos, los avisos en Discord, los rangos y las reglas del servidor.</p>
-  </header>
+  {#- Overview: one row per section, like a phone's settings app. admin-tabs.js swaps it for one screen at a time. -#}
+  <div id="admin-overview" class="mx-auto max-w-3xl">
+    <header class="pb-8">
+      <h1 id="admin-title" class="font-display text-4xl font-semibold text-zinc-50" tabindex="-1">Ajustes</h1>
+      <p class="mt-3 max-w-xl text-lg leading-relaxed text-zinc-400">Elegí qué querés cambiar.</p>
+    </header>
+    <nav id="admin-master-tabs" class="settings-list" aria-label="Secciones de ajustes">
+      <a id="tab-btn-myserver" href="#myserver" data-master-tab="myserver" aria-controls="panel-master-myserver" class="master-tab-btn settings-row"><span><strong>Tu servidor</strong><small>Cómo se enciende, las copias y lo que el panel no toca.</small></span></a>
+      <a id="tab-btn-ranks" href="#ranks" data-master-tab="ranks" aria-controls="panel-master-ranks" class="master-tab-btn settings-row"><span><strong>Rangos y permisos</strong><small>Qué rango tiene cada jugador y qué puede hacer.</small></span></a>
+      <a id="tab-btn-discord" href="#discord" data-master-tab="discord" aria-controls="panel-master-discord" class="master-tab-btn settings-row"><span><strong>Avisos en Discord</strong><small>Un mensaje en tu Discord cuando pasa algo en el servidor.</small></span></a>
+      <a id="tab-btn-rules" href="#rules" data-master-tab="rules" aria-controls="panel-master-rules" class="master-tab-btn settings-row"><span><strong>Reglas del servidor</strong><small>Qué objetos, criaturas y aldeanos hay en tu mundo.</small></span></a>
+      <a id="tab-btn-configs" href="#configs" data-master-tab="configs" aria-controls="panel-master-configs" class="master-tab-btn settings-row"><span><strong>Mods y mundo</strong><small>Los ajustes de cada mod, las reglas del juego y las copias automáticas.</small></span></a>
+      <a id="tab-btn-access" href="#access" data-master-tab="access" aria-controls="panel-master-access" class="master-tab-btn settings-row"><span><strong>Acceso por Internet</strong><small>Cómo entran tus amigos desde otra casa.</small></span></a>
+      <a id="tab-btn-security" href="#security" data-master-tab="security" aria-controls="panel-master-security" class="master-tab-btn settings-row"><span><strong>Verificación en dos pasos</strong><small>Un código del celular para entrar al panel.</small></span></a>
+    </nav>
+  </div>
 
+  {#- "← Volver" at the top of every section screen; admin-tabs.js returns to the overview. -#}
+  {%- macro back_link() -%}
+  <a href="/administration" class="back-link" data-admin-back>← Volver</a>
+  {%- endmacro -%}
+
+  <!-- TWO-STEP VERIFICATION -->
+  <div id="panel-master-security" class="master-tab-panel mx-auto hidden max-w-3xl">
+  {{ back_link() }}
   {#- Wired by static/js/admin-two-factor.js; the initial state comes from data-enabled. -#}
-  <section id="two-factor" class="mx-auto max-w-3xl border-t border-zinc-800 py-9" aria-labelledby="two-factor-title" data-enabled="{{ 'true' if two_factor_enabled else 'false' }}">
-    <h2 id="two-factor-title" class="text-lg font-semibold text-zinc-50">Verificación en dos pasos</h2>
-    <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Además de la contraseña, el panel te pide un código de 6 números que cambia cada 30 segundos. Lo genera una app de códigos en tu celular, así que aunque alguien sepa tu contraseña no puede entrar.</p>
+  <section id="two-factor" class="pt-6" aria-labelledby="two-factor-title" data-enabled="{{ 'true' if two_factor_enabled else 'false' }}">
+    <h2 id="two-factor-title" class="screen-title" tabindex="-1">Verificación en dos pasos</h2>
+    <p class="screen-lead">Además de la contraseña, el panel te pide un código de 6 números que cambia cada 30 segundos. Lo genera una app de códigos en tu celular, así que aunque alguien sepa tu contraseña no puede entrar.</p>
     <p id="two-factor-state" class="mt-3 text-sm text-zinc-500" aria-live="polite">{{ 'Está activada.' if two_factor_enabled else 'Está apagada.' }}</p>
 
     <div id="two-factor-actions-off" class="mt-5{% if two_factor_enabled %} hidden{% endif %}">
@@ -109,25 +144,18 @@
     </form>
     <p id="two-factor-error" class="mt-3 min-h-5 text-sm text-[#f3a79b]" role="alert"></p>
   </section>
+  </div>
 
-  <section class="mx-auto max-w-3xl border-t border-zinc-800 py-9" aria-labelledby="access-title">
-    <div class="flex flex-wrap items-start justify-between gap-4">
-      <div class="min-w-0">
-        <h2 id="access-title" class="text-lg font-semibold text-zinc-50">Acceso por Internet</h2>
-        <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Cómo entran tus amigos cuando no están conectados a tu Wi-Fi.</p>
-        <p class="mt-2 text-sm text-zinc-500">Dirección actual: <span class="break-all font-mono text-zinc-300">{{ public_address or 'todavía no configurada' }}</span></p>
-      </div>
-      <a href="/onboarding" class="v2-button btn-quiet shrink-0">Revisar el acceso</a>
-    </div>
-  </section>
-
-  <nav id="admin-master-tabs" class="mx-auto flex max-w-3xl flex-wrap gap-x-6 gap-y-2 border-b border-zinc-800" role="tablist" aria-label="Secciones de ajustes">
-    <button id="tab-btn-ranks" data-master-tab="ranks" type="button" role="tab" aria-selected="true" aria-controls="panel-master-ranks" class="master-tab-btn tab-pill -mb-px border-b-2 border-emerald-400 pb-3 font-semibold text-zinc-50">Rangos y permisos</button>
-    <button id="tab-btn-discord" data-master-tab="discord" type="button" role="tab" aria-selected="false" aria-controls="panel-master-discord" class="master-tab-btn tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Avisos en Discord</button>
-    <button id="tab-btn-rules" data-master-tab="rules" type="button" role="tab" aria-selected="false" aria-controls="panel-master-rules" class="master-tab-btn tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Reglas del servidor</button>
-    <button id="tab-btn-configs" data-master-tab="configs" type="button" role="tab" aria-selected="false" aria-controls="panel-master-configs" class="master-tab-btn tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Mods y mundo</button>
-    <button id="tab-btn-myserver" data-master-tab="myserver" type="button" role="tab" aria-selected="false" aria-controls="panel-master-myserver" class="master-tab-btn tab-pill -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Tu servidor</button>
-  </nav>
+  <!-- INTERNET ACCESS -->
+  <div id="panel-master-access" class="master-tab-panel mx-auto hidden max-w-3xl">
+    {{ back_link() }}
+    <section class="pt-6" aria-labelledby="access-title">
+      <h2 id="access-title" class="screen-title" tabindex="-1">Acceso por Internet</h2>
+      <p class="screen-lead">Cómo entran tus amigos cuando no están conectados a tu Wi-Fi.</p>
+      <p class="mt-6 text-zinc-400">Dirección actual: <span class="break-all font-mono text-zinc-200">{{ public_address or 'todavía no configurada' }}</span></p>
+      <a href="/onboarding" class="v2-button btn-primary mt-6">Revisar el acceso</a>
+    </section>
+  </div>
 
   {#- One craftpanel.txt value: label, the key as written in the file, a hint and its input (wired by admin-server-file.js). -#}
   {%- macro file_field(key, label, hint, placeholder='', mono=false, inputmode='text') -%}
@@ -167,10 +195,11 @@
   {%- endmacro -%}
 
   <!-- YOUR SERVER: server/craftpanel.txt -->
-  <div id="panel-master-myserver" class="master-tab-panel mx-auto hidden max-w-3xl" role="tabpanel" aria-labelledby="tab-btn-myserver">
-    <section id="server-file" class="py-9" aria-labelledby="server-file-title">
-      <h2 id="server-file-title" class="text-lg font-semibold text-zinc-50">Tu servidor</h2>
-      <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Estos ajustes se guardan en <span class="font-mono text-zinc-300">craftpanel.txt</span>, dentro de la carpeta del servidor. Si dejás algo vacío, el panel usa lo de siempre.</p>
+  <div id="panel-master-myserver" class="master-tab-panel mx-auto hidden max-w-3xl">
+    {{ back_link() }}
+    <section id="server-file" class="pt-6" aria-labelledby="server-file-title">
+      <h2 id="server-file-title" class="screen-title" tabindex="-1">Tu servidor</h2>
+      <p class="screen-lead">Cómo se enciende, dónde van las copias y qué no toca el panel. Si dejás algo vacío, se usa lo de siempre.</p>
       <p id="server-file-state" class="mt-2 text-sm text-zinc-500" aria-live="polite">Cargando…</p>
       <div id="server-file-problems" class="mt-4 hidden rounded-xl border border-[#e8b04b]/30 bg-[#e8b04b]/[.06] p-4" role="alert">
         <p class="font-semibold text-zinc-50">Hay líneas para revisar en el archivo</p>
@@ -178,8 +207,13 @@
         <ul id="server-file-problem-list" class="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-300"></ul>
       </div>
 
-      <form id="server-file-form" class="mt-6" novalidate>
+      <div class="mt-6">{{ subtabs('myserver', 'Partes de tu servidor', [('encender', 'Encender y apagar'), ('copias', 'Copias'), ('amigos', 'Mods y amigos'), ('proteccion', 'Protección'), ('archivo', 'El archivo')]) }}</div>
+
+      {#- One form for every group, so a save sends every change the person made; each group has its own Guardar. -#}
+      <form id="server-file-form" novalidate>
+        {{ subpanel('myserver', 'encender', first=true, cls='pt-6') }}
         <h3 class="font-semibold text-zinc-100">Encender y apagar</h3>
+        <p class="mt-1 text-sm text-zinc-400">Cómo arranca el servidor y qué hace si se cae.</p>
         <p id="server-file-running-note" class="mt-1 hidden text-sm text-zinc-500">El archivo para encender y Java se cambian con el servidor apagado.</p>
         <div class="mt-2 border-t border-zinc-800">
           {{ file_field('start_script', 'Archivo para encender', 'El archivo que enciende el servidor, dentro de su carpeta. Vacío = run.bat.', 'run.bat', mono=true) }}
@@ -192,8 +226,12 @@
           {{ file_field('daily_restart', 'Reiniciar todos los días a esta hora', 'En formato de 24 horas, por ejemplo 05:30. Vacío = no reiniciar solo.', '05:30', mono=true) }}
           {{ file_field('restart_warning', 'Cuánto antes avisar en el chat', 'Antes de un reinicio diario. Por ejemplo 60s o 5m.', '60s', mono=true) }}
         </div>
+        <button id="server-file-save" type="submit" class="v2-button btn-primary mt-6" data-server-file-save>Guardar</button>
+        </div>
 
-        <h3 class="mt-9 font-semibold text-zinc-100">Copias</h3>
+        {{ subpanel('myserver', 'copias', cls='pt-6') }}
+        <h3 class="font-semibold text-zinc-100">Copias</h3>
+        <p class="mt-1 text-sm text-zinc-400">Cada cuánto se copia el mundo, cuántas copias se guardan y dónde.</p>
         <div class="mt-2 border-t border-zinc-800">
           {{ file_field('backup_interval', 'Cada cuánto hacer una copia', 'Como mínimo 1h. Por ejemplo 6h o 1d. Vacío = lo que elegiste en «Copias automáticas».', '6h', mono=true) }}
           {{ file_field('backup_keep', 'Cuántas copias guardar', 'Las más viejas se borran solas. Vacío = 4.', '4', mono=true, inputmode='numeric') }}
@@ -202,53 +240,67 @@
           {{ file_list('backup_exclude', 'Qué no guardar en las copias', 'Archivos o carpetas del mundo, uno por línea, como en .gitignore: logs/, *.tmp, **/cache/. Lo que no se copia no vuelve al restaurar.', 'logs/\n*.tmp') }}
           {{ file_list('backup_include', 'Qué más guardar en las copias', 'Otras cosas de la carpeta del servidor, una por línea, por ejemplo config/ o server.properties.', 'config/\nserver.properties') }}
         </div>
+        <button type="submit" class="v2-button btn-primary mt-6" data-server-file-save>Guardar</button>
+        </div>
 
-        <h3 class="mt-9 font-semibold text-zinc-100">Mods y amigos</h3>
+        {{ subpanel('myserver', 'amigos', cls='pt-6') }}
+        <h3 class="font-semibold text-zinc-100">Mods y amigos</h3>
+        <p class="mt-1 text-sm text-zinc-400">El nombre del servidor, la dirección para tus amigos y los mods que no se les mandan.</p>
         <div class="mt-2 border-t border-zinc-800">
           {{ file_field('server_name', 'Nombre del servidor', 'Se ve en el panel, en Discord y en la imagen de estado. Vacío = el de siempre.', 'Mi servidor') }}
           {{ file_field('public_address', 'Dirección para tus amigos', 'Por ejemplo mi-servidor.ejemplo.com:25565. Vacío = el panel la busca solo.', 'mi-servidor.ejemplo.com', mono=true) }}
           {{ file_list('server_only_mods', 'Mods solo del servidor', 'No se mandan a tus amigos. El nombre del archivo (se puede usar *) o el identificador del mod, uno por línea.', '*-server.jar') }}
         </div>
+        <button type="submit" class="v2-button btn-primary mt-6" data-server-file-save>Guardar</button>
+        </div>
 
-        <h3 class="mt-9 font-semibold text-zinc-100">Protección</h3>
+        {{ subpanel('myserver', 'proteccion', cls='pt-6') }}
+        <h3 class="font-semibold text-zinc-100">Protección</h3>
+        <p class="mt-1 text-sm text-zinc-400">Lo que el panel nunca cambia y cómo reconoce a tu servidor.</p>
         <div class="mt-2 border-t border-zinc-800">
           {{ file_list('protected', 'Lo que el panel nunca toca', 'Archivos o carpetas de la carpeta del servidor que el panel no puede cambiar ni borrar, uno por línea, como en .gitignore.', 'config/mi-mod.toml\nserver.properties') }}
           {{ file_list('detect', 'Cómo reconocer tu servidor', 'Palabras que aparecen al abrir tu servidor, una por línea. Ayudan a reconocerlo cuando lo abrís fuera del panel, por ejemplo el nombre de su .jar.', 'mi-servidor.jar') }}
         </div>
+        <button type="submit" class="v2-button btn-primary mt-6" data-server-file-save>Guardar</button>
+        </div>
 
         <p id="server-file-error" class="mt-4 hidden whitespace-pre-line text-sm text-[#f3a79b]" role="alert"></p>
-        <div class="mt-6">
-          <button id="server-file-save" type="submit" class="v2-button btn-primary">Guardar</button>
-        </div>
       </form>
 
-      <details class="mt-9 text-sm text-zinc-400">
-        <summary class="cursor-pointer hover:text-zinc-200">Ver o editar el archivo</summary>
-        <p class="mt-3 leading-relaxed text-zinc-500">Es el mismo archivo que podés abrir con el Bloc de notas. Las líneas que empiezan con # son comentarios.</p>
+      {{ subpanel('myserver', 'archivo', cls='pt-6') }}
+        <h3 class="font-semibold text-zinc-100">Ver o editar el archivo</h3>
+        <p class="mt-1 text-sm leading-relaxed text-zinc-400">Todo lo de las otras pestañas se guarda en <span class="font-mono text-zinc-300">craftpanel.txt</span>, en la carpeta del servidor. Es el mismo archivo que podés abrir con el Bloc de notas. Las líneas que empiezan con # son comentarios.</p>
         <label for="server-file-raw" class="sr-only">Contenido de craftpanel.txt</label>
         <textarea id="server-file-raw" spellcheck="false" class="mt-3 h-96 w-full rounded-lg border border-zinc-800 bg-zinc-900 p-4 font-mono text-xs leading-relaxed text-zinc-100 outline-none focus:border-emerald-400"></textarea>
         <p id="server-file-raw-error" class="mt-2 hidden whitespace-pre-line text-sm text-[#f3a79b]" role="alert"></p>
-        <button id="server-file-raw-save" type="button" class="v2-button btn-quiet mt-3">Guardar archivo</button>
-      </details>
+        <button id="server-file-raw-save" type="button" class="v2-button btn-primary mt-3">Guardar archivo</button>
+      </div>
     </section>
   </div>
 
   <!-- RANKS AND PERMISSIONS (LuckPerms) -->
-  <div id="panel-master-ranks" class="master-tab-panel mx-auto max-w-3xl" role="tabpanel" aria-labelledby="tab-btn-ranks">
+  <div id="panel-master-ranks" class="master-tab-panel mx-auto hidden max-w-3xl">
+    {{ back_link() }}
+    <div class="flex flex-wrap items-start justify-between gap-4 pt-6">
+      <div class="min-w-0">
+        <h2 id="ranks-title" class="screen-title" tabindex="-1">Rangos y permisos</h2>
+        <p class="screen-lead">El rango decide cómo se ve el nombre de un jugador en el chat y qué comandos puede usar.</p>
+      </div>
+    </div>
+
     <!-- Shown when LuckPerms is not active yet -->
-    <div id="lp-disabled-banner" class="hidden py-9">
-      <h2 class="text-lg font-semibold text-zinc-50">Rangos y permisos</h2>
-      <p id="lp-disabled-message" class="mt-1 max-w-xl leading-relaxed text-zinc-400">Para dar rangos desde acá, el servidor necesita el mod LuckPerms. Si ya lo tenés instalado, activalo con este botón.</p>
+    <div id="lp-disabled-banner" class="hidden pt-8">
+      <p id="lp-disabled-message" class="max-w-xl leading-relaxed text-zinc-400">Para dar rangos desde acá, el servidor necesita el mod LuckPerms. Si ya lo tenés instalado, activalo con este botón.</p>
       <button id="btn-activate-luckperms" type="button" class="v2-button btn-primary mt-5">Activar rangos</button>
     </div>
 
     <section id="ranks" aria-labelledby="ranks-title">
-      <div class="py-9">
+      <div class="mt-6">{{ subtabs('ranks', 'Partes de rangos y permisos', [('jugadores', 'Dar un rango'), ('permisos', 'Qué puede hacer cada rango')]) }}</div>
+
+      {{ subpanel('ranks', 'jugadores', first=true) }}
+      <div class="py-8">
         <div class="flex flex-wrap items-start justify-between gap-4">
-          <div class="min-w-0">
-            <h2 id="ranks-title" class="text-lg font-semibold text-zinc-50">Rangos y permisos</h2>
-            <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Elegí un jugador y dale un rango. El rango decide cómo se ve su nombre en el chat y qué comandos puede usar.</p>
-          </div>
+          <p class="min-w-0 max-w-xl leading-relaxed text-zinc-400">Elegí un jugador y después tocá el rango que le querés dar.</p>
           <button id="btn-toggle-create-rank" type="button" class="v2-button btn-quiet shrink-0">Crear un rango</button>
         </div>
 
@@ -427,10 +479,12 @@
         <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Se suman al rango principal sin cambiarlo, por ejemplo para marcar a quien hace streams.</p>
         <div id="lp-roles-grid" class="mt-4 border-t border-zinc-800"></div>
       </div>
+      </div>
 
       <!-- What each rank can do -->
-      <div id="lp-inspector-section" class="border-t border-zinc-800 py-9">
-        <h2 class="text-lg font-semibold text-zinc-50">Qué puede hacer cada rango</h2>
+      {{ subpanel('ranks', 'permisos') }}
+      <div id="lp-inspector-section" class="py-8">
+        <h3 class="text-lg font-semibold text-zinc-50">Qué puede hacer cada rango</h3>
         <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Elegí un rango y dale o quitale comandos. Se aplica al momento, sin reiniciar.</p>
 
         <div class="mt-5">
@@ -535,6 +589,7 @@
           </div>
         </details>
       </div>
+      </div>
 
       <!-- Server replies -->
       <div class="border-t border-zinc-800 py-9">
@@ -561,12 +616,13 @@
   </div>
 
   <!-- SERVER RULES: items, mobs, villagers and building tools -->
-  <div id="panel-master-rules" class="master-tab-panel mx-auto hidden max-w-3xl" role="tabpanel" aria-labelledby="tab-btn-rules">
-    <section id="restrictions-hub" class="py-9" aria-labelledby="rules-title">
+  <div id="panel-master-rules" class="master-tab-panel mx-auto hidden max-w-3xl">
+    {{ back_link() }}
+    <section id="restrictions-hub" class="pb-9 pt-6" aria-labelledby="rules-title">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
-          <h2 id="rules-title" class="text-lg font-semibold text-zinc-50">Reglas del servidor</h2>
-          <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Decidí qué objetos, criaturas y aldeanos hay en tu mundo.</p>
+          <h2 id="rules-title" class="screen-title" tabindex="-1">Reglas del servidor</h2>
+          <p class="screen-lead">Decidí qué objetos, criaturas y aldeanos hay en tu mundo.</p>
           <p id="restrictions-quick-summary" class="mt-2 text-sm text-zinc-500">Cargando…</p>
         </div>
         <button id="btn-restrictions-reload" type="button" class="v2-button btn-quiet shrink-0" title="Recarga las reglas con el servidor encendido, sin reiniciarlo (/reload)">Aplicar ahora</button>
@@ -682,9 +738,17 @@
   </div>
 
   <!-- MODS AND WORLD: config files, game rules, players, performance, automatic backups -->
-  <div id="panel-master-configs" class="master-tab-panel mx-auto hidden max-w-3xl" role="tabpanel" aria-labelledby="tab-btn-configs">
-    <div id="tab-panel-configs" class="py-9">
-      <h2 class="text-lg font-semibold text-zinc-50">Archivos de configuración de mods</h2>
+  <div id="panel-master-configs" class="master-tab-panel mx-auto hidden max-w-3xl">
+    {{ back_link() }}
+    <div class="pt-6">
+      <h2 id="configs-title" class="screen-title" tabindex="-1">Mods y mundo</h2>
+      <p class="screen-lead">Elegí una parte: los ajustes de cada mod, las reglas del juego, los jugadores o las copias automáticas.</p>
+    </div>
+    <div class="mt-6">{{ subtabs('configs', 'Partes de mods y mundo', [('archivos', 'Ajustes de los mods'), ('reglas', 'Reglas del juego'), ('jugadores', 'Jugadores'), ('lento', 'Si anda lento'), ('copias', 'Copias automáticas')]) }}</div>
+
+    {{ subpanel('configs', 'archivos', first=true) }}
+    <div id="tab-panel-configs" class="py-8">
+      <h3 class="text-lg font-semibold text-zinc-50">Ajustes de los mods</h3>
       <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Cambiá cómo funciona cada mod. Cada cambio se guarda al momento; la mayoría se nota cuando reiniciás el servidor.</p>
       <label for="config-search" class="sr-only">Buscar un archivo</label>
       <input id="config-search" type="search" class="mt-5 {{ input_cls }}" placeholder="Buscar por nombre del mod" />
@@ -707,27 +771,39 @@
         </details>
       </div>
     </div>
+    </div>
 
-    <section id="world" class="border-t border-zinc-800 py-9" aria-labelledby="gamerules-title">
-      <h2 id="gamerules-title" class="text-lg font-semibold text-zinc-50">Reglas del juego</h2>
+    {{ subpanel('configs', 'reglas') }}
+    <section id="world" class="py-8" aria-labelledby="gamerules-title">
+      <h3 id="gamerules-title" class="text-lg font-semibold text-zinc-50">Reglas del juego</h3>
       <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Cosas como si se pierde el inventario al morir. Se aplican al momento, con el servidor encendido.</p>
-      <div id="gamerules-list" class="mt-4 max-h-[32rem] overflow-y-auto border-t border-zinc-800"></div>
+      <label for="gamerules-filter" class="sr-only">Buscar una regla</label>
+      <input id="gamerules-filter" type="search" data-list-filter="#gamerules-list" placeholder="Buscar una regla, por ejemplo: inventario" class="mt-5 {{ input_cls }}" />
+      <div id="gamerules-list" class="mt-4 border-t border-zinc-800"></div>
     </section>
+    </div>
 
-    <section class="border-t border-zinc-800 py-9" aria-labelledby="players-title">
-      <h2 id="players-title" class="text-lg font-semibold text-zinc-50">Jugadores que ya entraron</h2>
+    {{ subpanel('configs', 'jugadores') }}
+    <section class="py-8" aria-labelledby="players-title">
+      <h3 id="players-title" class="text-lg font-semibold text-zinc-50">Jugadores que ya entraron</h3>
       <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Hacelos administradores o mandalos al punto de inicio del mundo.</p>
-      <div id="players-list" class="mt-4 max-h-[32rem] overflow-y-auto border-t border-zinc-800"></div>
+      <label for="players-filter" class="sr-only">Buscar un jugador</label>
+      <input id="players-filter" type="search" data-list-filter="#players-list" placeholder="Buscar por nombre" class="mt-5 {{ input_cls }}" />
+      <div id="players-list" class="mt-4 border-t border-zinc-800"></div>
     </section>
+    </div>
 
-    <section id="health" class="border-t border-zinc-800 py-9" aria-labelledby="health-title">
-      <h2 id="health-title" class="text-lg font-semibold text-zinc-50">Si el juego anda lento</h2>
+    {{ subpanel('configs', 'lento') }}
+    <section id="health" class="py-8" aria-labelledby="health-title">
+      <h3 id="health-title" class="text-lg font-semibold text-zinc-50">Si el juego anda lento</h3>
       <p id="spark-note" class="mt-1 max-w-xl leading-relaxed text-zinc-400">El mod Spark mide durante 30 segundos qué está frenando al servidor.</p>
-      <button id="spark-audit" type="button" class="v2-button btn-quiet mt-4">Medir durante 30 segundos</button>
+      <button id="spark-audit" type="button" class="v2-button btn-primary mt-4">Medir durante 30 segundos</button>
     </section>
+    </div>
 
-    <section class="border-t border-zinc-800 py-9" aria-labelledby="schedule-title">
-      <h2 id="schedule-title" class="text-lg font-semibold text-zinc-50">Copias automáticas</h2>
+    {{ subpanel('configs', 'copias') }}
+    <section class="py-8" aria-labelledby="schedule-title">
+      <h3 id="schedule-title" class="text-lg font-semibold text-zinc-50">Copias automáticas</h3>
       <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Se hace una copia del mundo cada cierto tiempo, sin que tengas que acordarte.</p>
       <div class="mt-4 flex flex-wrap items-center gap-3">
         <label for="backup-hours" class="sr-only">Cada cuánto</label>
@@ -741,14 +817,20 @@
       </div>
       <p id="schedule-status" class="mt-3 text-sm text-zinc-500"></p>
     </section>
+    </div>
   </div>
 
   <!-- DISCORD NOTICES -->
-  <div id="panel-master-discord" class="master-tab-panel mx-auto hidden max-w-3xl" role="tabpanel" aria-labelledby="tab-btn-discord">
-    <section id="discord" class="py-9" aria-labelledby="discord-title">
-      <h2 id="discord-title" class="text-lg font-semibold text-zinc-50">Avisos en Discord</h2>
-      <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Recibí un mensaje en tu Discord cuando el servidor se enciende, se cae o alguien entra.</p>
+  <div id="panel-master-discord" class="master-tab-panel mx-auto hidden max-w-3xl">
+    {{ back_link() }}
+    <section id="discord" class="pb-9 pt-6" aria-labelledby="discord-title">
+      <h2 id="discord-title" class="screen-title" tabindex="-1">Avisos en Discord</h2>
+      <p class="screen-lead">Recibí un mensaje en tu Discord cuando el servidor se enciende, se cae o alguien entra.</p>
 
+      <div class="mt-6">{{ subtabs('discord', 'Partes de los avisos', [('canal', 'Canal'), ('avisos', 'Qué avisos mandar'), ('textos', 'Textos de los avisos')]) }}</div>
+
+      {#- Every sub-screen feeds the same Guardar below. -#}
+      {{ subpanel('discord', 'canal', first=true, cls='pt-2') }}
       <div class="mt-6">
         <label for="discord-webhook-url" class="block font-medium text-zinc-200">Enlace del canal</label>
         <p class="mt-0.5 text-sm text-zinc-500">Ahí llegan los avisos de encendido, apagado, caídas y copias. Es secreto: no lo compartas.</p>
@@ -785,8 +867,11 @@
           <li>Pegalo acá arriba, tocá <b class="font-semibold text-zinc-200">Guardar</b> y después <b class="font-semibold text-zinc-200">Enviar un aviso de prueba</b>.</li>
         </ol>
       </details>
+      </div>
 
-      <h3 class="mt-9 font-semibold text-zinc-100">Qué avisos mandar</h3>
+      {{ subpanel('discord', 'avisos', cls='pt-8') }}
+      <h3 class="font-semibold text-zinc-100">Qué avisos mandar</h3>
+      <p class="mt-1 text-sm text-zinc-400">Apagá los que no quieras recibir.</p>
       <div class="mt-2 border-t border-zinc-800">
         {{ switch_row('discord-toggle-lifecycle', 'Encendido y apagado', 'Cuando el servidor arranca, se apaga o se reinicia.') }}
         {{ switch_row('discord-toggle-crashes', 'Caídas', 'Cuando el servidor se cierra solo, con el mod que lo causó si se sabe.') }}
@@ -795,10 +880,10 @@
         {{ switch_row('discord-toggle-deaths', 'Muertes', 'Cuando alguien muere en el juego.') }}
         {{ switch_row('discord-toggle-advancements', 'Logros', 'Cuando alguien consigue un logro o completa un desafío.') }}
       </div>
+      </div>
 
-      <details class="mt-6 text-sm text-zinc-400">
-        <summary class="cursor-pointer hover:text-zinc-200">Opciones avanzadas · nombre del servidor y textos de los avisos</summary>
-        <div class="mt-4 text-base">
+      {{ subpanel('discord', 'textos', cls='pt-8') }}
+        <div>
           <h4 class="font-semibold text-zinc-100">Cómo se presenta</h4>
           <p class="mt-0.5 text-sm text-zinc-500">Se guarda solo en esta computadora. Si lo dejás vacío, se usa lo que tenga configurado el panel.</p>
           <div class="mt-3 grid gap-4 sm:grid-cols-2">
@@ -835,7 +920,7 @@
             {{ message_fields('adv', 'Logro conseguido', '¡{player_name} completó un {adv_kind}!', '**{player_name}** desbloqueó: **[{advancement_title}]**') }}
           </div>
         </div>
-      </details>
+      </div>
 
       <div class="mt-8 flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-6">
         <button id="btn-discord-save" type="button" class="v2-button btn-primary">Guardar</button>

@@ -348,31 +348,12 @@
   }
 
   // 5. Navegación por Hash
+  // admin-tabs.js owns the URL hash and opens the right rules tab; this only covers pages without it.
   function handleHashNavigation() {
+    if (window.AdminTabs) return;
     const hash = window.location.hash;
-    const scrollToHub = () => {
-      setTimeout(() => {
-        const el = document.getElementById('restrictions-hub');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    };
-
-    if (hash === '#worldedit') {
-      switchTab('worldedit');
-      scrollToHub();
-    } else if (hash === '#restrictions-hub' || hash === '#items') {
-      switchTab('items');
-      scrollToHub();
-    } else if (hash === '#mobs') {
-      switchTab('mobs');
-      scrollToHub();
-    } else if (hash === '#villagers') {
-      switchTab('villagers');
-      scrollToHub();
-    } else if (hash === '#configs') {
-      switchTab('configs');
-      scrollToHub();
-    }
+    const legacy = { '#worldedit': 'worldedit', '#restrictions-hub': 'items', '#items': 'items', '#mobs': 'mobs', '#villagers': 'villagers' };
+    if (legacy[hash]) switchTab(legacy[hash]);
   }
 
   // 6. Registro de Listeners de Eventos
@@ -577,9 +558,6 @@
         btn.disabled = false;
       }
     });
-
-    // Listen to hash changes dynamically
-    window.addEventListener('hashchange', handleHashNavigation);
   }
 
   // 7. Inicialización automática

@@ -950,16 +950,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   } catch (_) {}
 
-  // 14. Hash Navigation Auto-scroll for #ranks
-  const handleRanksHash = () => {
-    if (window.location.hash === '#ranks') {
-      setTimeout(() => {
-        const el = document.getElementById('ranks');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    }
-  };
-  window.addEventListener('hashchange', handleRanksHash);
+  // 14. #ranks deep links are opened as their own screen by admin-tabs.js; kept as a no-op for callers.
+  const handleRanksHash = () => {};
 
   // 15. Initial Execution & Activation Handler
   const initRanks = async () => {

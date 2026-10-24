@@ -186,6 +186,22 @@ document.addEventListener('DOMContentLoaded', () => {
   sync();
 });
 
+// Search boxes for long lists: <input data-list-filter="#list-id"> hides the rows of that list
+// that do not match. Rows re-rendered by a page script are filtered again automatically.
+document.addEventListener('DOMContentLoaded', () => {
+  const fold = (text) => String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  document.querySelectorAll('input[data-list-filter]').forEach((input) => {
+    const list = document.querySelector(input.dataset.listFilter);
+    if (!list) return;
+    const apply = () => {
+      const query = fold(input.value.trim());
+      [...list.children].forEach((row) => { row.hidden = Boolean(query) && !fold(row.textContent).includes(query); });
+    };
+    input.addEventListener('input', apply);
+    new MutationObserver(apply).observe(list, { childList: true });
+  });
+});
+
 // Header menus are <details> elements: close them on outside click or Escape.
 document.addEventListener('DOMContentLoaded', () => {
   const menus = [...document.querySelectorAll('details[data-menu]')];
