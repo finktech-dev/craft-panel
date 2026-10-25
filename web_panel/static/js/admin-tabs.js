@@ -22,7 +22,7 @@
     '#server': { main: 'configs' },
     '#world': { main: 'configs', sub: 'reglas' },
     '#health': { main: 'configs', sub: 'lento' },
-    '#backups': { main: 'configs', sub: 'copias' },
+    '#backups': { main: 'myserver', sub: 'copias' },
     '#tu-servidor': { main: 'myserver' },
     '#server-file': { main: 'myserver' },
     '#two-factor': { main: 'security' },

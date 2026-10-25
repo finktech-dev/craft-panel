@@ -39,7 +39,7 @@ one entry per line
 | `restart_warning` | `60s` | How long before a daily restart players are warned in the chat (10s to 10m). |
 | `idle_shutdown` | off | Stop the server (saving the world) after fewer than `idle_min_players` players for this long (5m to 24h). The countdown starts once the world has loaded, resets when enough players are online, and players still online are warned in the chat one minute before. |
 | `idle_min_players` | `1` | Players needed to keep the server on (1 to 100). `1` means it stops only when nobody is online. |
-| `backup_interval` | value from "Ajustes", else `6h` | Time between automatic copies (at least `1h`). Choosing an interval in "Copias automáticas" (Automatic copies) updates this line when the file exists. |
+| `backup_interval` | `6h` | Time between automatic copies (at least `1h`). Set it in **"Ajustes" › "Tu servidor" › "Copias"** (Settings › Your server › Backups). An interval chosen with an older version of the panel still applies while this line is empty. |
 | `backup_keep` | `4` | How many copies to keep. |
 | `backup_max_size` | `15GB` | Space for all copies together; the newest copy is always kept. |
 | `backup_location` | the panel's `backups` folder | Absolute folder for new copies, ideally on another drive. It must be outside the server folder, not a drive root, and writable. Copies left in the previous folder stay listed and restorable but are never purged; the free-space check follows the new folder. |

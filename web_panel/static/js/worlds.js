@@ -4,12 +4,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const esc = Panel.escapeHtml;
 
   // Main tab handling
+  // Ranks moved to Ajustes; keep old links to the removed tab working.
+  if (window.location.hash === '#luckperms') {
+    window.location.replace('/administration#ranks');
+    return;
+  }
   const tabs = {
     worlds: { btn: $('#tab-btn-worlds'), content: $('#tab-content-worlds') },
     props: { btn: $('#tab-btn-props'), content: $('#tab-content-props') },
     whitelist: { btn: $('#tab-btn-whitelist'), content: $('#tab-content-whitelist') },
     advancements: { btn: $('#tab-btn-advancements'), content: $('#tab-content-advancements') },
-    luckperms: { btn: $('#tab-btn-luckperms'), content: $('#tab-content-luckperms') },
   };
 
   const switchTab = (activeKey) => {
@@ -572,54 +576,6 @@ document.addEventListener('DOMContentLoaded', () => {
       loadWaypoints();
     } catch (err) {
       Panel.toast(err.message, 'error');
-    }
-  };
-
-  // ==========================================
-  // 4. LUCKPERMS
-  // ==========================================
-  $('#btn-luckperms-editor').onclick = async () => {
-    const btn = $('#btn-luckperms-editor');
-    const msg = $('#luckperms-status-msg');
-    const link = $('#link-luckperms-editor');
-    btn.disabled = true;
-    msg.textContent = 'Pidiéndole el enlace al servidor…';
-
-    try {
-      const res = await Panel.api('/api/luckperms/editor', { method: 'POST' });
-      if (res.success && res.editor_url) {
-        link.href = res.editor_url;
-        link.classList.remove('hidden');
-        link.classList.add('inline-flex');
-        msg.textContent = 'Listo. Abrí el editor con el botón de al lado.';
-        Panel.toast('El editor de rangos está listo.', 'success');
-      } else {
-        msg.textContent = res.message;
-        Panel.toast(res.message, 'error');
-      }
-    } catch (err) {
-      msg.textContent = err.message;
-      Panel.toast(err.message, 'error');
-    } finally {
-      btn.disabled = false;
-    }
-  };
-
-  $('#btn-lp-assign-group').onclick = async () => {
-    const user = $('#lp-user-target').value.trim();
-    const group = $('#lp-group-target').value.trim();
-    if (!user || !group) {
-      Panel.toast('Escribí el jugador y el rango.', 'error');
-      return;
-    }
-    try {
-      const res = await Panel.api('/api/luckperms/command', {
-        method: 'POST',
-        body: { command: `/lp user ${user} parent set ${group}` },
-      });
-      Panel.toast(res.message, res.success ? 'success' : 'error');
-    } catch (e) {
-      Panel.toast(e.message, 'error');
     }
   };
 

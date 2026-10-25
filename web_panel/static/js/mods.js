@@ -743,7 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (exportBtn) {
     exportBtn.addEventListener('click', async () => {
       exportBtn.disabled = true;
-      exportBtn.textContent = 'Generando ZIP...';
+      exportBtn.textContent = 'Preparando el paquete…';
       try {
         const res = await Panel.api('/api/mods/export-client-pack', { method: 'POST' });
         Panel.toast(res.message, 'success');
@@ -759,7 +759,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Panel.toast(err.message, 'error');
       } finally {
         exportBtn.disabled = false;
-        exportBtn.textContent = 'Regenerar Modpack';
+        exportBtn.textContent = 'Volver a preparar el paquete';
       }
     });
   }

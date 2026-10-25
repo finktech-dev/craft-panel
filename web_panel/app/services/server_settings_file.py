@@ -605,7 +605,7 @@ idle_min_players = 1
 # ----- Copias -----
 
 # Cada cuánto hacer una copia del mundo (como mínimo 1h).
-# Vacío = lo que elegiste en «Copias automáticas» (6h si nunca lo cambiaste).
+# Vacío = cada 6 horas, salvo que antes hayas elegido otro intervalo.
 backup_interval =
 
 # Cuántas copias guardar. Vacío = 4.
