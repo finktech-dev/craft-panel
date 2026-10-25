@@ -37,6 +37,13 @@ class FriendAddressResponse(BaseModel):
     message: str
 
 
+class VpnAddress(BaseModel):
+    """The server's address through one VPN, e.g. Tailscale 100.101.2.3:25565."""
+
+    name: str
+    address: str
+
+
 class FriendConnectionInfo(BaseModel):
     """Information for sharing the server, without controlling any tunnel.
 
@@ -47,12 +54,14 @@ class FriendConnectionInfo(BaseModel):
 
     public_address: str
     server_port: int
-    source: Literal["playit_detected", "manual", "configured", "local_only"]
+    source: Literal["playit_detected", "manual", "configured", "vpn", "local_only"]
     can_share_with_friends: bool
     tunnel_active: bool
     is_custom: bool
     message: str
     next_step: str
+    # Addresses through each VPN on this PC; friends on the same VPN can use them too.
+    vpn_addresses: list[VpnAddress] = Field(default_factory=list)
 
 
 class TunnelSetupRequest(BaseModel):

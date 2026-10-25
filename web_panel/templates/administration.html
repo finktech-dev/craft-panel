@@ -155,6 +155,30 @@
       <p class="mt-6 text-zinc-400">Dirección actual: <span class="break-all font-mono text-zinc-200">{{ public_address or 'todavía no configurada' }}</span></p>
       <a href="/onboarding" class="v2-button btn-primary mt-6">Revisar el acceso</a>
     </section>
+
+    {#- Wired by static/js/admin-vpn.js. -#}
+    <section id="vpn-access" class="mt-10 border-t border-zinc-800 pt-8" aria-labelledby="vpn-title" data-two-factor="{{ 'true' if two_factor_enabled else 'false' }}">
+      <h3 id="vpn-title" class="text-xl font-semibold text-zinc-50">Por una VPN</h3>
+      <p class="mt-2 max-w-2xl leading-relaxed text-zinc-400">Con una VPN como Tailscale, ZeroTier, Radmin VPN o Hamachi, tus amigos entran como si estuvieran en tu casa, sin Playit. Tienen que tener la misma VPN y estar en tu misma red.</p>
+      <p id="vpn-state" class="mt-4 text-sm text-zinc-500" aria-live="polite">Buscando VPN…</p>
+      <ul id="vpn-list" class="mt-4 space-y-3"></ul>
+
+      <div id="vpn-panel" class="mt-6 hidden rounded-xl border border-zinc-800 p-4">
+        <label class="flex cursor-pointer items-center justify-between gap-4">
+          <span class="min-w-0">
+            <span class="block font-medium text-zinc-200">Abrir el panel desde otra compu de la VPN</span>
+            <span class="mt-0.5 block text-sm leading-relaxed text-zinc-500">Para manejar el servidor desde tu celular o tu notebook. Se entra con tu contraseña de siempre. Nadie de tu Wi-Fi ni de Internet puede entrar, solo quien esté en tu VPN.</span>
+          </span>
+          <span class="relative inline-flex shrink-0 items-center">
+            <input id="vpn-panel-toggle" type="checkbox" class="peer sr-only" />
+            <span aria-hidden="true" class="{{ switch_cls }}"></span>
+          </span>
+        </label>
+        <p id="vpn-panel-local-only" class="mt-3 hidden text-sm text-zinc-500">Esto solo se cambia desde la computadora del servidor.</p>
+        <p id="vpn-panel-restart" class="mt-3 hidden text-sm text-[#e8b04b]" role="status">Cerrá el panel y abrilo de nuevo con iniciar_panel.bat para que tome el cambio. Si Windows pregunta si Python puede usar la red, tocá Permitir.</p>
+        <p id="vpn-panel-warning" class="mt-3 hidden text-sm leading-relaxed text-zinc-400">Activá la verificación en dos pasos: así, aunque alguien de tu VPN sepa tu contraseña, no puede entrar.</p>
+      </div>
+    </section>
   </div>
 
   {#- One craftpanel.txt value: label, the key as written in the file, a hint and its input (wired by admin-server-file.js). -#}
@@ -985,4 +1009,5 @@
 <script src="/static/js/admin-ranks.js"></script>
 <script src="/static/js/admin-discord.js"></script>
 <script defer src="/static/js/admin-server-file.js"></script>
+<script defer src="/static/js/admin-vpn.js"></script>
 {% endblock %}

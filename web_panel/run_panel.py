@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 import sys
 import threading
 import time
@@ -12,6 +13,7 @@ import webbrowser
 import uvicorn
 
 from app.core.config import settings
+from app.services import vpn_service
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,10 +47,47 @@ def _open_browser_when_ready() -> None:
         except OSError:
             time.sleep(0.25)
 
+def _vpn_sockets() -> list[socket.socket] | None:
+    """Loopback plus each VPN address, when the owner opened the panel to the VPN.
+
+    Never a wildcard address: Wi-Fi and the home network keep not reaching the panel.
+    Returns ``None`` to let Uvicorn bind ``panel_host`` as usual.
+    """
+    if settings.panel_mode != "local" or settings.panel_host not in {"127.0.0.1", "localhost"}:
+        return None
+    assert settings.panel_directory is not None
+    if not vpn_service.panel_access_enabled(settings.panel_directory):
+        return None
+    networks = vpn_service.detect()
+    if not networks:
+        logger.info("Panel access through a VPN is on, but no VPN is connected; only this PC can open the panel.")
+        return None
+    sockets: list[socket.socket] = []
+    bound: list[vpn_service.VpnNetwork] = []
+    for host, network in [("127.0.0.1", None), *((network.address, network) for network in networks)]:
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            listener.bind((host, settings.panel_port))
+        except OSError as error:
+            listener.close()
+            if network is None:
+                raise
+            logger.warning("Could not open the panel on %s: %s", network.name, error.strerror)
+            continue
+        listener.set_inheritable(True)
+        sockets.append(listener)
+        if network is not None:
+            bound.append(network)
+            logger.info("Panel also reachable through %s at http://%s:%s", network.name, network.address, settings.panel_port)
+    vpn_service.panel_vpn_access.activate(bound)
+    return sockets
+
+
 def main() -> None:
     _configure_windows_event_loop()
 
     threading.Thread(target=_open_browser_when_ready, daemon=True, name="open-panel-browser").start()
+    sockets = _vpn_sockets()
 
     config = uvicorn.Config(
         "main:app",
@@ -68,7 +107,7 @@ def main() -> None:
 
     try:
         # On Windows, server.run() wraps the asyncio loop
-        server.run()
+        server.run(sockets=sockets)
     except (KeyboardInterrupt, SystemExit, asyncio.CancelledError):
         pass
     finally:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +19,7 @@ from app.core.security import get_current_admin
 from app.core.rate_limit import rate_limit
 from app.schemas.job import JobAccepted
 from app.schemas.server import ServerActionResponse, ServerMetrics
-from app.schemas.runtime import FriendConnectionInfo, TunnelStatus
+from app.schemas.runtime import FriendConnectionInfo, TunnelStatus, VpnAddress
 from app.services import job_service as job_service_module
 from app.services.backup_service import BACKUP_STEPS, backup_service
 from app.services.crash_guard import crash_guard
@@ -42,6 +42,8 @@ from app.services.server_process import (
 from app.services.server_properties_service import server_properties_service
 from app.services.server_settings_file import read_server_settings
 from app.services.spark_service import spark_service
+from app.services import vpn_service
+from app.services.vpn_service import VpnNetwork
 
 logger = logging.getLogger(__name__)
 
@@ -409,8 +411,10 @@ def _friend_connection_info(
     tunnel: TunnelStatus,
     file_address: str | None = None,
     playit_host_state: str | None = None,
+    vpn_networks: Sequence[VpnNetwork] = (),
 ) -> FriendConnectionInfo:
     """Describe an existing address without starting, stopping or configuring tunnels."""
+    vpn_addresses = [VpnAddress(name=network.name, address=f"{network.address}:{port}") for network in vpn_networks]
     custom_address = custom_address.strip() if custom_address else None
     configured_address = configured_address.strip() if configured_address else None
     file_address = file_address.strip() if file_address else None
@@ -440,6 +444,12 @@ def _friend_connection_info(
         source = "configured"
         message = "Esta es la dirección guardada para tu servidor. Pasásela a tus amigos."
         next_step = "Si alguno no puede entrar, revisá que la dirección siga siendo la correcta."
+    elif vpn_addresses:
+        vpn = vpn_addresses[0]
+        address = vpn.address
+        source = "vpn"
+        message = f"Tus amigos pueden entrar por {vpn.name}: tienen que estar conectados a tu misma red de {vpn.name}."
+        next_step = "Si no pueden entrar, revisá que el Firewall de Windows deje pasar a Java (la primera vez que se enciende el servidor, Windows pregunta)."
     else:
         address = f"127.0.0.1:{port}"
         source = "local_only"
@@ -466,6 +476,7 @@ def _friend_connection_info(
         is_custom=source == "manual",
         message=message,
         next_step=next_step,
+        vpn_addresses=vpn_addresses,
     )
 
 
@@ -485,6 +496,7 @@ async def get_connection_info() -> FriendConnectionInfo:
         file_address=read_server_settings(settings).value("public_address"),
         tunnel=tunnel_stat,
         playit_host_state=host_state,
+        vpn_networks=await asyncio.to_thread(vpn_service.detect),
     )
 
 

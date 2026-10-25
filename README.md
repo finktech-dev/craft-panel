@@ -117,6 +117,8 @@ Playit.gg is enabled by default. The recommended way is the official Playit app 
 
 Without the app, the wizard can still link your account: approve this computer on Playit’s official claim page and the panel downloads the agent itself. A manually supplied agent key remains available as an advanced fallback. Choose **"Jugar solo en esta casa"** (Play only in this home) only when friends from other homes should not join.
 
+**Through a VPN.** If you and your friends share a mesh VPN (Tailscale, ZeroTier, Radmin VPN, Hamachi, NetBird or WireGuard), the panel detects it by its network adapter and shows the server's address on it, with no setup. With no Playit address it becomes the main address on the home screen. In **"Ajustes" → "Acceso por Internet" → "Por una VPN"** you can also open the panel itself to the other devices on your VPN, to manage the server from your phone or laptop; see [docs/SECURITY.md](docs/SECURITY.md).
+
 ## Language
 
 The panel interface is currently in Spanish. Documentation and code (comments, config keys) are in English. If you need the panel in another language, or want to help add translations (i18n), contributions are very welcome: see the [contribution guide](docs/CONTRIBUTING.md).
