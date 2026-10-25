@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.api.endpoints_jobs import accepted, start_job
 from app.core.config import settings
+from app.core.privacy import redact_ip_addresses, redact_personal_paths
 from app.core.security import get_current_admin
 from app.core.rate_limit import rate_limit
 from app.schemas.job import JobAccepted
@@ -363,6 +366,39 @@ async def get_online_players() -> dict[str, Any]:
         "is_running": server_manager.is_running,
         "players": players,
     }
+
+
+# Enough for any session; a bigger latest.log is cut from the start so the newest lines stay.
+LOG_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024
+
+
+def _read_log_for_download(path: Path) -> str:
+    with path.open("rb") as handle:
+        size = handle.seek(0, os.SEEK_END)
+        handle.seek(max(0, size - LOG_DOWNLOAD_MAX_BYTES))
+        data = handle.read()
+    text = data.decode("utf-8", errors="replace")
+    if size > LOG_DOWNLOAD_MAX_BYTES:
+        # Drop the partial first line and say the file was cut.
+        text = "# (Registro recortado: solo las últimas líneas)\n" + text.split("\n", 1)[-1]
+    # The file is meant to be shared when asking for help: hide player addresses and the Windows user name.
+    return redact_personal_paths(redact_ip_addresses(text))
+
+
+@router.get("/log/download")
+async def download_server_log() -> Response:
+    path = settings.server_log_file
+    if path is None or not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Todavía no hay registro: encendé el servidor una vez.")
+    try:
+        text = await asyncio.to_thread(_read_log_for_download, path)
+    except OSError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"No se pudo leer el registro: {error.strerror}") from error
+    return Response(
+        content=text.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="registro-del-servidor.log"', "Cache-Control": "no-store"},
+    )
 
 
 def _friend_connection_info(

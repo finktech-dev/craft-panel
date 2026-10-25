@@ -235,8 +235,11 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Loads events from the API.
+  // The console links here as /crashes?player=Name; it applies until the list of players is filled in.
+  let requestedPlayer = new URLSearchParams(window.location.search).get('player') || '';
+
   const loadEvents = async () => {
-    const p = playerSelect ? playerSelect.value : '';
+    const p = (playerSelect ? playerSelect.value : '') || requestedPlayer;
     const c = categorySelect ? categorySelect.value : '';
     const q = searchInput ? searchInput.value.trim() : '';
 
@@ -264,6 +267,16 @@ document.addEventListener('DOMContentLoaded', () => {
           opt.textContent = name;
           playerSelect.append(opt);
         });
+      }
+      if (playerSelect && requestedPlayer) {
+        if (![...playerSelect.options].some((option) => option.value === requestedPlayer)) {
+          const opt = document.createElement('option');
+          opt.value = requestedPlayer;
+          opt.textContent = requestedPlayer;
+          playerSelect.append(opt);
+        }
+        playerSelect.value = requestedPlayer;
+        requestedPlayer = '';
       }
 
       if (categorySelect && categorySelect.options.length <= 1) {
