@@ -2,6 +2,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => document.querySelectorAll(s);
   const esc = Panel.escapeHtml;
+  // The server sends UTC; show it in this computer's time.
+  const localTime = (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString([], { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  };
 
   // Main tab handling
   // Ranks moved to Ajustes; keep old links to the removed tab working.
@@ -105,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <h3 class="truncate font-semibold text-zinc-50">${esc(w.name)}</h3>
               ${w.is_active ? '<span class="text-sm text-zinc-400">· en uso</span>' : ''}
             </div>
-            <p class="mt-0.5 text-sm text-zinc-500">Ocupa ${esc(w.size_formatted)} · último cambio ${esc(w.last_modified)} · ${dimensionsText(w)}</p>
+            <p class="mt-0.5 text-sm text-zinc-500">Ocupa ${esc(String(w.size_formatted).replace('.', ','))} · último cambio ${esc(localTime(w.last_modified))} · ${dimensionsText(w)}</p>
           </div>
           ${w.is_active
             ? '<p class="shrink-0 text-sm text-zinc-500">Se carga al prender el servidor</p>'

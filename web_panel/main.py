@@ -32,6 +32,7 @@ from app.services.playit_service import playit_service
 from app.services.protected_paths import ProtectedPathError
 from app.services.scheduler_service import scheduler_service
 from app.services.server_version_service import server_version_service
+from app.services.update_service import current_version
 from app.websocket.terminal import router as terminal_router
 
 logging.basicConfig(
@@ -78,7 +79,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="Panel del servidor Minecraft",
-    version="0.1.0",
+    version=current_version(),
     lifespan=lifespan,
     # The interactive API docs are not needed by the UI and only widen what an
     # Internet visitor can probe.

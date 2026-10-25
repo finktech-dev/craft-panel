@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Preguntas y ayuda / Questions and help
+    url: https://github.com/finktech-dev/craft-panel/discussions
+    about: Para dudas sobre cómo usar el panel. / For questions about using the panel.
+  - name: Problema de seguridad / Security issue
+    url: https://github.com/finktech-dev/craft-panel/blob/main/docs/SECURITY.md
+    about: No lo publiques en un issue: seguí estos pasos. / Do not post it in an issue: follow these steps.

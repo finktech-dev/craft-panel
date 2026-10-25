@@ -94,9 +94,44 @@
     const latest = Array.isArray(backups) && backups.length
       ? [...backups].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
       : null;
+    // Some locales already end the time with a period ("8:20 a. m.").
+    const when = formatDate(latest?.created_at).replace(/\.$/, '');
     text('#backup-status', latest
-      ? `La última copia se hizo ${formatDate(latest.created_at)}. Si algo sale mal, podés volver a ese momento.`
+      ? `La última copia se hizo ${when}. Si algo sale mal, podés volver a ese momento.`
       : 'Todavía no hay copias. Hacé una antes de instalar mods o cambiar cosas grandes.');
+  };
+
+  // Who is in the game right now; the whole section only shows while the server runs.
+  const setPlayers = (online) => {
+    const players = online?.is_running && Array.isArray(online.players) ? online.players : [];
+    $('#players-section')?.classList.toggle('hidden', !online?.is_running);
+    text('#players-count', online?.is_running ? `(${players.length} de ${online.max_players})` : '');
+    $('#players-empty')?.classList.toggle('hidden', players.length > 0);
+    const list = $('#players-list');
+    if (!list) return;
+    list.innerHTML = players.map((player) => `
+      <li class="flex items-center gap-2 rounded-full border border-zinc-800 py-1.5 pl-2 pr-3 text-sm text-zinc-200">
+        <img src="${esc(player.avatar_url)}" alt="" class="h-5 w-5 rounded-sm" loading="lazy">
+        <span>${esc(player.username)}</span>
+      </li>`).join('');
+  };
+
+  // A newer panel release, once per page load. "Ahora no" hides that version in this browser only.
+  const UPDATE_KEY = 'cp.updateDismissed';
+  const showUpdate = async () => {
+    const update = await query('/api/updates');
+    if (!update?.available) return;
+    let hidden = null;
+    try { hidden = window.localStorage.getItem(UPDATE_KEY); } catch { /* private mode */ }
+    if (hidden === update.latest) return;
+    text('#update-latest', update.latest);
+    text('#update-current', update.current);
+    if (update.url) $('#update-link')?.setAttribute('href', update.url);
+    $('#update-notice')?.classList.remove('hidden');
+    $('#update-dismiss')?.addEventListener('click', () => {
+      try { window.localStorage.setItem(UPDATE_KEY, update.latest); } catch { /* hidden until reload */ }
+      $('#update-notice')?.classList.add('hidden');
+    }, { once: true });
   };
 
   // Hidden warnings live in this browser. A warning comes back if it gets worse (warn -> danger)
@@ -180,16 +215,18 @@
 
   const query = async (path) => { try { return await Panel.api(path); } catch { return null; } };
   const refresh = async () => {
-    const [metrics, connection, backups, safety, external, tunnel] = await Promise.all([
+    const [metrics, connection, backups, safety, external, tunnel, online] = await Promise.all([
       query('/api/server/metrics'),
       query('/api/server/connection-info'),
       query('/api/backups'),
       query('/api/server/safety-summary'),
       query('/api/server/external'),
       query('/api/tunnel/status'),
+      query('/api/server/online-players'),
     ]);
     setExternal(external);
     setHero(metrics);
+    setPlayers(online);
     setConnection(connection, tunnel);
     setBackup(backups);
     setChecks(safety);
@@ -326,5 +363,6 @@
     PanelJobs.resume({ kinds: ['backup'], mount: '#backup-progress', button: '#create-backup' }).then(resumed('#backup-progress'));
     refresh();
     window.setInterval(refresh, 15_000);
+    showUpdate();
   });
 })();

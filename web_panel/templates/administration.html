@@ -245,6 +245,7 @@
           {{ file_field('memory', 'Memoria', 'Cuánta memoria usa el servidor, por ejemplo 6G. Vacío = la que elegiste al prepararlo.', '6G', mono=true) }}
           {{ file_switch('start_with_panel', 'Encenderlo al abrir el panel', 'Cuando abrís el panel, el servidor se enciende solo.') }}
           {{ file_switch('stop_with_panel', 'Apagarlo al cerrar el panel', 'Al cerrar el panel, el servidor se apaga guardando el mundo. Si lo desactivás, sigue encendido y el panel lo retoma cuando lo volvés a abrir.') }}
+          {{ file_switch('check_updates', 'Avisar si hay una versión nueva del panel', 'Una vez por día el panel pregunta a GitHub cuál es la última versión y te avisa en el Inicio. No manda nada tuyo.') }}
           {{ file_field('startup_timeout', 'Cuánto esperar a que cargue', 'Después de este tiempo te avisamos que sigue cargando. Por ejemplo 5m o 10m.', '5m', mono=true) }}
           {{ file_switch('restart_on_crash', 'Volver a encenderlo si se cae', 'Si se cierra por un error, se enciende de nuevo a los pocos segundos.') }}
           {{ file_field('max_crash_restarts', 'Cuántas veces intentar', 'Si se cae esta cantidad de veces en 10 minutos, deja de intentar y te avisa.', '3', mono=true, inputmode='numeric') }}

@@ -32,6 +32,7 @@ one entry per line
 | `memory` | RAM chosen in setup | Server RAM such as `6G`. Written into `user_jvm_args.txt` (`-Xmx`/`-Xms`) before each start and kept in step with the RAM selector. Limited to what the PC can spare. |
 | `start_with_panel` | `false` | Start the server as a job when the panel opens (skipped if a server is already open outside the panel or Playit still needs setup). |
 | `stop_with_panel` | `true` | Stop the server, saving the world, when the panel closes: with Ctrl+C, the window's close button or signing out of Windows. With `false` it keeps running on its own and the panel takes it back (console, commands and players) the next time it opens. |
+| `check_updates` | `true` | Once a day, ask GitHub for the newest Craft Panel release and show a notice on the dashboard when it is newer than this copy. Only the public release list is read; nothing about this PC or server is sent. |
 | `startup_timeout` | `5m` | How long a start or restart waits for the world before saying it is still loading (30s to 60m). |
 | `restart_on_crash` | `false` | Start the server again, as a job, 10 seconds after it ends on its own. Never after a requested stop or a forced close. |
 | `max_crash_restarts` | `3` | After this many crashes within 10 minutes, automatic restarts stop; the console and the dashboard's "Cosas para revisar" (Things to check) say so. Starting the server by hand turns them back on. |
@@ -69,6 +70,7 @@ java = C:\Program Files\Eclipse Adoptium\jdk-21\bin\java.exe
 memory = 6G
 start_with_panel = false
 stop_with_panel = true
+check_updates = true
 startup_timeout = 10m
 restart_on_crash = true
 max_crash_restarts = 3

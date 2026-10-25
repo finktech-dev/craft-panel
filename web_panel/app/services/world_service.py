@@ -84,7 +84,8 @@ class WorldService:
                     is_active=(entry.name == active_world),
                     size_bytes=size_bytes,
                     size_formatted=_format_size(size_bytes),
-                    last_modified=datetime.fromtimestamp(mtime, UTC).strftime("%Y-%m-%d %H:%M:%S"),
+                    # ISO with its time zone, so the browser shows it in the owner's local time.
+                    last_modified=datetime.fromtimestamp(mtime, UTC).isoformat(timespec="seconds"),
                     has_nether=has_nether,
                     has_the_end=has_the_end,
                 )

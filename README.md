@@ -1,8 +1,44 @@
-# Local Minecraft Server Panel
+<div align="center">
 
-A self-hosted control panel for starting and sharing a local Minecraft server with friends. It is designed for people who do not want to edit launch flags, run console commands, or manually manage Java processes.
+# Craft Panel
 
-The goal is simple: help a non-technical person host a private Minecraft server for friends in a few guided steps.
+**Your own Minecraft server in one double-click. No commands, no port forwarding, no Java headaches.**
+
+A free, open-source web panel that installs, starts and shares a Minecraft server from a Windows PC, made so a kid or any non-technical player can host a private server for their friends.
+
+[![Latest release](https://img.shields.io/github/v/release/finktech-dev/craft-panel?label=download&color=8abf58)](https://github.com/finktech-dev/craft-panel/releases/latest)
+[![Tests](https://github.com/finktech-dev/craft-panel/actions/workflows/tests.yml/badge.svg)](https://github.com/finktech-dev/craft-panel/actions/workflows/tests.yml)
+[![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)](#compatibility)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+[**Download Craft Panel**](https://github.com/finktech-dev/craft-panel/releases/latest/download/CraftPanel.zip) · [Leer en español](README.es.md) · [Panel guide](docs/PANEL_GUIDE.md)
+
+<img src="docs/images/demo.gif" alt="Craft Panel installing a server, starting it, friends joining, the console and a world backup" width="880">
+
+<sub>Recorded from the real panel on a fresh Windows install: the server, the players joining and every screen are real; nothing is mocked up.</sub>
+
+</div>
+
+## What it does
+
+- **Guided setup:** pick normal Minecraft, NeoForge or Fabric and a version; the panel downloads the server (and the right Java if yours is too old) and starts it.
+- **Friends can join from their homes** through [Playit.gg](https://playit.gg/) or a VPN like Tailscale, with the address ready to copy. No router settings.
+- **Mods from Modrinth** in one click, with their dependencies, plus a ZIP of the same mods for your friends.
+- **Automatic world backups** you can restore, download or keep on another drive.
+- **A console that explains itself:** real errors highlighted, chat mode, search and one-click shortcuts.
+- **Who is playing**, players, worlds, game rules, ranks (LuckPerms) and Discord notices, all in plain Spanish words.
+- **Tells you when a new version is out**, and updating never touches your worlds.
+
+| | |
+| --- | --- |
+| <img src="docs/images/dashboard.png" alt="Home screen: server on, three friends playing and the address to share" width="420"> | <img src="docs/images/onboarding.png" alt="First-run wizard: choosing normal Minecraft, mods or Fabric" width="420"> |
+| **Home:** is it on, who is playing, the address for friends. | **Setup:** four short steps, nothing to type. |
+| <img src="docs/images/mods-search.png" alt="Searching Modrinth for mods that fit the server" width="420"> | <img src="docs/images/console.png" alt="Live console with chat and server messages" width="420"> |
+| **Mods:** only mods that fit your server, dependencies included. | **Console:** live, with chat and errors called out. |
+| <img src="docs/images/backups.png" alt="World backups with restore and download buttons" width="420"> | <img src="docs/images/mods-installed.png" alt="Installed mods with on/off switches and a modpack for friends" width="420"> |
+| **Backups:** automatic copies, restore in one click. | **Your mods:** turn them on or off, send the pack to friends. |
+
+The panel speaks Spanish; these docs are in English, with on-screen words kept as the panel shows them. [Leé esta página en español](README.es.md).
 
 ## Getting started
 
@@ -10,7 +46,7 @@ Craft Panel runs on **Windows 10 and Windows 11**. The first start needs an Inte
 
 **1. Get the panel and open it.**
 
-1. On this page, click the green **Code** button, then **Download ZIP**.
+1. Download **[CraftPanel.zip](https://github.com/finktech-dev/craft-panel/releases/latest/download/CraftPanel.zip)** from the [latest release](https://github.com/finktech-dev/craft-panel/releases/latest).
 2. Right-click the downloaded ZIP and choose **Extract All…**. Extract it to a simple folder that OneDrive does not sync, for example `C:\CraftPanel`. Avoid Desktop and Documents when OneDrive backs them up.
 3. Open the extracted folder and double-click **`iniciar_panel.bat`**. If Windows shows a warning about files from the Internet, click **More info** → **Run anyway** (or **Run**).
 
@@ -19,6 +55,17 @@ The first start takes a few minutes: the window finds Python (or installs it for
 For a tour of every screen, read the [panel guide](docs/PANEL_GUIDE.md).
 
 If you know Git, you can use `git clone` instead of the ZIP and then double-click `iniciar_panel.bat` in the cloned folder.
+
+### Updating
+
+When a new version is out, the home screen says so (turn this off with `check_updates = false` in [the settings file](docs/SERVER_FILE.md)). To update:
+
+1. Close the panel's black window, which also saves and stops the server.
+2. Download the new **CraftPanel.zip** and extract it.
+3. Copy everything from the new folder into your Craft Panel folder and choose **Replace the files in the destination**.
+4. Double-click `iniciar_panel.bat` again.
+
+Your worlds, backups, mods and settings live in files the ZIP does not include, so they stay as they are. Making a backup before updating never hurts.
 
 **2. Install Playit so friends can join from their homes.**
 
@@ -131,6 +178,8 @@ The panel interface is currently in Spanish. Documentation and code (comments, c
 In these docs, text you see on screen is kept in Spanish, exactly as the panel shows it, with an English meaning in parentheses the first time, for example "Encender" (Start).
 
 ## Contributing
+
+Questions go to [Discussions](https://github.com/finktech-dev/craft-panel/discussions); bugs and ideas to [Issues](https://github.com/finktech-dev/craft-panel/issues/new/choose). If the panel helps you, a ⭐ helps other players find it.
 
 Issues and pull requests are welcome, especially improvements that make first-run hosting clearer and safer for non-technical players. Please read the [contribution guide](docs/CONTRIBUTING.md) before opening a PR. Never include secrets, worlds, backups, logs, player data, or downloaded JARs in a contribution.
 

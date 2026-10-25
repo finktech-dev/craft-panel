@@ -122,8 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalMb = installedMods.reduce((acc, m) => acc + (m.size_mb || 0), 0).toFixed(1);
 
     if (kpiTotal) kpiTotal.textContent = total;
-    if (kpiActive) kpiActive.textContent = active;
-    if (kpiDisabled) kpiDisabled.textContent = disabled;
+    if (kpiActive) kpiActive.textContent = `${active} ${active === 1 ? 'encendido' : 'encendidos'}`;
+    if (kpiDisabled) kpiDisabled.textContent = `${disabled} ${disabled === 1 ? 'apagado' : 'apagados'}`;
     if (kpiSize) kpiSize.textContent = `${totalMb} MB`;
 
     const badgeInstalled = $('#tab-badge-installed');

@@ -19,6 +19,14 @@ Thanks for helping make the panel easier for non-technical Minecraft hosts.
    - If you changed templates or JavaScript classes, rebuild the stylesheet with `npm --prefix web_panel/frontend ci` (once) and `npm --prefix web_panel/frontend run build:css`, and commit `web_panel/static/css/tailwind.css`. CI fails when it is out of date.
 5. Explain in the pull request what the code validates and what still needs manual verification.
 
+## Releases
+
+1. Set the new number in `VERSION` (for example `1.1.0`) in a pull request and merge it.
+2. Tag that commit with the same number and push the tag: `git tag v1.1.0` and `git push origin v1.1.0`.
+3. The **Release** workflow checks that the tag matches `VERSION`, builds `CraftPanel.zip` (the panel without tests, CI files or stylesheet sources) and publishes the release with notes on how to update. Panels that have `check_updates` on show the new version on their home screen within a day.
+
+Use `MAJOR.MINOR.PATCH`: a patch for fixes, a minor version for new features, a major one only when updating needs extra steps.
+
 ## Language and translations
 
 The panel interface is in Spanish (Rioplatense, "vos" form); documentation, code comments and config keys are in English. Help translating the interface into other languages (i18n) is very welcome.

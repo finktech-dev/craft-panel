@@ -513,6 +513,7 @@ KEYS: dict[str, KeySpec] = {
         KeySpec("memory", parse_memory_gb, ""),
         KeySpec("start_with_panel", parse_bool, "false"),
         KeySpec("stop_with_panel", parse_bool, "true"),
+        KeySpec("check_updates", parse_bool, "true"),
         KeySpec("startup_timeout", _duration(30, 3600), "5m"),
         KeySpec("restart_on_crash", parse_bool, "false"),
         KeySpec("max_crash_restarts", _integer(1, 20), "3"),
@@ -577,6 +578,10 @@ start_with_panel = false
 # Apagar el servidor (guardando el mundo) cuando se cierra el panel (true o false).
 # Con false sigue encendido y el panel lo retoma cuando lo volvés a abrir.
 stop_with_panel = true
+
+# Avisar en el Inicio cuando hay una versión nueva del panel (true o false).
+# Una vez por día pregunta a GitHub cuál es la última; no manda nada tuyo.
+check_updates = true
 
 # Cuánto esperar a que cargue el mundo antes de avisar que tarda.
 startup_timeout = 5m

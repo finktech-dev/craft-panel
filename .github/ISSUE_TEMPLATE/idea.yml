@@ -1,0 +1,21 @@
+name: Idea / Feature idea
+description: Algo que haría el panel más fácil o más útil. / Something that would make the panel easier or more useful.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qué te gustaría poder hacer / What you would like to do
+      description: Contalo como lo harías vos, sin pensar en cómo programarlo. / Describe it as you would do it, not how to code it.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: Cómo lo hacés hoy / How you do it today
+      description: Si hoy hay que salir del panel o usar comandos, contá cómo. / If today it needs commands or another tool, say how.
+  - type: textarea
+    id: extra
+    attributes:
+      label: Algo más / Anything else
+      description: Capturas, mods o servidores donde lo viste. / Screenshots, mods or other panels where you saw it.
