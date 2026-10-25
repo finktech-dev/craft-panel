@@ -1,0 +1,50 @@
+name: Release
+
+# Pushing a tag like v1.2.0 builds CraftPanel.zip and publishes the release.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build CraftPanel.zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Tag matches the VERSION file
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match VERSION (${version})."
+            exit 1
+          fi
+      - name: Build the ZIP players download
+        # Only what running the panel needs: no tests, CI files or stylesheet sources.
+        # git archive keeps the CRLF endings .gitattributes sets for the .bat files.
+        run: |
+          git archive --format=zip --prefix=CraftPanel/ -o CraftPanel.zip "${GITHUB_REF_NAME}" -- . \
+            ':(exclude).github' \
+            ':(exclude).gitattributes' \
+            ':(exclude).gitignore' \
+            ':(exclude)docs/images' \
+            ':(exclude)pytest.ini' \
+            ':(exclude)requirements-dev.txt' \
+            ':(exclude)web_panel/tests' \
+            ':(exclude)web_panel/frontend'
+          unzip -l CraftPanel.zip | tail -1
+          unzip -l CraftPanel.zip | grep -q 'CraftPanel/iniciar_panel.bat'
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" CraftPanel.zip \
+            --title "Craft Panel ${GITHUB_REF_NAME}" \
+            --notes-file .github/release-notes.md \
+            --generate-notes \
+            --verify-tag

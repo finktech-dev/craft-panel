@@ -1,0 +1,53 @@
+name: Algo no anda / Something is broken
+description: El panel o el servidor hace algo que no debería. / The panel or the server does something it should not.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ¡Gracias por avisar! No pegues contraseñas, claves de Playit, webhooks de Discord ni direcciones IP.
+        Thanks for reporting! Do not paste passwords, Playit keys, Discord webhooks or IP addresses.
+  - type: textarea
+    id: what
+    attributes:
+      label: Qué pasó / What happened
+      description: Qué hiciste, qué esperabas y qué pasó en cambio. / What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Cómo repetirlo / How to reproduce it
+      placeholder: |
+        1. Abrí «Mods»
+        2. Toqué «Instalar» en…
+  - type: input
+    id: version
+    attributes:
+      label: Versión del panel / Panel version
+      description: Está en el archivo VERSION de la carpeta del panel. / It is in the VERSION file of the panel folder.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: server
+    attributes:
+      label: Tipo de servidor / Server type
+      options:
+        - Minecraft normal (Vanilla)
+        - Con mods (NeoForge)
+        - Con mods livianos (Fabric)
+        - Uno que ya tenía / One I already had
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows
+      placeholder: Windows 11
+  - type: textarea
+    id: log
+    attributes:
+      label: Lo que dice la consola / What the console says
+      description: Las últimas líneas de «Consola» (o «Descargar registro», que ya oculta las direcciones de los jugadores). / The last lines of the console, or its "Descargar registro" download, which hides player addresses.
+      render: text

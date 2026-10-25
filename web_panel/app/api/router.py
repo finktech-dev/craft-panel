@@ -28,6 +28,7 @@ from app.api.endpoints_advancements import router as advancements_router
 from app.api.endpoints_access import router as access_router
 from app.api.endpoints_discord import router as discord_router
 from app.api.endpoints_network import router as network_router
+from app.api.endpoints_updates import router as updates_router
 
 router = APIRouter(prefix="/api")
 router.include_router(auth_router)
@@ -57,4 +58,5 @@ router.include_router(luckperms_router)
 router.include_router(advancements_router)
 router.include_router(discord_router)
 router.include_router(network_router)
+router.include_router(updates_router)
 
