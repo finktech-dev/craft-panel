@@ -34,12 +34,18 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-1.5">
-        <div class="relative flex items-center">
-          <label for="search-filter" class="sr-only">Buscar en la consola</label>
-          <input id="search-filter" type="search" placeholder="Buscar" class="h-9 w-40 rounded-lg border border-zinc-800 bg-zinc-950 pl-3 pr-8 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400">
-          <button id="clear-search" type="button" class="hidden absolute right-1.5 rounded px-1.5 text-zinc-400 hover:text-zinc-100" aria-label="Borrar la búsqueda">×</button>
+        <div class="flex items-center gap-1">
+          <div class="relative flex items-center">
+            <label for="search-filter" class="sr-only">Buscar en la consola</label>
+            <input id="search-filter" type="search" placeholder="Buscar" class="h-9 w-40 rounded-lg border border-zinc-800 bg-zinc-950 pl-3 pr-8 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400" aria-describedby="search-count">
+            <button id="clear-search" type="button" class="hidden absolute right-1.5 rounded px-1.5 text-zinc-400 hover:text-zinc-100" aria-label="Borrar la búsqueda">×</button>
+          </div>
+          <span id="search-count" class="hidden min-w-[4.5rem] text-center text-sm text-zinc-400" aria-live="polite"></span>
+          <button id="search-prev" type="button" class="hidden rounded-lg px-2 py-1 text-zinc-300 hover:bg-zinc-800" aria-label="Resultado anterior" title="Anterior (Mayús + Enter)">↑</button>
+          <button id="search-next" type="button" class="hidden rounded-lg px-2 py-1 text-zinc-300 hover:bg-zinc-800" aria-label="Resultado siguiente" title="Siguiente (Enter)">↓</button>
         </div>
         <button id="copy-logs" type="button" class="v2-button btn-quiet min-h-9 px-3 py-1 text-sm" title="Copiar las líneas que se ven">Copiar</button>
+        <a href="/api/server/log/download" download class="v2-button btn-quiet min-h-9 px-3 py-1 text-sm" title="El registro completo de esta sesión, con las direcciones de los jugadores tapadas. Sirve para pedir ayuda.">Descargar registro</a>
         <button id="scroll-toggle" type="button" class="v2-button btn-quiet min-h-9 px-3 py-1 text-sm" title="Frenar o seguir el desplazamiento automático"><span id="scroll-icon" class="hidden" aria-hidden="true"></span><span id="scroll-label">Pausar</span></button>
         <button id="clear-terminal" type="button" class="v2-button btn-quiet min-h-9 px-3 py-1 text-sm" title="Borra lo que se ve en pantalla; el servidor no cambia">Limpiar</button>
         <button id="fullscreen-toggle" type="button" class="v2-button btn-quiet min-h-9 px-3 py-1 text-sm">Pantalla completa</button>
@@ -49,11 +55,22 @@
     <div class="relative flex-1">
       <div id="terminal-output" class="h-[60vh] min-h-[350px] overflow-y-auto overflow-x-hidden p-4 font-mono text-[12px] leading-relaxed text-zinc-200 selection:bg-emerald-500/30" role="log" aria-live="polite" aria-label="Salida de consola"></div>
       <button id="scroll-to-bottom-btn" type="button" class="v2-button btn-quiet hidden absolute bottom-3 right-6 z-10 min-h-9 bg-zinc-900 px-3 py-1 text-sm">Ver lo más nuevo</button>
+      <div id="player-menu" class="absolute z-20 hidden w-56 rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 text-sm shadow-xl" role="menu" aria-label="Acciones del jugador">
+        <p id="player-menu-name" class="truncate px-2.5 pb-1.5 pt-1 font-semibold text-zinc-100"></p>
+        <button type="button" data-player-action="message" class="block w-full rounded-lg px-2.5 py-2 text-left text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100" role="menuitem">Escribirle un mensaje</button>
+        <a id="player-menu-crashes" href="/crashes" class="block rounded-lg px-2.5 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100" role="menuitem">Ver por qué se desconectó</a>
+        <button type="button" data-player-action="copy" class="block w-full rounded-lg px-2.5 py-2 text-left text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100" role="menuitem">Copiar el nombre</button>
+        <button type="button" data-player-action="kick" class="block w-full rounded-lg px-2.5 py-2 text-left text-[#f3a79b] hover:bg-zinc-800" role="menuitem">Echarlo del servidor</button>
+      </div>
     </div>
 
     <form id="command-form" class="flex items-center gap-2 border-t border-zinc-800 bg-zinc-900 p-3">
-      <label class="sr-only" for="command-input">Comando</label>
-      <span class="select-none pl-1 font-mono text-zinc-500" aria-hidden="true">&gt;</span>
+      <div class="flex shrink-0 rounded-lg border border-zinc-800 p-0.5" role="group" aria-label="Qué mandar">
+        <button type="button" data-send-mode="command" class="rounded-md px-2.5 py-1.5 text-sm font-medium text-zinc-400" aria-pressed="true" title="Una orden para el servidor, como time set day">Comando</button>
+        <button type="button" data-send-mode="chat" class="rounded-md px-2.5 py-1.5 text-sm font-medium text-zinc-400" aria-pressed="false" title="Un mensaje que leen todos en el chat del juego">Chat</button>
+      </div>
+      <label class="sr-only" for="command-input">Comando o mensaje</label>
+      <span id="command-prompt" class="select-none pl-1 font-mono text-zinc-500" aria-hidden="true">&gt;</span>
       <input id="command-input" type="text" class="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-4 font-mono text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400" placeholder="Por ejemplo: time set day" autocomplete="off" spellcheck="false" aria-describedby="command-help">
       <button class="v2-button btn-primary shrink-0" type="submit">Enviar</button>
     </form>
@@ -68,7 +85,8 @@
 
   <div id="command-help" class="mt-4 space-y-1 text-sm leading-relaxed text-zinc-500">
     <p>Escribí un comando como si estuvieras en el chat, sin la barra. Con las flechas <kbd class="rounded border border-zinc-700 px-1 font-mono text-zinc-300">↑</kbd> <kbd class="rounded border border-zinc-700 px-1 font-mono text-zinc-300">↓</kbd> volvés a los que ya usaste.</p>
-    <p>Un clic en un atajo lo escribe por vos; doble clic lo manda directo.</p>
+    <p>Un clic en un atajo lo escribe por vos; doble clic lo manda directo. Los comandos que no se pueden deshacer te preguntan antes.</p>
+    <p>Tocá el nombre de un jugador para escribirle, ver por qué se desconectó o echarlo. Los errores largos vienen plegados: «Ver más» muestra el detalle.</p>
   </div>
 </div>
 {% endblock %}
