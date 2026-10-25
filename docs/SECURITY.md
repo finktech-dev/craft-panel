@@ -29,7 +29,7 @@ The panel has a single administrator. There are no user roles.
 **Local by default**
 
 - It listens on `127.0.0.1:8080` only. Nothing is reachable from other devices unless you deliberately publish it.
-- **Opening it to a VPN** ("Ajustes" → "Acceso por Internet" → "Por una VPN", off by default) only adds the addresses of the mesh VPNs found when the panel starts (Tailscale, ZeroTier, Radmin VPN, Hamachi, NetBird, WireGuard). It never listens on `0.0.0.0`, so Wi-Fi and the home network still cannot reach it, and every request that is not from this PC must come from one of those VPN networks. Only a browser on this PC can turn it on or off. The login, its rate limit and 2FA work the same; the first-run password is still shown only on this PC, and "Abrir" in Notepad stays local. Turn on 2FA before opening it: anyone on your VPN can see the login page.
+- **Opening it to a VPN** ("Ajustes" → "Acceso por Internet" → "Por una VPN", off by default) only adds the addresses of the mesh VPNs found when the panel starts (Tailscale, ZeroTier, Radmin VPN, Hamachi, NetBird, WireGuard). It never listens on `0.0.0.0`, so Wi-Fi and the home network still cannot reach it, and every request that is not from this PC must come from one of those VPN networks. Only a browser on this PC can turn it on or off, and the change applies after restarting the panel. It is not offered when the panel is published through a tunnel or proxy. The login, its rate limit and 2FA work the same; the first-run password is still shown only on this PC, and "Abrir" in Notepad stays local. Turn on 2FA before opening it: anyone on your VPN can see the login page.
 
 **Passwords and sessions**
 
@@ -80,7 +80,7 @@ The panel has a single administrator. There are no user roles.
 - They are written atomically, with owner-only permissions where the operating system supports it.
 - They are never returned by the API, except the Discord webhook, which only the logged-in administrator can see in its own settings page.
 - **RCON.** The server runs detached from the panel, so a restarted panel can take it back and still send commands. For that, before a start the panel turns RCON on in `server.properties` when it is off, with a random 32-character password (an RCON setup you already have is kept). The password is never shown: the properties editor hides it and refuses to change it. RCON listens on port `25575` on every network card of this PC, like the game port; Playit never forwards it. Don't forward `25575` on your router.
-- API answers shown in the browser never include folders of this PC, the Windows user name or the machine name. Java is described by version, vendor and place ("Java 21 de Adoptium, en tu computadora", meaning "Java 21 from Adoptium, on your computer") and the start script by its file name.
+- API answers shown in the browser never include folders of this PC, the Windows user name or the machine name. Java is described by version, vendor and place ("Java 21 de Adoptium, en tu computadora", meaning "Java 21 from Adoptium, on your computer") and the start script by its file name. The console's **"Descargar registro"** (Download log) hides players' addresses and the Windows user name too.
 
 **The official Playit app for Windows**
 
@@ -99,7 +99,7 @@ When the official Playit installer is used, its `playitd` Windows service holds 
 You usually don't need to: friends join the **Minecraft server** through Playit, not the panel. Publish the panel only if you need to manage the server while away from home.
 
 1. **Use HTTPS, never a plain port forward.** Don't forward port `8080` on your router. Use a tunnel or a reverse proxy that adds HTTPS instead:
-   - **Easiest:** create a Cloudflare Quick Tunnel. Use the panel's HTTPS link option if your version shows it; otherwise run `iniciar_tunel_panel.bat`, which needs `cloudflared` in `tools\` or installed on the system. You get a temporary `https://…trycloudflare.com` link that changes every time you restart it. Stop it when you are done.
+   - **Easiest:** create a Cloudflare Quick Tunnel with `iniciar_tunel_panel.bat`, which needs `cloudflared` in `tools\` or installed on the system. You get a temporary `https://…trycloudflare.com` link that changes every time you restart it. Stop it when you are done.
    - **Your own domain:** put a reverse proxy (Caddy, nginx, a Cloudflare named tunnel…) in front of `http://127.0.0.1:8080`. Add your domain to `web_panel/.env`:
 
      ```
@@ -128,7 +128,7 @@ Everything under `/api` and `/ws` requires an administrator session, except thes
 | `GET /` | Login page (the dashboard once logged in) | Nothing. The first-run password appears only on the same PC. |
 | `GET /health` | Liveness probe used by the launcher | `ok` and the server state (running/stopped) |
 | `GET /api/public/status` | Status for a public page | Online/offline, state and the public **game** address |
-| `GET /api/server/banner.png` | Status banner image | Online/offline, RAM in use and the public game address |
+| `GET /api/server/banner.png` | Status banner image | Online/offline, the server name, its software and version, RAM in use and its limit, and the public game address |
 | `POST /api/auth/login` | Sign in | Nothing (rate-limited) |
 | `POST /api/auth/logout` | Sign out | Nothing |
 | `GET /api/auth/2fa/status` | Login form shows the 2FA field | Whether 2FA is enabled |

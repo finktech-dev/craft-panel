@@ -74,6 +74,8 @@ restart_on_crash = true
 max_crash_restarts = 3
 daily_restart = 05:30
 restart_warning = 2m
+idle_shutdown = 30m
+idle_min_players = 1
 
 backup_interval = 6h
 backup_keep = 6
@@ -105,5 +107,7 @@ config/my-tuned-mod.toml
 ```
 
 ## How the panel recognises a server opened outside it
+
+A server the panel itself started and left running (with `stop_with_panel = false`, or because the panel closed unexpectedly) is not "outside": when the panel opens it finds that very process (same PID and start time) and takes it back, with its console, commands and players.
 
 Before starting, the panel looks at Java processes and at whatever listens on `server-port`, and collects evidence: it has the active world's `session.lock` open, it was opened from the server folder, its command line mentions the server folder or one of your `[detect]` words, it looks like a Minecraft launch (`@user_jvm_args.txt`, Forge/NeoForge libraries, Fabric's launcher, `nogui`), or it was started by the panel last time. The dashboard lists those reasons in plain words. Only a Java process with confident evidence (world lock, folder, command line, `[detect]` word or previous panel session) can be closed from the panel; anything holding the world or the port still blocks starting a second copy.

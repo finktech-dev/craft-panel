@@ -36,10 +36,12 @@ On the **"Mods"** page, under **"Tus mods"** (Your mods), installed mods can be:
 
 - Enabled or disabled with the switch on each row.
 - Enabled, disabled, or deleted in bulk by selecting multiple rows and clicking **"Encender"** (Turn on), **"Apagar"** (Turn off) or **"Quitar"** (Remove).
-- Checked for Modrinth updates with **"Ver si hay actualizaciones"** (Check for updates).
-- Deleted permanently from `server/mods/`.
+- Checked for Modrinth updates with **"Ver si hay actualizaciones"** (Check for updates). When newer versions exist, the **"Actualizaciones"** (Updates) tab lists them with **"Actualizar"** (Update) per mod and **"Actualizar todos"** (Update all). A newer version is not always better for an existing world, so read the changes first.
+- Removed with **"Quitar"** (Remove).
 
-Most mod changes require a server restart. The safest flow is: stop server, change mods, start server, then watch the console for loader errors.
+Before every change the panel saves the state of the mods folder, keeping a copy of each jar in `web_panel/.mod_history`. The **"Historial"** (History) tab can put things back as they were with **"Volver a este punto"** (Go back to this point), including removed or updated mods.
+
+The panel only changes mods while the server is stopped: stop it, change mods, start it again, then watch the console for loader errors.
 
 ## Give friends the client modpack
 
@@ -50,7 +52,7 @@ Many modded servers also require players to install matching client-side mods.
 3. Download the generated ZIP with **"Descargar paquete"** (Download pack).
 4. Send it to players so they can copy its `mods/` and included client configuration into their Minecraft instance.
 
-The exporter excludes common server-only tools such as Spark, LuckPerms, WorldEdit, Chunky, BlueMap, and similar admin/server utilities. If a special mod is incorrectly included or excluded, adjust the modpack manually before sharing it.
+The exporter excludes common server-only tools such as Spark, LuckPerms, WorldEdit, Chunky, BlueMap, and similar admin/server utilities. The **"Solo del servidor"** (Server only) filter shows which mods are left out. To mark more of them, list them under [`[server_only_mods]`](SERVER_FILE.md) in `craftpanel.txt`. If a special mod is still wrongly included or excluded, adjust the pack by hand before sharing it.
 
 ## Bring an existing modpack
 

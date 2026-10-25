@@ -14,7 +14,9 @@ Craft Panel runs on **Windows 10 and Windows 11**. The first start needs an Inte
 2. Right-click the downloaded ZIP and choose **Extract All…**. Extract it to a simple folder that OneDrive does not sync, for example `C:\CraftPanel`. Avoid Desktop and Documents when OneDrive backs them up.
 3. Open the extracted folder and double-click **`iniciar_panel.bat`**. If Windows shows a warning about files from the Internet, click **More info** → **Run anyway** (or **Run**).
 
-The first start takes a few minutes: the window finds Python (or installs it for you) and prepares the panel. When it is ready, the panel opens in your browser. Keep that black window open while you use the panel. Save the password shown on the first screen.
+The first start takes a few minutes: the window finds Python (or installs it for you) and prepares the panel. When it is ready, the panel opens in your browser. Keep that black window open while you use the panel: closing it, pressing Ctrl+C in it or signing out of Windows also stops the server, saving the world first (to keep the server running instead, turn off `stop_with_panel`, see [the settings file](docs/SERVER_FILE.md)). Save the password shown on the first screen.
+
+For a tour of every screen, read the [panel guide](docs/PANEL_GUIDE.md).
 
 If you know Git, you can use `git clone` instead of the ZIP and then double-click `iniciar_panel.bat` in the cloned folder.
 
@@ -51,8 +53,11 @@ This project is not affiliated with, endorsed by, or associated with Mojang Stud
 ## What the panel controls
 
 - Minecraft server lifecycle: start, graceful restart, normal stop, and emergency stop.
-- Launch RAM: stored locally in `web_panel/.launch_settings.json`, ignored by Git, and used on the next server start.
-- Backups, mods, worlds, player access, console activity, and Playit.gg connection status.
+- Launch RAM: written to the server's `user_jvm_args.txt` right away; when `server/craftpanel.txt` exists, its `memory` value is the one that counts and is kept in step.
+- Backups, mods, worlds, player access, and Playit.gg connection status.
+- A console with real error levels, folded Java errors, search, clickable player names, a chat mode and a log download that hides players' addresses.
+- Mod updates from Modrinth and a history that can undo any mod change.
+- A menu you can arrange: choose which pages stay in the bar.
 - Mod installation from the panel: upload compatible `.jar` files, search Modrinth, install required Modrinth dependencies, enable or disable mods, and export a client modpack ZIP for friends.
 - Optional integrations: LuckPerms and Discord. Their per-server settings are local and ignored by Git.
 
@@ -129,7 +134,7 @@ In these docs, text you see on screen is kept in Spanish, exactly as the panel s
 
 Issues and pull requests are welcome, especially improvements that make first-run hosting clearer and safer for non-technical players. Please read the [contribution guide](docs/CONTRIBUTING.md) before opening a PR. Never include secrets, worlds, backups, logs, player data, or downloaded JARs in a contribution.
 
-For local verification, install development dependencies with `python -m pip install -r requirements-dev.txt` and run `python -m pytest web_panel/tests`.
+For local verification, install development dependencies with `python -m pip install -r requirements-dev.txt` and run `python -m pytest web_panel/tests`. The [contribution guide](docs/CONTRIBUTING.md) lists the JavaScript tests and the stylesheet build that CI also checks.
 
 ## Credits
 

@@ -5,8 +5,8 @@ echo   Iniciando Tunel Seguro Cloudflare (Quick Tunnel)
 echo   Puerto local: http://localhost:8080
 echo ========================================================
 echo.
-echo Preferido: crea el enlace desde Dashboard ^> Enlace HTTPS del panel.
-echo Este script es una alternativa manual. No uses ambos a la vez.
+echo Crea un enlace HTTPS temporal para entrar al panel desde afuera de tu casa.
+echo Cerra esta ventana cuando termines: el enlace deja de funcionar.
 set "CF_BIN=%~dp0tools\cloudflared.exe"
 if not exist "%CF_BIN%" (
   where cloudflared >nul 2>nul
@@ -14,8 +14,7 @@ if not exist "%CF_BIN%" (
     set "CF_BIN=cloudflared"
   ) else (
     echo [AVISO] No se encontro cloudflared.exe en tools\ ni en el sistema.
-    echo Puedes generar el enlace directamente desde el panel: Dashboard ^> Enlace HTTPS.
-    echo O descarga cloudflared desde https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+        echo O descarga cloudflared desde https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
     echo y colocalo en la carpeta tools\
     echo.
     pause

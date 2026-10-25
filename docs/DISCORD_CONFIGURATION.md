@@ -2,15 +2,15 @@
 
 The panel does not include a specific server's world names, player names, or webhooks. **"Ajustes" › "Avisos en Discord"** (Settings › Discord alerts) stores local preferences in `web_panel/.discord_config.json`, which is ignored by Git. You can also use the `MINECRAFT_DISCORD_*` variables in [`web_panel/.env.example`](../web_panel/.env.example) as initial values for an installation.
 
-Screen preferences take precedence over environment variables. If a presentation field is empty, the panel uses its matching variable. This lets you publish the code without copying host data or secrets.
+Screen preferences take precedence over environment variables, and `server_name` in [`craftpanel.txt`](SERVER_FILE.md) takes precedence over both. If a presentation field is empty, the panel uses its matching variable. This lets you publish the code without copying host data or secrets.
 
 | Preference | Variable | Use |
 | --- | --- | --- |
 | Server name | `MINECRAFT_DISCORD_SERVER_NAME` | Alert footer. |
-| Software/version | `MINECRAFT_DISCORD_SERVER_SOFTWARE_LABEL` | Status and startup alerts. |
+| Software/version | `MINECRAFT_DISCORD_SERVER_SOFTWARE_LABEL` | Status and startup alerts. Empty: detected from the installed server. |
 | World | `MINECRAFT_DISCORD_WORLD_NAME` | Startup and ready alerts. |
 | Test player | `MINECRAFT_DISCORD_TEST_PLAYER_NAME` | Feed test only. |
-| Avatar template | `MINECRAFT_DISCORD_PLAYER_AVATAR_URL_TEMPLATE` | Must contain `{player_name}`; empty disables avatars. |
+| Avatar template | `MINECRAFT_DISCORD_PLAYER_AVATAR_URL_TEMPLATE` | Must contain `{player_name}`. Empty uses `https://mc-heads.net/avatar/{player_name}/100.png`; avatars are off only when the variable is set to an empty value too. |
 
 Never paste a webhook into documentation, issues, or commits. Testing a webhook from the UI sends a message; automated tests do not make network calls.
 
