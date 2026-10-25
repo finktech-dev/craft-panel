@@ -29,6 +29,7 @@ The panel has a single administrator. There are no user roles.
 **Local by default**
 
 - It listens on `127.0.0.1:8080` only. Nothing is reachable from other devices unless you deliberately publish it.
+- **Opening it to a VPN** ("Ajustes" → "Acceso por Internet" → "Por una VPN", off by default) only adds the addresses of the mesh VPNs found when the panel starts (Tailscale, ZeroTier, Radmin VPN, Hamachi, NetBird, WireGuard). It never listens on `0.0.0.0`, so Wi-Fi and the home network still cannot reach it, and every request that is not from this PC must come from one of those VPN networks. Only a browser on this PC can turn it on or off. The login, its rate limit and 2FA work the same; the first-run password is still shown only on this PC, and "Abrir" in Notepad stays local. Turn on 2FA before opening it: anyone on your VPN can see the login page.
 
 **Passwords and sessions**
 

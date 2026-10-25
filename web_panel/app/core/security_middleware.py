@@ -11,6 +11,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import settings
+from app.services.vpn_service import panel_vpn_access
 from app.core.security import (
     has_valid_csrf_token,
     is_allowed_host,
@@ -68,6 +69,13 @@ class RequestGuardMiddleware:
             return
 
         headers = Headers(scope=scope)
+        client = scope.get("client")
+        if not panel_vpn_access.peer_is_allowed(client[0] if client else None):
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 1008})
+            else:
+                await _send_json(send, 403, "Solo se puede entrar desde esta computadora o desde tu VPN.")
+            return
         if not is_allowed_host(headers.get("host")):
             if scope["type"] == "websocket":
                 await send({"type": "websocket.close", "code": 1008})

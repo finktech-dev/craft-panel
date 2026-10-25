@@ -78,6 +78,10 @@
     text('#connection-address', connection?.public_address || 'Todavía no hay dirección');
     text('#connection-message', connection?.message || 'No encontramos una dirección para compartir.');
     text('#connection-next-step', connection?.next_step || '');
+    // Friends on the owner's VPN can also use its address, even when Playit gives the main one.
+    const otherVpns = (connection?.vpn_addresses || []).filter((item) => item.address !== connection?.public_address);
+    text('#connection-vpn', otherVpns.map((item) => `También por ${item.name}: ${item.address}`).join(' · '));
+    $('#connection-vpn')?.classList.toggle('hidden', otherVpns.length === 0);
     const button = $('#copy-connection');
     if (button) button.disabled = !connection?.can_share_with_friends;
     // No address yet: offer to read it from the official Playit app, or to paste it.
