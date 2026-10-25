@@ -148,6 +148,34 @@ document.addEventListener('DOMContentLoaded', () => {
     countChat.textContent = chatCount;
   };
 
+  // Lines that arrived while the reader was scrolled up or paused.
+  const NEAR_BOTTOM_PX = 40;
+  let unseenLines = 0;
+
+  const isNearBottom = () => output.scrollHeight - output.scrollTop - output.clientHeight <= NEAR_BOTTOM_PX;
+
+  const isSelectingText = () => {
+    const selection = window.getSelection?.();
+    return Boolean(selection && !selection.isCollapsed && output.contains(selection.anchorNode));
+  };
+
+  const shouldFollow = () => !paused && isNearBottom() && !isSelectingText();
+
+  const showNewLinesButton = () => {
+    scrollToBottomBtn.textContent = unseenLines === 1 ? '1 línea nueva ↓' : unseenLines > 1 ? `${unseenLines} líneas nuevas ↓` : 'Ver lo más nuevo';
+    scrollToBottomBtn.classList.remove('hidden');
+  };
+
+  const hideNewLinesButton = () => {
+    unseenLines = 0;
+    scrollToBottomBtn.classList.add('hidden');
+  };
+
+  const jumpToBottom = () => {
+    output.scrollTop = output.scrollHeight;
+    hideNewLinesButton();
+  };
+
   const appendLine = (rawLine) => {
     const item = parseLogLine(rawLine);
     if (item.isError || item.isWarn) errorCount++;
@@ -162,6 +190,8 @@ document.addEventListener('DOMContentLoaded', () => {
       row.style.display = 'none';
     }
 
+    // Decide before adding the row: only follow new lines when the reader was already at the bottom.
+    const follow = shouldFollow();
     item.element = row;
     linesData.push(item);
     output.append(row);
@@ -171,16 +201,21 @@ document.addEventListener('DOMContentLoaded', () => {
       if (removed.isError || removed.isWarn) errorCount = Math.max(0, errorCount - 1);
       if (removed.isChat) chatCount = Math.max(0, chatCount - 1);
       if (removed.element && removed.element.parentNode) {
+        // Dropping a row at the top shifts everything up; compensate so the text being read stays put.
+        const before = output.scrollHeight;
         removed.element.remove();
+        if (!follow) output.scrollTop -= before - output.scrollHeight;
       }
     }
 
     updateCounters();
 
-    if (!paused && visible) {
+    if (!visible) return;
+    if (follow) {
       output.scrollTop = output.scrollHeight;
-    } else if (paused && visible) {
-      scrollToBottomBtn.classList.remove('hidden');
+    } else {
+      unseenLines++;
+      showNewLinesButton();
     }
   };
 
@@ -193,24 +228,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (!paused) {
-      output.scrollTop = output.scrollHeight;
+      jumpToBottom();
     }
   };
 
-  // Scroll detection
+  // Reaching the bottom by hand counts as having seen the new lines.
   output.addEventListener('scroll', () => {
-    const distanceFromBottom = output.scrollHeight - output.scrollTop - output.clientHeight;
-    if (distanceFromBottom > 80) {
-      scrollToBottomBtn.classList.remove('hidden');
+    if (isNearBottom()) {
+      hideNewLinesButton();
     } else {
-      scrollToBottomBtn.classList.add('hidden');
+      showNewLinesButton();
     }
   });
 
-  scrollToBottomBtn.addEventListener('click', () => {
-    output.scrollTop = output.scrollHeight;
-    scrollToBottomBtn.classList.add('hidden');
-  });
+  scrollToBottomBtn.addEventListener('click', jumpToBottom);
 
   // Filter Tabs
   filterTabs.forEach((tab) => {
@@ -249,8 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scrollToggle.classList.toggle('border-[#e8b04b]/50', paused);
     scrollToggle.classList.toggle('text-[#e8b04b]', paused);
     if (!paused) {
-      output.scrollTop = output.scrollHeight;
-      scrollToBottomBtn.classList.add('hidden');
+      jumpToBottom();
     }
   });
 
@@ -261,6 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
     errorCount = 0;
     chatCount = 0;
     updateCounters();
+    hideNewLinesButton();
     Panel.toast('Pantalla limpia. El servidor sigue igual.', 'success');
   });
 
