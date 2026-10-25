@@ -225,6 +225,8 @@
           {{ file_field('max_crash_restarts', 'Cuántas veces intentar', 'Si se cae esta cantidad de veces en 10 minutos, deja de intentar y te avisa.', '3', mono=true, inputmode='numeric') }}
           {{ file_field('daily_restart', 'Reiniciar todos los días a esta hora', 'En formato de 24 horas, por ejemplo 05:30. Vacío = no reiniciar solo.', '05:30', mono=true) }}
           {{ file_field('restart_warning', 'Cuánto antes avisar en el chat', 'Antes de un reinicio diario. Por ejemplo 60s o 5m.', '60s', mono=true) }}
+          {{ file_field('idle_shutdown', 'Apagarlo si hay pocos jugadores', 'Si durante este tiempo hay menos jugadores que los de abajo, se apaga solo y guarda el mundo. Como mínimo 5m, por ejemplo 30m. Vacío = no apagarlo solo.', '30m', mono=true) }}
+          {{ file_field('idle_min_players', 'Cuántos jugadores tiene que haber', 'Con menos que esto empieza a contar el tiempo de arriba. 1 = se apaga solo cuando no hay nadie.', '1', mono=true, inputmode='numeric') }}
         </div>
         <button id="server-file-save" type="submit" class="v2-button btn-primary mt-6" data-server-file-save>Guardar</button>
         </div>

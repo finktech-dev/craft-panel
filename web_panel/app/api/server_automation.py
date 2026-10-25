@@ -1,4 +1,4 @@
-"""Automations driven by craftpanel.txt: start with the panel, restart after a crash, daily restart.
+"""Automations driven by craftpanel.txt: start with the panel, restart after a crash, daily restart, idle shutdown.
 
 They live next to the endpoints because they reuse the same jobs and checks
 as the buttons (external server, Playit, a broken settings file), so an
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from fastapi import HTTPException
 
@@ -16,7 +17,7 @@ from app.core.config import settings
 from app.services.crash_guard import crash_guard
 from app.services.external_server_service import external_server_detector
 from app.services.scheduler_service import scheduler_service
-from app.services.server_process import server_manager
+from app.services.server_process import ServerProcessError, ServerState, server_manager
 from app.services.server_settings_file import read_server_settings
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,70 @@ async def daily_restart() -> None:
         await server_manager.log_system(f"No se pudo hacer el reinicio diario: {error.detail}")
 
 
+class IdleShutdown:
+    """``idle_shutdown``: stop the server after too few players for that long.
+
+    The countdown only runs while the world is loaded and nothing else is in
+    progress; reaching ``idle_min_players`` again resets it. Players still
+    online get a chat warning one minute before the stop.
+    """
+
+    WARNING_SECONDS = 60
+
+    def __init__(self) -> None:
+        self.below_since: float | None = None
+        self.warned = False
+
+    def reset(self) -> None:
+        self.below_since = None
+        self.warned = False
+
+    async def check(self, now: float | None = None) -> None:
+        file_settings = read_server_settings(settings)
+        limit = file_settings.value("idle_shutdown")
+        if (
+            limit is None
+            or not server_manager.is_running
+            or server_manager.state != ServerState.RUNNING
+            or server_manager.lifecycle_operation
+        ):
+            self.reset()
+            return
+        minimum = int(file_settings.effective("idle_min_players"))
+        players = len(server_manager.get_online_players())
+        if players >= minimum:
+            self.reset()
+            return
+        now = time.monotonic() if now is None else now
+        if self.below_since is None:
+            self.below_since = now
+            return
+        remaining = limit - (now - self.below_since)
+        if remaining <= 0:
+            self.reset()
+            await self._stop(limit, minimum)
+        elif remaining <= self.WARNING_SECONDS and not self.warned and players:
+            self.warned = True
+            await server_manager.send_command(
+                "/say §e[Servidor] Hay pocos jugadores: el servidor se apaga en 1 minuto."
+            )
+
+    async def _stop(self, limit: int, minimum: int) -> None:
+        who = "nadie conectado" if minimum == 1 else f"menos de {minimum} jugadores"
+        minutes = round(limit / 60)
+        duration = "1 minuto" if minutes == 1 else f"{minutes} minutos"
+        await server_manager.log_system(f"Se apaga solo: hubo {who} durante {duration}.")
+        try:
+            await server_manager.stop()
+        except ServerProcessError as error:
+            logger.info("Idle shutdown skipped: %s", error)
+
+
+idle_shutdown = IdleShutdown()
+
+
 def install() -> None:
     """Connect the automations; called once when the panel starts."""
     server_manager.add_crash_listener(restart_after_crash)
     scheduler_service.set_daily_restart_action(daily_restart)
+    scheduler_service.set_idle_check_action(idle_shutdown.check)

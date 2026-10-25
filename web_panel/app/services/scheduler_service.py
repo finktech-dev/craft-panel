@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 BACKUP_JOB_ID = "panel-backup"
 DAILY_RESTART_JOB_ID = "daily-restart"
 SETTINGS_SYNC_JOB_ID = "settings-file-sync"
+IDLE_CHECK_JOB_ID = "idle-shutdown-check"
+IDLE_CHECK_SECONDS = 30
 
 
 def _local_timezone():
@@ -44,6 +46,7 @@ class SchedulerService:
         self._settings = configured_settings
         self.scheduler = AsyncIOScheduler(timezone=_local_timezone())
         self._daily_restart_action: Callable[[], Awaitable[None]] | None = None
+        self._idle_check_action: Callable[[], Awaitable[None]] | None = None
         self._applied: tuple[object, ...] | None = None
 
     @property
@@ -72,6 +75,15 @@ class SchedulerService:
             replace_existing=True,
             name="Leer craftpanel.txt",
         )
+        if self._idle_check_action is not None:
+            self.scheduler.add_job(
+                self._idle_check_action,
+                "interval",
+                seconds=IDLE_CHECK_SECONDS,
+                id=IDLE_CHECK_JOB_ID,
+                replace_existing=True,
+                name="Apagar si hay pocos jugadores",
+            )
 
     def shutdown(self) -> None:
         if self.scheduler.running:
@@ -81,6 +93,10 @@ class SchedulerService:
         """The API layer provides the graceful-restart job; the scheduler only decides when."""
         self._daily_restart_action = action
         self._applied = None
+
+    def set_idle_check_action(self, action: Callable[[], Awaitable[None]]) -> None:
+        """Checked every ``IDLE_CHECK_SECONDS``; the action itself reads ``idle_shutdown``."""
+        self._idle_check_action = action
 
     def backup_interval_seconds(self) -> int:
         from_file = read_server_settings(self._settings).value("backup_interval")
