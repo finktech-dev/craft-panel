@@ -20,6 +20,8 @@ from app.core.security import (
 )
 from app.schemas.auth import TOTPCurrentCodeRequest, TOTPSetupResponse, TOTPVerifyRequest, TwoFactorStatus
 from app.schemas.server import LoginRequest, LoginResponse
+from app.services.server_history import needs_setup
+from app.services.server_process import server_manager
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -68,7 +70,12 @@ async def login(payload: LoginRequest, request: Request) -> LoginResponse:
     except OSError:
         pass  # only the "unclaimed" marker could not be cleared; the hash is unchanged
     mark_session_as_admin(request)
-    return LoginResponse(success=True, message="Sesión de administrador iniciada.")
+    setup = await run_in_threadpool(needs_setup, settings, server_manager.is_running)
+    return LoginResponse(
+        success=True,
+        message="Sesión de administrador iniciada.",
+        next_url="/onboarding" if setup else "/",
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

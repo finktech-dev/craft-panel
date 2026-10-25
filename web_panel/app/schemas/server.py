@@ -38,3 +38,5 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     success: bool
     message: str
+    # The wizard while the server was never played, else the home screen.
+    next_url: str = "/"

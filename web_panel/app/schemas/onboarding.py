@@ -40,6 +40,14 @@ class OnboardingStatus(BaseModel):
     public_address: str | None
     first_step: Literal["java", "server", "connection", "ready"]
     recommended_versions: dict[ServerFlavor, list[str]]
+    # Running through the panel, or opened outside it: the wizard then only offers to review access.
+    server_running: bool = False
+    external_server: bool = False
+    # new: nothing to start yet; installed: never played; played: a world already exists.
+    history_phase: Literal["new", "installed", "played"] = "new"
+    world_name: str | None = None
+    last_played_at: datetime | None = None
+    known_players: int = 0
 
 
 class AvailableVersion(BaseModel):
