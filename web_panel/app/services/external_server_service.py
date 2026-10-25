@@ -222,17 +222,44 @@ class ExternalServerDetector:
         return name if is_safe_component(name) else "world"
 
     def remember_panel_process(self, pid: int) -> None:
-        """Persist the launcher PID so a restarted panel can recognise its own orphan."""
+        """Persist the launcher PID so a restarted panel can take its server back.
+
+        The start time tells it apart from an unrelated process that later got the same PID.
+        """
+        try:
+            created = psutil.Process(pid).create_time()
+        except _PROCESS_ERRORS:
+            created = None
         temporary = self.pid_file.with_name(f".{self.pid_file.name}.{uuid.uuid4().hex}.tmp")
         try:
             self.pid_file.parent.mkdir(parents=True, exist_ok=True)
-            temporary.write_text(json.dumps({"pid": pid}) + "\n", encoding="utf-8")
+            temporary.write_text(json.dumps({"pid": pid, "created": created}) + "\n", encoding="utf-8")
             os.replace(temporary, self.pid_file)
         except OSError as error:
             logger.warning("Could not persist the server PID: %s", error)
         finally:
             if temporary.exists():
                 temporary.unlink()
+
+    def remembered_process(self) -> psutil.Process | None:
+        """The server an earlier panel session started, if that very process is still alive."""
+        try:
+            data = json.loads(self.pid_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        pid = data.get("pid") if isinstance(data, dict) else None
+        created = data.get("created") if isinstance(data, dict) else None
+        if not isinstance(pid, int) or not isinstance(created, (int, float)):
+            return None
+        try:
+            process = psutil.Process(pid)
+            if abs(process.create_time() - created) > 1 or not process.is_running():
+                return None
+            if process.status() == psutil.STATUS_ZOMBIE:
+                return None
+        except _PROCESS_ERRORS:
+            return None
+        return process
 
     def forget_panel_process(self) -> None:
         try:

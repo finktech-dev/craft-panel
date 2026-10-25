@@ -79,6 +79,7 @@ The panel has a single administrator. There are no user roles.
 - The password hash, session key, 2FA secret, Playit key and Discord config are stored in `web_panel/` and are ignored by Git.
 - They are written atomically, with owner-only permissions where the operating system supports it.
 - They are never returned by the API, except the Discord webhook, which only the logged-in administrator can see in its own settings page.
+- **RCON.** The server runs detached from the panel, so a restarted panel can take it back and still send commands. For that, before a start the panel turns RCON on in `server.properties` when it is off, with a random 32-character password (an RCON setup you already have is kept). The password is never shown: the properties editor hides it and refuses to change it. RCON listens on port `25575` on every network card of this PC, like the game port; Playit never forwards it. Don't forward `25575` on your router.
 - API answers shown in the browser never include folders of this PC, the Windows user name or the machine name. Java is described by version, vendor and place ("Java 21 de Adoptium, en tu computadora", meaning "Java 21 from Adoptium, on your computer") and the start script by its file name.
 
 **The official Playit app for Windows**
@@ -113,7 +114,7 @@ You usually don't need to: friends join the **Minecraft server** through Playit,
 5. **Protect the Minecraft server itself:**
    - Keep `online-mode=true` so players must own a real Minecraft account.
    - Turn on the whitelist (`white-list=true`) and add only your friends.
-   - Don't enable RCON or `enable-query` unless you know you need them.
+   - Don't enable `enable-query` unless you know you need it, and never forward the RCON port (`25575`).
    - Remember that anyone you make **op** can run commands in the game.
 6. **Close it when you don't need it.** Stop the tunnel, and log out on shared computers.
 7. **Keep things updated.** Pull new versions of the panel; the launcher upgrades the Python dependencies. Keep Java and your mods up to date too.

@@ -83,8 +83,39 @@ def _vpn_sockets() -> list[socket.socket] | None:
     return sockets
 
 
+_console_handler = None
+
+
+def _stop_server_when_window_closes() -> None:
+    """Closing this window (or signing out) ends the panel at once, with no clean shutdown.
+
+    The server runs detached, so it would not notice: ask it to save and stop first.
+    Ctrl+C is not handled here; Uvicorn turns it into a clean shutdown.
+    """
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    from app.services.server_process import server_manager
+
+    closing_events = {2, 5, 6}  # CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT
+
+    def on_console_event(event: int) -> int:
+        if event in closing_events:
+            try:
+                server_manager.stop_for_closing_window()
+            except Exception:  # noqa: BLE001 - never block Windows' close
+                logger.exception("Could not ask the server to stop")
+        return 0  # let Windows go on closing the panel
+
+    global _console_handler
+    _console_handler = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_uint)(on_console_event)
+    ctypes.windll.kernel32.SetConsoleCtrlHandler(_console_handler, True)
+
+
 def main() -> None:
     _configure_windows_event_loop()
+    _stop_server_when_window_closes()
 
     threading.Thread(target=_open_browser_when_ready, daemon=True, name="open-panel-browser").start()
     sockets = _vpn_sockets()

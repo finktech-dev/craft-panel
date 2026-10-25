@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Coroutine
 from dataclasses import asdict, dataclass
@@ -17,11 +18,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final
 
+import psutil
+
 from app.core.config import Settings, settings
 from app.core.privacy import redact_personal_paths
+from app.services import rcon
 from app.services.crash_analyzer import crash_analyzer
 from app.services.discord_service import discord_service
-from app.services.external_server_service import ExternalServerDetector
+from app.services.external_server_service import ExternalServerDetector, request_graceful_stop
 from app.services.server_settings_file import read_server_settings
 from app.services.progress import ProgressCallback, StepPlan, report
 from app.websocket.manager import ConnectionManager, connection_manager
@@ -51,6 +55,126 @@ _SERVER_READY_RE: Final = re.compile(
     r"Done \([0-9.]+s\)!|Listening on /",
     re.IGNORECASE,
 )
+_STOPPING_RE: Final = re.compile(r"Stopping (?:the )?server", re.IGNORECASE)
+_CRASH_RE: Final = re.compile(r"This crash report has been saved to|Encountered an unexpected exception", re.IGNORECASE)
+_PLAYER_LIST_RE: Final = re.compile(r"There are \d+ of a max(?: of)? \d+ players online:\s*(.*)", re.IGNORECASE)
+
+# Java writes its console to this file instead of a pipe: if the panel freezes or closes,
+# Java never blocks waiting for someone to read its output.
+_CONSOLE_FILENAME: Final = ".server_console.log"
+_CONSOLE_POLL_SECONDS: Final = 0.25
+# How much of the console a restarted panel shows again when it takes a running server back.
+_ADOPT_HISTORY_BYTES: Final = 128 * 1024
+
+
+def _detached_launch_options() -> dict[str, Any]:
+    """Java gets its own hidden console, so closing the panel's window never reaches it."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NO_WINDOW}
+    return {"start_new_session": True}
+
+
+class _ConsoleFile:
+    """The server's console file read as it grows, like a pipe.
+
+    ``read`` waits for new bytes and returns ``b""`` only once the process ended
+    and everything it wrote was read.
+    """
+
+    def __init__(self, path: Path, finished: Callable[[], bool], position: int = 0) -> None:
+        self._path = path
+        self._finished = finished
+        self.position = position
+
+    def _read_now(self, size: int) -> bytes:
+        try:
+            with self._path.open("rb") as handle:
+                handle.seek(self.position)
+                data = handle.read(size)
+        except OSError:
+            return b""
+        self.position += len(data)
+        return data
+
+    async def read(self, size: int) -> bytes:
+        while True:
+            data = await asyncio.to_thread(self._read_now, size)
+            if data:
+                return data
+            if self._finished():
+                # One last look: the process may have written right before ending.
+                return await asyncio.to_thread(self._read_now, size)
+            await asyncio.sleep(_CONSOLE_POLL_SECONDS)
+
+
+def _console_tail(path: Path, max_bytes: int) -> tuple[list[str], int]:
+    """The last complete lines of the console file, and where the next unread line starts."""
+    try:
+        with path.open("rb") as handle:
+            size = handle.seek(0, os.SEEK_END)
+            start = max(0, size - max_bytes)
+            handle.seek(start)
+            data = handle.read()
+    except OSError:
+        return [], 0
+    end = data.rfind(b"\n") + 1
+    complete = data[:end]
+    if start > 0:
+        complete = complete.split(b"\n", 1)[-1] if b"\n" in complete else b""
+    lines = [line.decode("utf-8", errors="replace").rstrip("\r") for line in complete.split(b"\n") if line.strip()]
+    return lines, start + end
+
+
+def _console_says_ready(path: Path) -> bool:
+    """Whether Minecraft already printed its "Done" line in this console file."""
+    tail = ""
+    try:
+        with path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                text = tail + chunk.decode("utf-8", errors="replace")
+                if _SERVER_READY_RE.search(text):
+                    return True
+                tail = text[-200:]
+    except OSError:
+        return False
+    return False
+
+
+class AdoptedProcess:
+    """A server that an earlier panel session started and left running.
+
+    There are no pipes to it, only its PID: commands go through RCON and its
+    console is followed from the file. Its exit code is unknown.
+    """
+
+    stdin = None
+
+    def __init__(self, process: psutil.Process) -> None:
+        self._process = process
+        self.pid = process.pid
+        self._ended = False
+
+    @property
+    def returncode(self) -> int | None:
+        if not self._ended:
+            try:
+                self._ended = not self._process.is_running() or self._process.status() == psutil.STATUS_ZOMBIE
+            except psutil.Error:
+                self._ended = True
+        return 0 if self._ended else None
+
+    async def wait(self) -> None:
+        while self.returncode is None:
+            await asyncio.sleep(1.0)
+
+    def kill(self) -> None:
+        try:
+            family = [*self._process.children(recursive=True), self._process]
+        except psutil.Error:
+            family = [self._process]
+        for member in family:
+            with contextlib.suppress(psutil.Error):
+                member.kill()
 
 
 # Steps announced through ``progress`` callbacks. ``ready`` is reported by the
@@ -187,7 +311,13 @@ class MinecraftServerManager:
         self._settings = configured_settings or settings
         self._websocket_manager = websocket_manager or connection_manager
         self._external_detector = ExternalServerDetector(self._settings)
-        self._process: asyncio.subprocess.Process | None = None
+        self._process: asyncio.subprocess.Process | AdoptedProcess | None = None
+        # Taken back from an earlier panel session: its exit code is unknown, so the log decides.
+        self._adopted = False
+        self._saw_stopping = False
+        self._saw_crash = False
+        # Showing old console lines again after taking a server back: no notifications for them.
+        self._replaying = False
         self._state = ServerState.STOPPED
         self._online_players: dict[str, str] = {}
         self._log_buffer: deque[TerminalLine] = deque(maxlen=self._settings.log_buffer_size)
@@ -222,6 +352,11 @@ class MinecraftServerManager:
     @property
     def is_running(self) -> bool:
         return self._process is not None and self._process.returncode is None
+
+    @property
+    def console_log_path(self) -> Path:
+        assert self._settings.panel_directory is not None
+        return self._settings.panel_directory / _CONSOLE_FILENAME
 
     @property
     def lifecycle_operation(self) -> str | None:
@@ -315,25 +450,36 @@ class MinecraftServerManager:
             self._stop_requested = False
             self._start_requested_time = asyncio.get_running_loop().time()
             self._ready_notified = False
+            self._adopted = False
+            self._saw_stopping = self._saw_crash = False
+            console_path = self.console_log_path
             try:
                 environment = await asyncio.to_thread(server_environment, self._settings)
-                self._process = await asyncio.create_subprocess_exec(
-                    *self._settings.server_start_command,
-                    cwd=str(self._settings.server_directory),
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    env=environment,
-                )
+                await asyncio.to_thread(self._enable_rcon)
+                console = await asyncio.to_thread(console_path.open, "wb")
+                try:
+                    # Detached from the panel: its own hidden console, output to a file. It keeps
+                    # running and never blocks if the panel freezes, closes or restarts.
+                    self._process = await asyncio.create_subprocess_exec(
+                        *self._settings.server_start_command,
+                        cwd=str(self._settings.server_directory),
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=console,
+                        stderr=asyncio.subprocess.STDOUT,
+                        env=environment,
+                        **_detached_launch_options(),
+                    )
+                finally:
+                    console.close()
             except OSError as error:
                 self._state = ServerState.CRASHED
                 await self._record_log("system", f"No se pudo iniciar el servidor: {error}")
                 raise ServerProcessError("No se pudo crear el proceso del servidor.") from error
 
-            assert self._process.stdout is not None
-            assert self._process.stderr is not None
-            self._create_reader_task(self._read_stream(self._process.stdout, "stdout"))
-            self._create_reader_task(self._read_stream(self._process.stderr, "stderr"))
+            process = self._process
+            self._create_reader_task(
+                self._read_stream(_ConsoleFile(console_path, lambda: process.returncode is not None), "stdout")
+            )
             self._watcher_task = asyncio.create_task(
                 self._watch_process(self._process), name="minecraft-process-watcher"
             )
@@ -342,6 +488,133 @@ class MinecraftServerManager:
             if not self._dev_mode:
                 asyncio.create_task(discord_service.send_server_starting(), name="discord-server-starting")
             return True
+
+    def _server_properties_path(self) -> Path:
+        assert self._settings.server_directory is not None
+        return self._settings.server_directory / "server.properties"
+
+    def _enable_rcon(self) -> None:
+        """Turn RCON on when it is off, so a restarted panel can still send commands."""
+        from app.services.protected_paths import ProtectedPathError, require_not_protected  # noqa: PLC0415 - import cycle
+
+        path = self._server_properties_path()
+        updates = rcon.updates_to_enable(rcon.read_properties(path))
+        if updates is None:
+            return
+        try:
+            require_not_protected(path, configured=self._settings)
+            rcon.write_properties(path, updates)
+        except (ProtectedPathError, OSError) as error:
+            logger.info("RCON stays off (%s): a restarted panel could not send commands to this server.", error)
+
+    def _rcon_settings(self) -> rcon.RconSettings | None:
+        try:
+            return rcon.rcon_settings(rcon.read_properties(self._server_properties_path()))
+        except Exception:  # noqa: BLE001 - a broken file only means no RCON
+            return None
+
+    async def _send_rcon(self, command: str) -> str:
+        rcon_settings = await asyncio.to_thread(self._rcon_settings)
+        if rcon_settings is None:
+            raise ServerProcessError(
+                "El panel no puede mandarle comandos a este servidor: RCON está apagado en server.properties. "
+                "Apagalo y volvé a encenderlo desde el panel."
+            )
+        try:
+            answer = await asyncio.to_thread(rcon.run_command, rcon_settings, command)
+        except rcon.RconError as error:
+            raise ServerProcessError(str(error)) from error
+        # RCON answers do not reach the console file; show them like console output.
+        for line in answer.splitlines():
+            if line.strip():
+                await self._record_log("stdout", line)
+        return answer
+
+    async def _refresh_players_from_rcon(self) -> bool:
+        """Ask who is online (``list``); False when RCON does not answer."""
+        rcon_settings = await asyncio.to_thread(self._rcon_settings)
+        if rcon_settings is None:
+            return False
+        try:
+            answer = await asyncio.to_thread(rcon.run_command, rcon_settings, "list")
+        except rcon.RconError:
+            return False
+        match = _PLAYER_LIST_RE.search(answer)
+        names = [name.strip() for name in match.group(1).split(",") if name.strip()] if match else []
+        now = datetime.now(UTC).isoformat()
+        self._online_players = {name: now for name in names}
+        return True
+
+    async def adopt_running_server(self) -> bool:
+        """Take back the server an earlier panel session started and left running.
+
+        Called when the panel starts. The process must be the very one the panel
+        launched (same PID and start time); its console is followed from the file
+        and commands go through RCON.
+        """
+        async with self._lock:
+            if self._process is not None:
+                return False
+            found = await asyncio.to_thread(self._external_detector.remembered_process)
+            if found is None:
+                return False
+            process = AdoptedProcess(found)
+            console_path = self.console_log_path
+            history, position = await asyncio.to_thread(_console_tail, console_path, _ADOPT_HISTORY_BYTES)
+            ready = await asyncio.to_thread(_console_says_ready, console_path)
+            self._process = process
+            self._adopted = True
+            self._stop_requested = False
+            self._saw_stopping = self._saw_crash = False
+            self._dev_mode = False
+            self._online_players.clear()
+            self._replaying = True
+            try:
+                for line in history:
+                    await self._record_log("stdout", line)
+            finally:
+                self._replaying = False
+            # RCON only answers once the world is loaded.
+            ready = await self._refresh_players_from_rcon() or ready
+            self._ready_notified = ready
+            self._state = ServerState.RUNNING if ready else ServerState.STARTING
+            self._create_reader_task(
+                self._read_stream(
+                    _ConsoleFile(console_path, lambda: process.returncode is not None, position), "stdout"
+                )
+            )
+            self._watcher_task = asyncio.create_task(
+                self._watch_process(process), name="minecraft-process-watcher"
+            )
+        await self.log_system("El servidor siguió encendido mientras el panel estaba cerrado. Lo retomamos.")
+        await self._broadcast_status()
+        return True
+
+    def _stop_with_panel(self) -> bool:
+        try:
+            return bool(read_server_settings(self._settings).effective("stop_with_panel"))
+        except Exception:  # noqa: BLE001 - when in doubt, stop it: an invisible server is worse
+            return True
+
+    def stop_for_closing_window(self) -> None:
+        """The panel's window is closing and Windows ends it within seconds.
+
+        Runs on Windows' console thread, so it only sends the stop request and
+        returns: the detached server saves and stops on its own, with no hurry.
+        """
+        process = self._process
+        if process is None or process.returncode is not None or not self._stop_with_panel():
+            return
+        self._stop_requested = True
+        rcon_settings = self._rcon_settings()
+        if rcon_settings is not None:
+            try:
+                rcon.run_command(rcon_settings, "stop", timeout=2.0)
+                return
+            except rcon.RconError:
+                pass
+        # RCON is not up yet (still loading): press Ctrl+C in the server's own console.
+        request_graceful_stop(process.pid)
 
     def _apply_memory(self, memory_gb: int) -> None:
         """craftpanel.txt's memory is the source of truth: write it into user_jvm_args.txt before starting."""
@@ -476,8 +749,12 @@ class MinecraftServerManager:
             process.kill()
         return True
 
-    async def send_command(self, command: str) -> None:
-        """Write a single command to STDIN without using a shell."""
+    async def send_command(self, command: str) -> str | None:
+        """Write a single command to STDIN without using a shell.
+
+        A server taken back from an earlier panel session has no STDIN: the
+        command goes through RCON and its answer is returned (and shown).
+        """
         normalized_command = command.strip()
         if not normalized_command:
             raise ServerProcessError("El comando no puede estar vacío.")
@@ -487,14 +764,17 @@ class MinecraftServerManager:
             raise ServerProcessError("El comando supera el límite de 1000 caracteres.")
 
         process = self._process
-        if process is None or process.returncode is not None or process.stdin is None:
+        if process is None or process.returncode is not None:
             raise ServerProcessError("El servidor no está en ejecución.")
+        if process.stdin is None:
+            return await self._send_rcon(normalized_command)
 
         try:
             process.stdin.write(f"{normalized_command}\n".encode("utf-8"))
             await process.stdin.drain()
         except (BrokenPipeError, ConnectionError) as error:
             raise ServerProcessError("La consola del servidor ya no acepta comandos.") from error
+        return None
 
     async def send_command_and_wait_for_log(
         self,
@@ -528,6 +808,10 @@ class MinecraftServerManager:
         # The panel is going away: never let an in-flight restart start a new process.
         self._restart_cancelled = True
         if not self.is_running:
+            return
+        if not await asyncio.to_thread(self._stop_with_panel):
+            # stop_with_panel = false: the detached server keeps running; the next panel takes it back.
+            logger.info("Leaving the server running (stop_with_panel = false).")
             return
 
         process = self._process
@@ -594,7 +878,7 @@ class MinecraftServerManager:
             # One bad line must never stop draining the pipe.
             logger.exception("Could not process a console line")
 
-    async def _watch_process(self, process: asyncio.subprocess.Process) -> None:
+    async def _watch_process(self, process: asyncio.subprocess.Process | AdoptedProcess) -> None:
         exit_code = await process.wait()
         for task in tuple(self._reader_tasks):
             with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -610,10 +894,14 @@ class MinecraftServerManager:
             self._last_join_notified.clear()
             self._last_leave_notified.clear()
             self._last_death_notified.clear()
-            self._state = ServerState.STOPPED if self._stop_requested else ServerState.CRASHED
+            # A server taken back has no exit code: its log tells a /stop from a crash.
+            stopped = self._stop_requested or (self._adopted and self._saw_stopping and not self._saw_crash)
+            self._state = ServerState.STOPPED if stopped else ServerState.CRASHED
+            self._adopted = False
 
         await asyncio.to_thread(self._external_detector.forget_panel_process)
-        await self._record_log("system", f"Proceso del servidor finalizado con código {exit_code}.")
+        ending = f" con código {exit_code}" if exit_code is not None else ""
+        await self._record_log("system", f"Proceso del servidor finalizado{ending}.")
         await self._broadcast_status()
         if not self._dev_mode:
             if self._state == ServerState.STOPPED:
@@ -639,6 +927,14 @@ class MinecraftServerManager:
             seq=self._log_seq,
         )
         self._log_buffer.append(line)
+        if _STOPPING_RE.search(message):
+            self._saw_stopping = True
+        if _CRASH_RE.search(message):
+            self._saw_crash = True
+        if self._replaying:
+            # Old lines shown again after taking a server back: no joins, no Discord messages.
+            await self._websocket_manager.broadcast_json({"type": "log", "line": asdict(line)})
+            return
 
         # Detect when the server finishes starting up ("Done (X.XXs)!")
         if not self._ready_notified and _SERVER_READY_RE.search(message):
