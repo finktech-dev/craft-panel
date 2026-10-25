@@ -63,6 +63,8 @@ jobs:
           if ($failed) { exit 1 }
       - name: Settings scripts regression test
         run: node web_panel/tests/test_admin_js_regression.js
+      - name: Console scrolling test
+        run: node web_panel/tests/test_console_scroll.js
       - name: Compiled stylesheet is up to date
         shell: pwsh
         working-directory: web_panel/frontend
