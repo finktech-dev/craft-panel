@@ -15,7 +15,7 @@ Un panel web gratis y de código abierto que instala, enciende y comparte un ser
 
 <img src="docs/images/demo.gif" alt="Craft Panel instalando un servidor, encendiéndolo, amigos entrando, la consola y una copia del mundo" width="880">
 
-<sub>Grabado con el panel real en una instalación nueva de Windows: el servidor, los jugadores que entran y todas las pantallas son reales; no hay nada armado a mano.</sub>
+<sub>Grabado con el panel real en una instalación nueva de Windows: el servidor, los jugadores que entran y todas las pantallas son reales; no hay nada armado a mano. [Verlo como video](https://github.com/finktech-dev/craft-panel/releases/download/v1.0.0/craft-panel-demo.mp4).</sub>
 
 </div>
 

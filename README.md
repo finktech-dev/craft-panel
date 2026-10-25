@@ -15,7 +15,7 @@ A free, open-source web panel that installs, starts and shares a Minecraft serve
 
 <img src="docs/images/demo.gif" alt="Craft Panel installing a server, starting it, friends joining, the console and a world backup" width="880">
 
-<sub>Recorded from the real panel on a fresh Windows install: the server, the players joining and every screen are real; nothing is mocked up.</sub>
+<sub>Recorded from the real panel on a fresh Windows install: the server, the players joining and every screen are real; nothing is mocked up. [Watch it as a video](https://github.com/finktech-dev/craft-panel/releases/download/v1.0.0/craft-panel-demo.mp4).</sub>
 
 </div>
 
