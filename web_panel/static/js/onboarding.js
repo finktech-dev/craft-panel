@@ -72,10 +72,59 @@
       : 'Todavía no tenemos la dirección para tus amigos. Tocá el botón y la buscamos en Playit.');
   };
 
+  const relativeTime = (iso) => {
+    const seconds = (new Date(iso).getTime() - Date.now()) / 1000;
+    const format = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
+    const units = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
+    for (const [unit, size] of units) {
+      if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
+    }
+    return 'hace un momento';
+  };
+
+  // "Tu mundo «world» ya se jugó: entraron 4 jugadores, la última vez hace 2 días."
+  const historyText = () => {
+    if (state.history_phase !== 'played') return '';
+    const players = state.known_players;
+    const who = players === 0 ? 'todavía no entró nadie más' : players === 1 ? 'entró 1 jugador' : `entraron ${players} jugadores`;
+    const when = state.last_played_at ? `, la última vez ${relativeTime(state.last_played_at)}` : '';
+    return `Tu mundo «${state.world_name}» ya se jugó: ${who}${when}.`;
+  };
+
+  // A server that is on, or already played, needs other words than a first install.
+  // Ajustes > Acceso por Internet links here with ?review=access to go straight to that step.
+  let reviewingAccess = new URLSearchParams(window.location.search).get('review') === 'access';
+  const applyHistory = () => {
+    const played = state.history_phase === 'played';
+    const running = state.server_running || state.external_server;
+    say('#onboarding-title', running ? 'Tu servidor' : played ? 'Revisemos tu servidor' : 'Vamos a armar tu servidor');
+    say('#onboarding-lead', played || running
+      ? 'Ya lo usaste antes: solo revisamos lo que falta. No borramos nada.'
+      : 'Son cuatro pasos cortos. No borramos nada que ya tengas.');
+    document.querySelectorAll('.onboarding-history').forEach((node) => {
+      node.textContent = historyText();
+      node.classList.toggle('hidden', !node.textContent);
+    });
+    show('#ready-first-time', !played);
+
+    const showRunning = running && !reviewingAccess;
+    show('#onboarding-running', showRunning);
+    show('#onboarding-steps', !showRunning);
+    say('#onboarding-running-title', state.server_running ? 'Tu servidor ya está encendido' : 'Hay un servidor abierto fuera del panel');
+    say('#onboarding-running-text', state.server_running
+      ? 'No hace falta seguir estos pasos. Si querés, revisá cómo entran tus amigos.'
+      : 'Lo abriste desde otra ventana. Desde el Inicio podés cerrarlo o seguir usándolo así.');
+    return showRunning;
+  };
+
   const refresh = async () => {
     try {
       state = await Panel.api('/api/onboarding/status');
       $('#onboarding-loading').classList.add('hidden');
+      if (applyHistory()) {
+        document.querySelectorAll('.onboarding-step').forEach((node) => node.classList.add('hidden'));
+        return;
+      }
       say('#java-message', state.java_ready ? '' : state.java_message);
       fillVersions();
       renderInternet();
@@ -88,7 +137,7 @@
         return new Option(`${value} GB`, String(value), false, value === launch.allocated_ram_gb);
       }));
       say('#onboarding-ram-hint', `Tu computadora tiene ${launch.total_ram_gb} GB. Recomendamos hasta ${launch.maximum_recommended_ram_gb} GB para que el resto siga andando bien.`);
-      showStep(effectiveStep());
+      showStep(reviewingAccess ? 'connection' : effectiveStep());
     } catch (error) { showError(error.message); }
   };
 
@@ -267,8 +316,18 @@
       } catch (error) { say('#connection-feedback', error.message); }
     });
 
+    $('#onboarding-review-access')?.addEventListener('click', () => {
+      reviewingAccess = true;
+      refresh();
+    });
+
     $('#friends-continue')?.addEventListener('click', async () => {
       state = await Panel.api('/api/onboarding/status');
+      // Reviewing access with the server already on: there is nothing to start, go home.
+      if (state.server_running || state.external_server) {
+        window.location.assign('/');
+        return;
+      }
       if (!internetReady()) {
         say('#connection-feedback', 'Primero instalá Playit, o elegí "Jugar solo en esta casa" en Otras opciones.');
         return;

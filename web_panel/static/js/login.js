@@ -14,8 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
     error.textContent = '';
     button.disabled = true;
     try {
-      await Panel.api('/api/auth/login', { method: 'POST', body: { pin, totp_code: totpCode } });
-      window.location.assign('/onboarding');
+      const result = await Panel.api('/api/auth/login', { method: 'POST', body: { pin, totp_code: totpCode } });
+      // The wizard only while the server was never played; otherwise straight to the home screen.
+      window.location.assign(result?.next_url === '/onboarding' ? '/onboarding' : '/');
     } catch (issue) {
       error.textContent = issue.message;
     } finally {
