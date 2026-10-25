@@ -28,6 +28,9 @@ from app.websocket.manager import ConnectionManager, connection_manager
 
 logger = logging.getLogger(__name__)
 _COMMAND_MAX_LENGTH: Final = 1_000
+_READ_CHUNK_BYTES: Final = 64 * 1024
+# Longer console lines are cut; the rest is drained and dropped.
+_MAX_LINE_BYTES: Final = 16 * 1024
 _PLAYER_JOIN_RE: Final = re.compile(
     r"(?:\[(?:minecraft|net\.minecraft\.server).*?\]:?\s+|^|\b)([a-zA-Z0-9_]{2,16})\s+joined the game",
     re.IGNORECASE,
@@ -560,14 +563,41 @@ class MinecraftServerManager:
         task.add_done_callback(self._reader_tasks.discard)
 
     async def _read_stream(self, stream: asyncio.StreamReader, stream_name: str) -> None:
-        async for raw_line in stream:
-            line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+        # Read raw chunks instead of ``readline``: a single console line longer
+        # than asyncio's 64 KiB limit would kill the reader, the pipe would fill
+        # up and Minecraft would freeze while writing its next log line.
+        buffer = b""
+        skipping = False
+        while chunk := await stream.read(_READ_CHUNK_BYTES):
+            buffer += chunk
+            *lines, buffer = buffer.split(b"\n")
+            for raw_line in lines:
+                if skipping:
+                    skipping = False
+                    continue
+                await self._record_raw_line(stream_name, raw_line)
+            if len(buffer) > _MAX_LINE_BYTES:
+                if not skipping:
+                    await self._record_raw_line(stream_name, buffer[:_MAX_LINE_BYTES], truncated=True)
+                    skipping = True
+                buffer = b""
+        if buffer and not skipping:
+            await self._record_raw_line(stream_name, buffer)
+
+    async def _record_raw_line(self, stream_name: str, raw_line: bytes, *, truncated: bool = False) -> None:
+        line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+        if truncated:
+            line += " … (línea recortada, era demasiado larga)"
+        try:
             await self._record_log(stream_name, line)
+        except Exception:
+            # One bad line must never stop draining the pipe.
+            logger.exception("Could not process a console line")
 
     async def _watch_process(self, process: asyncio.subprocess.Process) -> None:
         exit_code = await process.wait()
         for task in tuple(self._reader_tasks):
-            with contextlib.suppress(asyncio.CancelledError):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
 
         async with self._lock:
