@@ -517,6 +517,8 @@ KEYS: dict[str, KeySpec] = {
         KeySpec("max_crash_restarts", _integer(1, 20), "3"),
         KeySpec("daily_restart", parse_time_of_day, ""),
         KeySpec("restart_warning", _duration(10, 600), "60s"),
+        KeySpec("idle_shutdown", _duration(5 * 60, 24 * 3600), ""),
+        KeySpec("idle_min_players", _integer(1, 100), "1"),
         KeySpec("backup_interval", _duration(3600, 168 * 3600), "6h", template=""),
         KeySpec("backup_keep", _integer(1, 100), "4", template=""),
         KeySpec("backup_max_size", parse_size_gb, "15GB", template=""),
@@ -586,6 +588,14 @@ daily_restart =
 
 # Cuánto antes avisar en el chat que se va a reiniciar.
 restart_warning = 60s
+
+# Apagar el servidor solo si hay pocos jugadores durante este tiempo
+# (como mínimo 5m, por ejemplo 30m). Vacío = no apagarlo solo.
+idle_shutdown =
+
+# Cuántos jugadores tiene que haber para que siga encendido.
+# 1 = se apaga solo cuando no hay nadie.
+idle_min_players = 1
 
 # ----- Copias -----
 

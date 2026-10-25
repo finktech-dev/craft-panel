@@ -36,6 +36,8 @@ one entry per line
 | `max_crash_restarts` | `3` | After this many crashes within 10 minutes, automatic restarts stop; the console and the dashboard's "Cosas para revisar" (Things to check) say so. Starting the server by hand turns them back on. |
 | `daily_restart` | off | Daily graceful restart at `HH:MM` (24 h, this PC's time). Skipped when the server is off. |
 | `restart_warning` | `60s` | How long before a daily restart players are warned in the chat (10s to 10m). |
+| `idle_shutdown` | off | Stop the server (saving the world) after fewer than `idle_min_players` players for this long (5m to 24h). The countdown starts once the world has loaded, resets when enough players are online, and players still online are warned in the chat one minute before. |
+| `idle_min_players` | `1` | Players needed to keep the server on (1 to 100). `1` means it stops only when nobody is online. |
 | `backup_interval` | value from "Ajustes", else `6h` | Time between automatic copies (at least `1h`). Choosing an interval in "Copias automáticas" (Automatic copies) updates this line when the file exists. |
 | `backup_keep` | `4` | How many copies to keep. |
 | `backup_max_size` | `15GB` | Space for all copies together; the newest copy is always kept. |
