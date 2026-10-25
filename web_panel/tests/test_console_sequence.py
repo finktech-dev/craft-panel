@@ -27,6 +27,9 @@ def _manager() -> MinecraftServerManager:
     manager._last_join_notified = {}
     manager._last_leave_notified = {}
     manager._last_death_notified = {}
+    manager._replaying = False
+    manager._saw_stopping = False
+    manager._saw_crash = False
     manager._websocket_manager = RecordingSockets()
     return manager
 

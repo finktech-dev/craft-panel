@@ -13,6 +13,7 @@ from app.core.config import Settings, settings
 from app.core.path_safety import is_safe_component
 from app.services.runtime_guard import require_server_stopped
 from app.services.protected_paths import require_not_protected
+from app.services.rcon import MANAGED_KEYS
 from app.services.server_process import MinecraftServerManager, server_manager
 from app.schemas.worlds import (
     ServerPropertiesResponse,
@@ -429,7 +430,8 @@ class ServerPropertiesService:
 
         # Then add the remaining properties found in the file
         for key, val in current_props.items():
-            if key in _PROPERTY_METADATA:
+            # The RCON password is the panel's secret: never sent to the browser.
+            if key in _PROPERTY_METADATA or key in MANAGED_KEYS:
                 continue
             # Automatic type
             val_lower = val.lower()
@@ -474,6 +476,8 @@ class ServerPropertiesService:
         for key, value in updates.items():
             if not _PROPERTY_KEY.match(key):
                 raise ValueError(f"La propiedad '{key[:40]}' no es válida.")
+            if key in MANAGED_KEYS:
+                raise ValueError(f"'{key}' lo maneja el panel y no se cambia desde acá.")
             if not isinstance(value, str) or len(value) > _MAX_PROPERTY_VALUE_LENGTH:
                 raise ValueError(f"El valor de '{key}' es demasiado largo.")
             if any(ord(character) < 32 or ord(character) == 127 for character in value):

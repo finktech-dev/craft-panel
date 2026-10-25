@@ -45,6 +45,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Keep the Minecraft process consistent when the panel shuts down."""
     server_automation.install()
     scheduler_service.start()
+    # A server left running by the previous panel session is taken back before anything else.
+    try:
+        await server_manager.adopt_running_server()
+    except Exception:  # noqa: BLE001 - the panel must open even if this fails
+        logging.getLogger("panel").exception("Could not take back the running server")
     asyncio.create_task(server_automation.start_with_panel(), name="start-with-panel")
     try:
         yield
