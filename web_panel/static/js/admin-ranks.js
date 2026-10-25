@@ -541,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await runLP(`group ${rawId} setweight ${weight}`, `Asignando peso ${weight}`);
         await runLP(`group ${rawId} meta setprefix ${weight} "${prefix} "`, `Asignando prefijo ${prefix}`);
 
-        // Permisos iniciales marcados
+        // Starting permissions ticked in the form
         const permsToSet = [];
         if ($('#init-perm-fly') && $('#init-perm-fly').checked) permsToSet.push(...PERM_DEFINITIONS.fly);
         if ($('#init-perm-tp') && $('#init-perm-tp').checked) permsToSet.push(...PERM_DEFINITIONS.tp);

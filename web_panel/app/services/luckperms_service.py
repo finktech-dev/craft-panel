@@ -310,7 +310,7 @@ class LuckPermsService:
         async with self._lock:
             sent_at = datetime.now(UTC).isoformat()
             try:
-                # Enviar comando /lp editor
+                # Ask LuckPerms for a web editor session.
                 await server_manager.send_command("/lp editor")
             except Exception as e:
                 return LuckPermsEditorResponse(

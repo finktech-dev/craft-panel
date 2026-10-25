@@ -51,7 +51,7 @@ async def delete_custom_rank(rank_id: str = Path(pattern=r"^[a-z0-9_-]{1,32}$"))
 
 @router.post("/rank-step")
 async def change_primary_rank(step: LuckPermsRankStep) -> dict[str, Any]:
-    """Subir, bajar o volver al rango inicial, without needing a LuckPerms track."""
+    """Move a player one rank up or down, or back to the initial rank, without a LuckPerms track."""
     return await luckperms_service.change_primary_rank(step.player, step.direction)
 
 
