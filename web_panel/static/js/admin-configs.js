@@ -296,23 +296,6 @@
       };
     }
 
-    // #save-schedule click handler saving /api/scheduler/backup/{hours}
-    const saveScheduleBtn = $('#save-schedule');
-    if (saveScheduleBtn) {
-      saveScheduleBtn.onclick = async () => {
-        try {
-          const hoursInput = $('#backup-hours');
-          const hours = hoursInput ? hoursInput.value : '6';
-          await Panel.api('/api/scheduler/backup/' + hours, { method: 'POST' });
-          const statusEl = $('#schedule-status');
-          if (statusEl) statusEl.textContent = 'Copias automáticas encendidas.';
-          Panel.toast('Listo: las copias se hacen solas.');
-        } catch (e) {
-          Panel.toast(e.message, 'error');
-        }
-      };
-    }
-
     // Global exports for coordination or external calls
     window.loadConfigsFiles = async () => {
       try {

@@ -151,25 +151,59 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   setInterval(scrambleObfuscatedNodes, 45);
 
-  // 4. Local Storage / Custom Ranks Persistence
-  const CUSTOM_RANKS_KEY = 'minecraft_panel_custom_ranks';
+  // 4. Ranks created from the panel live in the panel's LuckPerms settings on the server,
+  // so every browser lists them. Older versions kept them in this browser only; they move once.
+  const LEGACY_CUSTOM_RANKS_KEY = 'minecraft_panel_custom_ranks';
+  let CUSTOM_RANKS = [];
   function getCustomRanks() {
-    try {
-      const raw = localStorage.getItem(CUSTOM_RANKS_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (_) { return []; }
+    return CUSTOM_RANKS.map(r => ({ ...r, isCustom: true }));
   }
   const loadCustomRanks = getCustomRanks;
 
-  function saveCustomRank(rank) {
-    const list = getCustomRanks().filter(r => r.id !== rank.id);
-    list.push(rank);
-    try { localStorage.setItem(CUSTOM_RANKS_KEY, JSON.stringify(list)); } catch (_) {}
+  function customRankBody(rank) {
+    const weight = Math.min(1000, Math.max(0, parseInt(rank.weight, 10) || 50));
+    return {
+      id: String(rank.id || ''),
+      name: String(rank.name || rank.id || '').slice(0, 40),
+      weight,
+      tag: String(rank.tag || '').slice(0, 80),
+      desc: String(rank.desc || '').slice(0, 200),
+      perm: String(rank.perm || '').slice(0, 60),
+      type: rank.type === 'secondary' ? 'secondary' : 'primary'
+    };
   }
 
-  function removeCustomRank(id) {
-    const list = getCustomRanks().filter(r => r.id !== id);
-    try { localStorage.setItem(CUSTOM_RANKS_KEY, JSON.stringify(list)); } catch (_) {}
+  // Returns false (and says why) when the server could not save it.
+  async function saveCustomRank(rank) {
+    try {
+      const config = await window.Panel.api('/api/luckperms/custom-ranks', { method: 'POST', body: customRankBody(rank) });
+      CUSTOM_RANKS = Array.isArray(config.custom_ranks) ? config.custom_ranks : CUSTOM_RANKS;
+      return true;
+    } catch (e) {
+      if (window.Panel && window.Panel.toast) window.Panel.toast(e.message || 'No se pudo guardar el rango en el panel.', 'error');
+      return false;
+    }
+  }
+
+  async function removeCustomRank(id) {
+    try {
+      const config = await window.Panel.api(`/api/luckperms/custom-ranks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      CUSTOM_RANKS = Array.isArray(config.custom_ranks) ? config.custom_ranks : CUSTOM_RANKS;
+    } catch (e) {
+      if (window.Panel && window.Panel.toast) window.Panel.toast(e.message || 'No se pudo quitar el rango de la lista.', 'error');
+    }
+  }
+
+  async function moveLegacyCustomRanks() {
+    let legacy = [];
+    try { legacy = JSON.parse(localStorage.getItem(LEGACY_CUSTOM_RANKS_KEY) || '[]'); } catch (_) { return; }
+    if (!Array.isArray(legacy) || !legacy.length) return;
+    for (const rank of legacy) {
+      if (!rank || !/^[a-z0-9_-]{1,32}$/.test(String(rank.id || ''))) continue;
+      if (CUSTOM_RANKS.some(r => r.id === rank.id)) continue;
+      if (!await saveCustomRank(rank)) return; // keep them in the browser and try again next time
+    }
+    try { localStorage.removeItem(LEGACY_CUSTOM_RANKS_KEY); } catch (_) {}
   }
 
   function getAllPrimaryRanks() {
@@ -208,6 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ranksSec) ranksSec.classList.remove('hidden');
       PRIMARY_RANKS = Array.isArray(config.primary_ranks) ? config.primary_ranks : [];
       SECONDARY_ROLES = Array.isArray(config.secondary_roles) ? config.secondary_roles : [];
+      CUSTOM_RANKS = Array.isArray(config.custom_ranks) ? config.custom_ranks : [];
       return true;
     } catch (_) {
       if (banner) banner.classList.remove('hidden');
@@ -527,10 +562,9 @@ document.addEventListener('DOMContentLoaded', () => {
           tag: prefix,
           desc: `Creado desde el panel.`,
           perm: `${permsToSet.length} permisos`,
-          type,
-          isCustom: true
+          type
         };
-        saveCustomRank(newRank);
+        await saveCustomRank(newRank);
         renderRanksCards();
         populateInspectorDropdown();
         if ($('#lp-inspect-select')) {
@@ -610,7 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!rankId) return;
       if (!confirm(`¿Borrar el rango '${rankId}'? Se quita del servidor y quienes lo tengan lo pierden.`)) return;
       await runLP(`deletegroup ${rankId}`, `Eliminando grupo ${rankId}`);
-      removeCustomRank(rankId);
+      await removeCustomRank(rankId);
       renderRanksCards();
       populateInspectorDropdown();
     };
@@ -704,8 +738,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const rankId = delCustomBtn.dataset.deleteCustom;
         const rankName = delCustomBtn.dataset.rankName || rankId;
         if (confirm(`¿Borrar el rango '${rankName}'? Se quita del servidor y quienes lo tengan lo pierden.`)) {
-          runLP(`deletegroup ${rankId}`, `Eliminando grupo ${rankId}`);
-          removeCustomRank(rankId);
+          await runLP(`deletegroup ${rankId}`, `Eliminando grupo ${rankId}`);
+          await removeCustomRank(rankId);
           renderRanksCards();
           populateInspectorDropdown();
         }
@@ -737,8 +771,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const roleId = delCustomBtn.dataset.deleteCustom;
         const roleName = delCustomBtn.dataset.rankName || roleId;
         if (confirm(`¿Borrar el rol '${roleName}'? Se quita del servidor y quienes lo tengan lo pierden.`)) {
-          runLP(`deletegroup ${roleId}`, `Eliminando rol ${roleId}`);
-          removeCustomRank(roleId);
+          await runLP(`deletegroup ${roleId}`, `Eliminando rol ${roleId}`);
+          await removeCustomRank(roleId);
           renderRanksCards();
           populateInspectorDropdown();
         }
@@ -823,44 +857,36 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  const btnLpPromote = $('#btn-lp-promote');
-  if (btnLpPromote) {
-    btnLpPromote.onclick = () => {
-      const targetInput = $('#lp-target-player');
-      const target = targetInput ? targetInput.value.trim() : '';
-      if (!target) {
-        if (window.Panel && window.Panel.toast) window.Panel.toast('Seleccioná un jugador primero.', 'error');
-        return;
-      }
-      runLP(`user ${target} promote jerarquia`, `Subiendo rango en jerarquía a ${target}`);
-    };
+  // Up, down or back to the initial rank, following the "Rango principal" list by priority.
+  // The server reads the player's current rank, so no LuckPerms track is needed.
+  async function stepRank(direction, button) {
+    const targetInput = $('#lp-target-player');
+    const target = targetInput ? targetInput.value.trim() : '';
+    if (!target) {
+      if (window.Panel && window.Panel.toast) window.Panel.toast('Seleccioná un jugador primero.', 'error');
+      return;
+    }
+    if (button) button.disabled = true;
+    try {
+      const res = await window.Panel.api('/api/luckperms/rank-step', { method: 'POST', body: { player: target, direction } });
+      if (window.Panel && window.Panel.toast) window.Panel.toast(res.message, res.success ? 'success' : 'error');
+      logLP(res.message);
+    } catch (e) {
+      if (window.Panel && window.Panel.toast) window.Panel.toast(e.message, 'error');
+      logLP('Error: ' + e.message);
+    } finally {
+      if (button) button.disabled = false;
+    }
   }
+
+  const btnLpPromote = $('#btn-lp-promote');
+  if (btnLpPromote) btnLpPromote.onclick = () => stepRank('up', btnLpPromote);
 
   const btnLpDemote = $('#btn-lp-demote');
-  if (btnLpDemote) {
-    btnLpDemote.onclick = () => {
-      const targetInput = $('#lp-target-player');
-      const target = targetInput ? targetInput.value.trim() : '';
-      if (!target) {
-        if (window.Panel && window.Panel.toast) window.Panel.toast('Seleccioná un jugador primero.', 'error');
-        return;
-      }
-      runLP(`user ${target} demote jerarquia`, `Bajando rango en jerarquía a ${target}`);
-    };
-  }
+  if (btnLpDemote) btnLpDemote.onclick = () => stepRank('down', btnLpDemote);
 
   const btnLpResetDefault = $('#btn-lp-reset-default');
-  if (btnLpResetDefault) {
-    btnLpResetDefault.onclick = () => {
-      const targetInput = $('#lp-target-player');
-      const target = targetInput ? targetInput.value.trim() : '';
-      if (!target) {
-        if (window.Panel && window.Panel.toast) window.Panel.toast('Seleccioná un jugador primero.', 'error');
-        return;
-      }
-      runLP(`user ${target} parent set default`, `Restableciendo ${target} a Turista (Default)`);
-    };
-  }
+  if (btnLpResetDefault) btnLpResetDefault.onclick = () => stepRank('initial', btnLpResetDefault);
 
   // Header quick buttons (Sync, Web Editor, Clear Terminal)
   const btnLpSync = $('#btn-lp-sync');
@@ -957,6 +983,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 15. Initial Execution & Activation Handler
   const initRanks = async () => {
     if (!await loadLuckPermsConfiguration()) return;
+    await moveLegacyCustomRanks();
     renderRanksCards();
     populateInspectorDropdown();
     updateCreateRankPreview();

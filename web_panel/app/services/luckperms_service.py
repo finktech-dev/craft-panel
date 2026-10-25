@@ -3,17 +3,28 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import os
+import uuid
 from pathlib import Path
 import re
 from datetime import UTC, datetime
 from typing import Any
 
-from app.schemas.luckperms import LuckPermsAvailability, LuckPermsEditorResponse, LuckPermsPanelConfig
+from app.schemas.luckperms import (
+    LuckPermsAvailability,
+    LuckPermsCustomRank,
+    LuckPermsEditorResponse,
+    LuckPermsPanelConfig,
+)
 from app.services.server_process import server_manager
 
 # "<PlayerName> message" is how Minecraft logs player chat.
 _CHAT_LINE = re.compile(r"<[A-Za-z0-9_]{1,16}>")
+# "/lp user <name> info" prints "- Primary Group: vip".
+_PRIMARY_GROUP = re.compile(r"Primary Group:\s*([A-Za-z0-9_.\-]+)", re.IGNORECASE)
+_COLOR_CODE = re.compile(r"§.")
 
 
 DEFAULT_PRIMARY_RANKS: list[dict[str, Any]] = [
@@ -174,10 +185,115 @@ class LuckPermsService:
             message="LuckPerms está configurado para esta instalación.",
             primary_ranks=primary_ranks,
             secondary_roles=secondary_roles,
+            custom_ranks=config.custom_ranks,
         )
 
     def save_configuration(self, config: LuckPermsPanelConfig) -> None:
-        self._config_file.write_text(config.model_dump_json(indent=2), encoding="utf-8")
+        # Turning ranks on again must not forget the ranks created from the panel.
+        if "custom_ranks" not in config.model_fields_set:
+            with contextlib.suppress(OSError, ValueError):
+                config.custom_ranks = self._load_config().custom_ranks
+        self._write_config(config)
+
+    def _load_config(self) -> LuckPermsPanelConfig:
+        """The local file; with none yet, the integration is on by detection, so start from that."""
+        try:
+            raw = json.loads(self._config_file.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return LuckPermsPanelConfig(enabled=True)
+        return LuckPermsPanelConfig(**raw)
+
+    def _write_config(self, config: LuckPermsPanelConfig) -> None:
+        target = self._config_file
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temporary.write_text(config.model_dump_json(indent=2), encoding="utf-8")
+            os.replace(temporary, target)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+
+    def save_custom_rank(self, rank: LuckPermsCustomRank) -> LuckPermsAvailability:
+        """Remember a rank created from the panel, replacing one with the same id."""
+        config = self._load_config()
+        config.custom_ranks = [existing for existing in config.custom_ranks if existing.id != rank.id] + [rank]
+        self._write_config(config)
+        return self.get_configuration()
+
+    def delete_custom_rank(self, rank_id: str) -> LuckPermsAvailability:
+        config = self._load_config()
+        config.custom_ranks = [existing for existing in config.custom_ranks if existing.id != rank_id]
+        self._write_config(config)
+        return self.get_configuration()
+
+    def _primary_ladder(self, availability: LuckPermsAvailability) -> list[tuple[str, str]]:
+        """Primary ranks as (id, name), lowest weight first: the steps for "Subir" and "Bajar"."""
+        ranks: dict[str, tuple[float, str]] = {}
+        for rank in availability.primary_ranks:
+            rank_id = str(rank.get("id", ""))
+            if rank_id:
+                ranks[rank_id] = (float(rank.get("weight") or 0), str(rank.get("name") or rank_id))
+        for custom in availability.custom_ranks:
+            if custom.type == "primary":
+                ranks[custom.id] = (float(custom.weight), custom.name)
+        return [(rank_id, name) for rank_id, (_, name) in sorted(ranks.items(), key=lambda item: item[1][0])]
+
+    async def _primary_group(self, player: str) -> str | None:
+        """Ask LuckPerms for the player's primary group and read it from the console."""
+        sent_at = datetime.now(UTC).isoformat()
+        await server_manager.send_command(f"/lp user {player} info")
+        deadline = asyncio.get_running_loop().time() + 6.0
+        while asyncio.get_running_loop().time() < deadline:
+            for entry in reversed(server_manager.history[-40:]):
+                message = _COLOR_CODE.sub("", str(entry.get("message", "")))
+                if str(entry.get("timestamp", "")) < sent_at or _CHAT_LINE.search(message):
+                    continue
+                if match := _PRIMARY_GROUP.search(message):
+                    return match.group(1).lower()
+            await asyncio.sleep(0.3)
+        return None
+
+    async def change_primary_rank(self, player: str, direction: str) -> dict[str, Any]:
+        """Move a player one step up or down the panel's primary ranks, or back to the initial one.
+
+        Uses ``parent set`` instead of a LuckPerms track, so it works with no track set up.
+        """
+        availability = self.get_configuration()
+        if not availability.enabled:
+            return {"success": False, "message": "LuckPerms no está habilitado para esta instalación."}
+        if not server_manager.is_running:
+            return {"success": False, "message": "Encendé el servidor para cambiarle el rango a alguien."}
+        ladder = self._primary_ladder(availability)
+        names = dict(ladder)
+        if direction == "initial":
+            target = "default"
+        else:
+            async with self._lock:
+                try:
+                    current = await self._primary_group(player)
+                except Exception as error:  # noqa: BLE001 - shown to the person as is
+                    return {"success": False, "message": f"No se pudo preguntar el rango: {error}"}
+            if current is None:
+                return {
+                    "success": False,
+                    "message": f"No pudimos saber el rango de {player}. ¿Ya entró alguna vez al servidor?",
+                }
+            ids = [rank_id for rank_id, _ in ladder]
+            if current not in ids:
+                return {
+                    "success": False,
+                    "message": f"{player} tiene el rango «{current}», que no está en tu lista de rangos. Dale uno de la lista.",
+                }
+            index = ids.index(current) + (1 if direction == "up" else -1)
+            if not 0 <= index < len(ids):
+                where = "el más alto" if direction == "up" else "el más bajo"
+                return {"success": False, "message": f"{player} ya tiene {where} de tus rangos ({names[current]})."}
+            target = ids[index]
+        try:
+            await server_manager.send_command(f"/lp user {player} parent set {target}")
+        except Exception as error:  # noqa: BLE001
+            return {"success": False, "message": f"Error al ejecutar: {error}"}
+        return {"success": True, "message": f"{player} ahora tiene el rango {names.get(target, target)}."}
 
     def _is_enabled(self) -> bool:
         return self.get_configuration().enabled

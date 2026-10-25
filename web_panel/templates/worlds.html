@@ -15,7 +15,6 @@
     <button id="tab-btn-whitelist" data-tab="whitelist" type="button" class="tab-btn -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Jugadores</button>
     <button id="tab-btn-props" data-tab="props" type="button" class="tab-btn -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Ajustes</button>
     <button id="tab-btn-advancements" data-tab="advancements" type="button" class="tab-btn -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Logros</button>
-    <button id="tab-btn-luckperms" data-tab="luckperms" type="button" class="tab-btn -mb-px border-b-2 border-transparent pb-3 font-semibold text-zinc-400 hover:text-zinc-200">Rangos</button>
   </nav>
 
   <!-- Worlds -->
@@ -222,36 +221,6 @@
     </section>
   </div>
 
-  <!-- Ranks (LuckPerms) -->
-  <div id="tab-content-luckperms" class="hidden">
-    <section class="py-9" aria-labelledby="lp-editor-title">
-      <h2 id="lp-editor-title" class="text-lg font-semibold text-zinc-50">Editor de rangos</h2>
-      <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Armá rangos y permisos desde el navegador con el editor de LuckPerms. Necesitás ese mod instalado y el servidor prendido.</p>
-      <div class="mt-5 flex flex-wrap items-center gap-3">
-        <button id="btn-luckperms-editor" type="button" class="v2-button btn-primary">Preparar el editor</button>
-        <a id="link-luckperms-editor" href="#" target="_blank" rel="noopener" class="v2-button btn-quiet hidden">Abrir el editor en otra pestaña</a>
-      </div>
-      <p id="luckperms-status-msg" class="mt-3 min-h-5 text-sm text-zinc-400" aria-live="polite"></p>
-    </section>
-
-    <section class="border-t border-zinc-800 py-9" aria-labelledby="lp-assign-title">
-      <h2 id="lp-assign-title" class="text-lg font-semibold text-zinc-50">Darle un rango a alguien</h2>
-      <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">El rango tiene que existir antes. Podés crearlo en el editor.</p>
-      <div class="mt-5 flex flex-col gap-3 sm:flex-row">
-        <label for="lp-user-target" class="sr-only">Jugador</label>
-        <input id="lp-user-target" placeholder="Jugador, por ejemplo Alex" class="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400">
-        <label for="lp-group-target" class="sr-only">Rango</label>
-        <input id="lp-group-target" placeholder="Rango, por ejemplo vip" class="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400">
-        <button id="btn-lp-assign-group" type="button" class="v2-button btn-quiet shrink-0">Dar rango</button>
-      </div>
-    </section>
-
-    <section class="border-t border-zinc-800 py-9" aria-labelledby="lp-config-title">
-      <h2 id="lp-config-title" class="text-lg font-semibold text-zinc-50">Archivos de configuración</h2>
-      <p class="mt-1 max-w-xl leading-relaxed text-zinc-400">Para cambiar los archivos de configuración de LuckPerms u otros mods, usá el editor de archivos.</p>
-      <a href="/administration#configs" class="link mt-4 inline-block text-sm">Ir al editor de archivos</a>
-    </section>
-  </div>
 </section>
 
 <!-- Create world dialog -->
