@@ -1,18 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Consola · {{ brand_name or 'Craft Panel' }}{% endblock %}
 {% block content %}
-{%- set quick_commands = [
-  ('/save-all', 'Guardar el mundo'),
-  ('/list', 'Ver quién está'),
-  ('/time set day', 'Hacer de día'),
-  ('/weather clear', 'Sacar la lluvia'),
-  ('/kill @e[type=item]', 'Limpiar objetos del suelo'),
-  ('/reload', 'Recargar datos'),
-  ('/spark tps', 'Medir el lag'),
-  ('/spark health', 'Estado del servidor'),
-  ('/spark sampler --timeout 30', 'Analizar el lag (30 s)'),
-  ('/chunky pause', 'Pausar Chunky'),
-  ('/chunky continue', 'Seguir con Chunky'),
+{%- set quick_groups = [
+  ('Para jugar mejor', [
+    ('/time set day', 'Hacer de día'),
+    ('/weather clear', 'Sacar la lluvia'),
+    ('/kill @e[type=item]', 'Limpiar objetos del suelo'),
+    ('/list', 'Ver quién está'),
+  ]),
+  ('Para revisar el servidor', [
+    ('/save-all', 'Guardar el mundo'),
+    ('/reload', 'Recargar datos'),
+    ('/spark tps', 'Ver si anda lento'),
+    ('/spark health', 'Ver cómo está el servidor'),
+    ('/spark sampler --timeout 30', 'Buscar qué lo vuelve lento (30 s)'),
+    ('/chunky pause', 'Pausar la carga del mapa'),
+    ('/chunky continue', 'Seguir con la carga del mapa'),
+  ]),
 ] -%}
 <div class="mx-auto max-w-5xl">
   <header class="pb-8">
@@ -53,7 +57,8 @@
     </div>
 
     <div class="relative flex-1">
-      <div id="terminal-output" class="h-[60vh] min-h-[350px] overflow-y-auto overflow-x-hidden p-4 font-mono text-[12px] leading-relaxed text-zinc-200 selection:bg-emerald-500/30" role="log" aria-live="polite" aria-label="Salida de consola"></div>
+      <div id="terminal-output" class="h-[60vh] min-h-[350px] overflow-y-auto overflow-x-hidden p-4 font-mono text-[12px] leading-relaxed text-zinc-200 selection:bg-emerald-500/30" role="log" aria-live="off" aria-label="Salida de consola"></div>
+      <p id="console-announcer" class="sr-only" role="status" aria-live="polite"></p>
       <button id="scroll-to-bottom-btn" type="button" class="v2-button btn-quiet hidden absolute bottom-3 right-6 z-10 min-h-9 bg-zinc-900 px-3 py-1 text-sm">Ver lo más nuevo</button>
       <div id="player-menu" class="absolute z-20 hidden w-56 rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 text-sm shadow-xl" role="menu" aria-label="Acciones del jugador">
         <p id="player-menu-name" class="truncate px-2.5 pb-1.5 pt-1 font-semibold text-zinc-100"></p>
@@ -71,21 +76,31 @@
       </div>
       <label class="sr-only" for="command-input">Comando o mensaje</label>
       <span id="command-prompt" class="select-none pl-1 font-mono text-zinc-500" aria-hidden="true">&gt;</span>
-      <input id="command-input" type="text" class="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-4 font-mono text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400" placeholder="Por ejemplo: time set day" autocomplete="off" spellcheck="false" aria-describedby="command-help">
-      <button class="v2-button btn-primary shrink-0" type="submit">Enviar</button>
+      <input id="command-input" type="text" class="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-4 font-mono text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400" placeholder="Escribí algo, por ejemplo: time set day (hacer de día)" autocomplete="off" spellcheck="false" aria-describedby="command-help">
+      <button id="command-send" class="v2-button btn-primary shrink-0" type="submit">Enviar</button>
     </form>
+    <p id="offline-note" class="hidden border-t border-zinc-800 bg-zinc-900 px-3 pb-3 pt-2 text-sm text-zinc-400">No hay conexión con la consola. Se vuelve a conectar sola; mientras tanto no se puede escribir.</p>
 
-    <div class="flex items-center gap-1.5 overflow-x-auto border-t border-zinc-800 bg-zinc-900 px-3 py-2.5">
-      <span class="mr-1 shrink-0 text-sm text-zinc-500">Atajos:</span>
-      {% for command, label in quick_commands %}
-      <button type="button" data-cmd="{{ command }}" class="quick-cmd-chip shrink-0 rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100" title="{{ command }}">{{ label }}</button>
+    <div class="space-y-3 border-t border-zinc-800 bg-zinc-900 px-3 py-3">
+      {% for group_name, commands in quick_groups %}
+      <div role="group" aria-label="{{ group_name }}">
+        <p class="mb-1.5 text-sm font-semibold text-zinc-300">{{ group_name }}</p>
+        <div class="flex flex-wrap gap-1.5">
+          {% for command, label in commands %}
+          <span class="quick-group">
+            <button type="button" data-cmd="{{ command }}" class="quick-cmd-chip" title="{{ command }}">{{ label }}</button>
+            <button type="button" data-cmd-send="{{ command }}" class="quick-send" aria-label="Mandar ahora: {{ label }}">Mandar</button>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
       {% endfor %}
     </div>
   </section>
 
   <div id="command-help" class="mt-4 space-y-1 text-sm leading-relaxed text-zinc-500">
     <p>Escribí un comando como si estuvieras en el chat, sin la barra. Con las flechas <kbd class="rounded border border-zinc-700 px-1 font-mono text-zinc-300">↑</kbd> <kbd class="rounded border border-zinc-700 px-1 font-mono text-zinc-300">↓</kbd> volvés a los que ya usaste.</p>
-    <p>Un clic en un atajo lo escribe por vos; doble clic lo manda directo. Los comandos que no se pueden deshacer te preguntan antes.</p>
+    <p>Tocá un atajo para escribirlo y después apretá «Enviar», o tocá «Mandar» para que salga enseguida. Los comandos que no se pueden deshacer te preguntan antes.</p>
     <p>Tocá el nombre de un jugador para escribirle, ver por qué se desconectó o echarlo. Los errores largos vienen plegados: «Ver más» muestra el detalle.</p>
   </div>
 </div>

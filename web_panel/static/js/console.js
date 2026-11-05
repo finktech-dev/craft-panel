@@ -654,7 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
       button.classList.toggle('text-zinc-100', active);
       button.classList.toggle('text-zinc-400', !active);
     });
-    input.placeholder = mode === 'chat' ? 'Un mensaje para todos los que están jugando' : 'Por ejemplo: time set day';
+    input.placeholder = mode === 'chat' ? 'Un mensaje para todos los que están jugando' : 'Escribí algo, por ejemplo: time set day (hacer de día)';
     if (prompt) prompt.textContent = mode === 'chat' ? 'Chat' : '>';
   };
 
@@ -666,6 +666,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   setMode(sendMode);
 
+  const sendShortcut = (cmd) => {
+    if (!cmd || !sendCommand(cmd)) return;
+    input.value = '';
+    Panel.toast(`Enviado: ${cmd}`, 'success');
+  };
+
   // Quick Command Chips
   quickCmdChips.forEach((chip) => {
     chip.addEventListener('click', () => {
@@ -676,13 +682,13 @@ document.addEventListener('DOMContentLoaded', () => {
       input.focus();
     });
 
-    // Double click directly sends command
-    chip.addEventListener('dblclick', () => {
-      const cmd = chip.getAttribute('data-cmd');
-      if (!cmd || !sendCommand(cmd)) return;
-      input.value = '';
-      Panel.toast(`Enviado: ${cmd}`, 'success');
-    });
+    // Double click still sends right away, for people who already know it.
+    chip.addEventListener('dblclick', () => sendShortcut(chip.getAttribute('data-cmd')));
+  });
+
+  // The visible "Mandar" button next to each shortcut does the same thing.
+  document.querySelectorAll('[data-cmd-send]').forEach((button) => {
+    button.addEventListener('click', () => sendShortcut(button.getAttribute('data-cmd-send')));
   });
 
   // Keyboard navigation for History (Arrow Up / Arrow Down)
@@ -730,6 +736,29 @@ document.addEventListener('DOMContentLoaded', () => {
     appendLine(line);
   };
 
+  // Typing is off while the connection is down; the note says it comes back by itself.
+  const setSendEnabled = (enabled) => {
+    input.disabled = !enabled;
+    const sendButton = document.querySelector('#command-send');
+    if (sendButton) sendButton.disabled = !enabled;
+    document.querySelectorAll('[data-cmd-send]').forEach((button) => { button.disabled = !enabled; });
+    document.querySelector('#offline-note')?.classList.toggle('hidden', enabled);
+  };
+
+  // The log itself is silent for screen readers; only key events are announced, errors at most every 30 s.
+  const announcer = document.querySelector('#console-announcer');
+  let lastErrorAnnounce = 0;
+  const announce = (message) => { if (announcer) announcer.textContent = message; };
+  const announceLive = (line) => {
+    const message = line?.message || '';
+    if (/Done \(.*\)! For help/.test(message)) announce('El servidor terminó de encender.');
+    else if (/Stopping (?:the )?server/i.test(message)) announce('El servidor se está apagando.');
+    else if (levelOf(message, line?.stream) === 'error' && Date.now() - lastErrorAnnounce > 30_000) {
+      lastErrorAnnounce = Date.now();
+      announce('Hay un error nuevo en la consola.');
+    }
+  };
+
   // WebSocket Connection with Status Badge
   const connect = () => {
     socketDot.className = 'h-2 w-2 rounded-full bg-[#e8b04b]';
@@ -741,6 +770,8 @@ document.addEventListener('DOMContentLoaded', () => {
       socketDot.className = 'h-2 w-2 rounded-full bg-emerald-400';
       socketText.textContent = 'Conectada, en vivo';
       dropNotified = false;
+      setSendEnabled(true);
+      announce('Consola conectada.');
     });
 
     socket.addEventListener('message', (event) => {
@@ -755,6 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (payload.type === 'log') {
           appendNew(payload.line);
+          announceLive(payload.line);
         }
         if (payload.type === 'error') {
           Panel.toast(payload.message, 'error');
@@ -767,6 +799,8 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.addEventListener('close', () => {
       socketDot.className = 'h-2 w-2 rounded-full bg-[#ec7a6a]';
       socketText.textContent = 'Sin conexión';
+      setSendEnabled(false);
+      announce('La consola perdió la conexión. Se vuelve a conectar sola.');
       // One notice per outage, not one every retry.
       if (!dropNotified) Panel.toast('Se cortó la consola. Volvemos a conectar solos.', 'error');
       dropNotified = true;
