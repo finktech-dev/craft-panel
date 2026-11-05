@@ -6,10 +6,12 @@ import asyncio
 import uuid
 import contextlib
 import json
+import locale
 import logging
 import os
 import re
 import subprocess
+import time
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Coroutine
 from dataclasses import asdict, dataclass
@@ -74,6 +76,18 @@ def _detached_launch_options() -> dict[str, Any]:
     return {"start_new_session": True}
 
 
+def _decode_console(raw: bytes) -> str:
+    """UTF-8 first; a Windows program printing in the local code page (ANSI) falls back to it."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        return raw.decode(locale.getpreferredencoding(False) or "cp1252", errors="replace")
+    except LookupError:
+        return raw.decode("utf-8", errors="replace")
+
+
 class _ConsoleFile:
     """The server's console file read as it grows, like a pipe.
 
@@ -121,7 +135,7 @@ def _console_tail(path: Path, max_bytes: int) -> tuple[list[str], int]:
     complete = data[:end]
     if start > 0:
         complete = complete.split(b"\n", 1)[-1] if b"\n" in complete else b""
-    lines = [line.decode("utf-8", errors="replace").rstrip("\r") for line in complete.split(b"\n") if line.strip()]
+    lines = [_decode_console(line).rstrip("\r") for line in complete.split(b"\n") if line.strip()]
     return lines, start + end
 
 
@@ -131,7 +145,7 @@ def _console_says_ready(path: Path) -> bool:
     try:
         with path.open("rb") as handle:
             while chunk := handle.read(1024 * 1024):
-                text = tail + chunk.decode("utf-8", errors="replace")
+                text = tail + _decode_console(chunk)
                 if _SERVER_READY_RE.search(text):
                     return True
                 tail = text[-200:]
@@ -204,12 +218,30 @@ class ServerState(StrEnum):
     STARTING = "STARTING"
     RUNNING = "RUNNING"
     CRASHED = "CRASHED"
+    # Saving and shutting down (a /stop from the panel or from the game).
+    STOPPING = "STOPPING"
+    # The process ended before Minecraft finished loading: it never got to be on.
+    START_FAILED = "START_FAILED"
 
 
 class ServerProcessError(RuntimeError):
     """Java process operation error."""
 
     status_code = 503
+
+
+_BUSY_PHRASES = {
+    "inicio": "se está encendiendo",
+    "detención": "se está apagando",
+    "reinicio": "se está reiniciando",
+    "reinicio suave": "se está reiniciando",
+}
+
+
+def busy_message(operation: str | None) -> str:
+    """User-facing text for a lifecycle operation already running."""
+    phrase = _BUSY_PHRASES.get(operation or "", "está ocupado")
+    return f"Ahora el servidor {phrase}. Esperá a que termine."
 
 
 class ServerBusyError(ServerProcessError):
@@ -330,7 +362,11 @@ class MinecraftServerManager:
         self._lifecycle_operation: str | None = None
         self._restart_cancelled = False
         self._reader_tasks: set[asyncio.Task[None]] = set()
+        # Fire-and-forget work (Discord messages, crash listeners): kept so the GC cannot drop it mid-run.
+        self._background_tasks: set[asyncio.Task[Any]] = set()
         self._watcher_task: asyncio.Task[None] | None = None
+        # Wall-clock start of the current session; a crash report older than this is not its cause.
+        self._session_started_at: float | None = None
         self._stop_requested = False
         self._dev_mode: bool = False
         self._start_requested_time: float | None = None
@@ -346,8 +382,18 @@ class MinecraftServerManager:
         return self._state
 
     @property
+    def start_failed(self) -> bool:
+        """The last start ended before Minecraft finished loading."""
+        return self._state == ServerState.START_FAILED
+
+    @property
     def dev_mode(self) -> bool:
         return self._dev_mode
+
+    def _spawn(self, coroutine: Coroutine[Any, Any, Any], name: str) -> None:
+        task = asyncio.create_task(coroutine, name=name)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
     @property
     def is_running(self) -> bool:
@@ -367,9 +413,7 @@ class MinecraftServerManager:
     async def _exclusive_lifecycle(self, operation: str) -> AsyncIterator[None]:
         # Reject instead of queueing: a queued stop must never hit a freshly restarted server.
         if self._lifecycle_lock.locked():
-            raise ServerBusyError(
-                f"Ya hay una operación en curso ({self._lifecycle_operation}). Esperá a que termine."
-            )
+            raise ServerBusyError(busy_message(self._lifecycle_operation))
         async with self._lifecycle_lock:
             self._lifecycle_operation = operation
             try:
@@ -414,7 +458,22 @@ class MinecraftServerManager:
             report(progress, "start", "Abriendo el servidor de Minecraft.")
             return await self._start_process(dev_mode)
 
+    async def _finish_previous_session(self) -> None:
+        """Let the old process's watcher record its end before a new start overwrites the session flags.
+
+        The watcher also drains the old console reader, so the console file is not truncated while
+        it still has lines to read. Must run outside ``_lock``: the watcher takes it.
+        """
+        previous = self._watcher_task
+        if previous is None or previous.done() or self.is_running:
+            return
+        try:
+            await asyncio.wait_for(asyncio.shield(previous), timeout=15.0)
+        except Exception:  # noqa: BLE001 - never block a start on it (TimeoutError included)
+            logger.warning("The previous server session took too long to finish; starting anyway.")
+
     async def _start_process(self, dev_mode: bool) -> bool:
+        await self._finish_previous_session()
         async with self._lock:
             if self.is_running:
                 return False
@@ -449,6 +508,7 @@ class MinecraftServerManager:
             self._state = ServerState.STARTING
             self._stop_requested = False
             self._start_requested_time = asyncio.get_running_loop().time()
+            self._session_started_at = time.time()
             self._ready_notified = False
             self._adopted = False
             self._saw_stopping = self._saw_crash = False
@@ -472,21 +532,21 @@ class MinecraftServerManager:
                 finally:
                     console.close()
             except OSError as error:
-                self._state = ServerState.CRASHED
-                await self._record_log("system", f"No se pudo iniciar el servidor: {error}")
+                self._state = ServerState.START_FAILED
+                await self._record_log("system", f"No se pudo iniciar el servidor: {redact_personal_paths(str(error))}")
                 raise ServerProcessError("No se pudo crear el proceso del servidor.") from error
 
             process = self._process
-            self._create_reader_task(
+            reader = self._create_reader_task(
                 self._read_stream(_ConsoleFile(console_path, lambda: process.returncode is not None), "stdout")
             )
             self._watcher_task = asyncio.create_task(
-                self._watch_process(self._process), name="minecraft-process-watcher"
+                self._watch_process(process, reader), name="minecraft-process-watcher"
             )
-            await asyncio.to_thread(self._external_detector.remember_panel_process, self._process.pid)
+            await asyncio.to_thread(self._external_detector.remember_panel_process, process.pid)
             await self._broadcast_status()
             if not self._dev_mode:
-                asyncio.create_task(discord_service.send_server_starting(), name="discord-server-starting")
+                self._spawn(discord_service.send_server_starting(), "discord-server-starting")
             return True
 
     def _server_properties_path(self) -> Path:
@@ -578,13 +638,15 @@ class MinecraftServerManager:
             ready = await self._refresh_players_from_rcon() or ready
             self._ready_notified = ready
             self._state = ServerState.RUNNING if ready else ServerState.STARTING
-            self._create_reader_task(
+            with contextlib.suppress(psutil.Error):
+                self._session_started_at = found.create_time()
+            reader = self._create_reader_task(
                 self._read_stream(
                     _ConsoleFile(console_path, lambda: process.returncode is not None, position), "stdout"
                 )
             )
             self._watcher_task = asyncio.create_task(
-                self._watch_process(process), name="minecraft-process-watcher"
+                self._watch_process(process, reader), name="minecraft-process-watcher"
             )
         await self.log_system("El servidor siguió encendido mientras el panel estaba cerrado. Lo retomamos.")
         await self._broadcast_status()
@@ -629,6 +691,11 @@ class MinecraftServerManager:
             logger.info("user_jvm_args.txt is protected in craftpanel.txt; its memory is left as it is.")
         except OSError as error:
             raise ServerProcessError(f"No se pudo poner la memoria en user_jvm_args.txt: {error}") from error
+        except ValueError as error:
+            raise ServerSettingsFileError(
+                "No pudimos preparar la memoria del servidor en user_jvm_args.txt. "
+                "Abrilo con el Bloc de notas, revisá que esté bien y guardalo de nuevo."
+            ) from error
 
     async def stop(self) -> bool:
         """Request a clean stop through the Minecraft console."""
@@ -639,7 +706,15 @@ class MinecraftServerManager:
         if not self.is_running:
             return False
         self._stop_requested = True
-        await self.send_command("/stop")
+        try:
+            await self.send_command("/stop")
+        except BaseException:
+            # The stop never reached the server: a later exit is not a requested one.
+            self._stop_requested = False
+            raise
+        if self._state in (ServerState.RUNNING, ServerState.STARTING):
+            self._state = ServerState.STOPPING
+            await self._broadcast_status()
         return True
 
     async def restart(self, dev_mode: bool | None = None, progress: ProgressCallback | None = None) -> bool:
@@ -649,6 +724,7 @@ class MinecraftServerManager:
         ``progress`` receives the ``stop`` and ``start`` steps of :data:`RESTART_STEPS`.
         """
         async with self._exclusive_lifecycle("reinicio"):
+            self._restart_cancelled = False
             return await self._restart_process(self._dev_mode if dev_mode is None else dev_mode, progress)
 
     async def graceful_restart(
@@ -662,6 +738,8 @@ class MinecraftServerManager:
         ``progress`` receives the steps of :data:`GRACEFUL_RESTART_STEPS` except ``ready``.
         """
         async with self._exclusive_lifecycle("reinicio suave"):
+            # Reset on entry, before the countdown: a kill during it must cancel this restart.
+            self._restart_cancelled = False
             target_dev_mode = self._dev_mode if dev_mode is None else dev_mode
             if self.is_running:
                 await self._announce_restart(countdown_seconds, progress)
@@ -692,7 +770,6 @@ class MinecraftServerManager:
             pass
 
     async def _restart_process(self, dev_mode: bool, progress: ProgressCallback | None = None) -> bool:
-        self._restart_cancelled = False
         if self.is_running:
             report(progress, "stop", "Esperando a que el servidor se apague.")
             await self._request_stop()
@@ -830,6 +907,8 @@ class MinecraftServerManager:
         while asyncio.get_running_loop().time() < deadline:
             if self._state == ServerState.RUNNING:
                 return
+            if self._state == ServerState.STOPPING:
+                raise ServerProcessError("El servidor se está apagando.")
             if not self.is_running:
                 raise ServerProcessError("El servidor se cerró antes de terminar de encender.")
             await asyncio.sleep(0.2)
@@ -841,10 +920,11 @@ class MinecraftServerManager:
         if process is not None and process.returncode is None:
             await process.wait()
 
-    def _create_reader_task(self, coroutine: Coroutine[Any, Any, None]) -> None:
+    def _create_reader_task(self, coroutine: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
         task = asyncio.create_task(coroutine)
         self._reader_tasks.add(task)
         task.add_done_callback(self._reader_tasks.discard)
+        return task
 
     async def _read_stream(self, stream: asyncio.StreamReader, stream_name: str) -> None:
         # Read raw chunks instead of ``readline``: a single console line longer
@@ -869,7 +949,7 @@ class MinecraftServerManager:
             await self._record_raw_line(stream_name, buffer)
 
     async def _record_raw_line(self, stream_name: str, raw_line: bytes, *, truncated: bool = False) -> None:
-        line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+        line = _decode_console(raw_line).rstrip("\r\n")
         if truncated:
             line += " … (línea recortada, era demasiado larga)"
         try:
@@ -878,43 +958,62 @@ class MinecraftServerManager:
             # One bad line must never stop draining the pipe.
             logger.exception("Could not process a console line")
 
-    async def _watch_process(self, process: asyncio.subprocess.Process | AdoptedProcess) -> None:
+    async def _watch_process(
+        self,
+        process: asyncio.subprocess.Process | AdoptedProcess,
+        reader: asyncio.Task[None] | None = None,
+    ) -> None:
         exit_code = await process.wait()
-        for task in tuple(self._reader_tasks):
+        # Only this process's own reader: the next session's reader must not delay or be awaited here.
+        if reader is not None:
             with contextlib.suppress(asyncio.CancelledError, Exception):
-                await task
+                await reader
 
         async with self._lock:
             if self._process is not process:
+                # Replaced before this watcher finished (start waits for it, so this is a timeout path).
+                logger.warning("A previous server process ended after a new one was started.")
                 return
             self._process = None
+            was_ready = self._ready_notified
+            session_started_at = self._session_started_at
             self._online_players.clear()
             self._ready_notified = False
             self._start_requested_time = None
             self._last_join_notified.clear()
             self._last_leave_notified.clear()
             self._last_death_notified.clear()
-            # A server taken back has no exit code: its log tells a /stop from a crash.
-            stopped = self._stop_requested or (self._adopted and self._saw_stopping and not self._saw_crash)
-            self._state = ServerState.STOPPED if stopped else ServerState.CRASHED
+            # An exit code of 0 (or unknown, for a server taken back) after "Stopping the server" with no
+            # crash line is a /stop, also one typed in the game. Otherwise the log decides.
+            clean_exit = self._saw_stopping and not self._saw_crash and exit_code in (0, None)
+            if self._stop_requested or clean_exit:
+                self._state = ServerState.STOPPED
+            elif not was_ready:
+                self._state = ServerState.START_FAILED
+            else:
+                self._state = ServerState.CRASHED
             self._adopted = False
 
         await asyncio.to_thread(self._external_detector.forget_panel_process)
         ending = f" con código {exit_code}" if exit_code is not None else ""
         await self._record_log("system", f"Proceso del servidor finalizado{ending}.")
+        if self._state == ServerState.START_FAILED:
+            await self._record_log(
+                "system", "El servidor se cerró antes de terminar de encender. Revisá los últimos mensajes de la consola."
+            )
         await self._broadcast_status()
         if not self._dev_mode:
             if self._state == ServerState.STOPPED:
-                asyncio.create_task(discord_service.send_server_stopped(), name="discord-server-stopped")
-            else:
-                report = await crash_analyzer.get_latest_crash_report()
-                asyncio.create_task(discord_service.send_crash(report), name="discord-server-crashed")
-        # Test runs (dev mode) never trigger automatic restarts.
+                self._spawn(discord_service.send_server_stopped(), "discord-server-stopped")
+            elif self._state == ServerState.CRASHED:
+                crash_report = await crash_analyzer.get_latest_crash_report(since=session_started_at)
+                self._spawn(discord_service.send_crash(crash_report), "discord-server-crashed")
+        # Test runs (dev mode) never trigger automatic restarts; neither does a server that never came up.
         crashed = self._state == ServerState.CRASHED and not self._dev_mode
         self._dev_mode = False
         if crashed:
             for listener in tuple(self._crash_listeners):
-                asyncio.create_task(listener(), name="server-crash-listener")
+                self._spawn(listener(), "server-crash-listener")
 
     async def _record_log(self, stream: str, message: str) -> None:
         # Java and mods print absolute paths; never show the host's user folder in the console.
@@ -927,10 +1026,17 @@ class MinecraftServerManager:
             seq=self._log_seq,
         )
         self._log_buffer.append(line)
-        if _STOPPING_RE.search(message):
-            self._saw_stopping = True
-        if _CRASH_RE.search(message):
-            self._saw_crash = True
+        if not self._replaying:
+            # Replayed history from an adopted server must not set these flags: an old
+            # "Stopping the server" line would otherwise mislabel a later crash as a clean stop.
+            if _STOPPING_RE.search(message):
+                self._saw_stopping = True
+                if self._state in (ServerState.RUNNING, ServerState.STARTING):
+                    # A /stop typed in the game (or by a plugin) shows up here first.
+                    self._state = ServerState.STOPPING
+                    await self._broadcast_status()
+            if _CRASH_RE.search(message):
+                self._saw_crash = True
         if self._replaying:
             # Old lines shown again after taking a server back: no joins, no Discord messages.
             await self._websocket_manager.broadcast_json({"type": "log", "line": asdict(line)})
@@ -939,7 +1045,8 @@ class MinecraftServerManager:
         # Detect when the server finishes starting up ("Done (X.XXs)!")
         if not self._ready_notified and _SERVER_READY_RE.search(message):
             self._ready_notified = True
-            self._state = ServerState.RUNNING
+            if self._state != ServerState.STOPPING:
+                self._state = ServerState.RUNNING
             await self._broadcast_status()
 
             if not self._dev_mode:
@@ -954,9 +1061,9 @@ class MinecraftServerManager:
                         conn_addr = json.loads(conn_file.read_text(encoding="utf-8")).get("public_address")
                     except Exception:
                         pass
-                asyncio.create_task(
+                self._spawn(
                     discord_service.send_server_started(public_address=conn_addr, elapsed_seconds=elapsed_sec),
-                    name="discord-server-started",
+                    "discord-server-started",
                 )
 
         # Track player join and leave events (debounced against duplicates)
@@ -968,7 +1075,7 @@ class MinecraftServerManager:
                 self._last_join_notified[player_name] = now_ts
                 self._online_players[player_name] = line.timestamp
                 if not self._dev_mode:
-                    asyncio.create_task(discord_service.send_player_join(player_name), name="discord-player-join")
+                    self._spawn(discord_service.send_player_join(player_name), "discord-player-join")
         else:
             leave_m = _PLAYER_LEAVE_RE.search(message)
             if leave_m:
@@ -978,7 +1085,7 @@ class MinecraftServerManager:
                     self._last_leave_notified[player_name] = now_ts
                     self._online_players.pop(player_name, None)
                     if not self._dev_mode:
-                        asyncio.create_task(discord_service.send_player_leave(player_name), name="discord-player-leave")
+                        self._spawn(discord_service.send_player_leave(player_name), "discord-player-leave")
             else:
                 death_m = _PLAYER_DEATH_RE.search(message)
                 if death_m:
@@ -988,7 +1095,7 @@ class MinecraftServerManager:
                     if now_ts - self._last_death_notified.get(player_name, 0.0) > 4.0:
                         self._last_death_notified[player_name] = now_ts
                         if not self._dev_mode:
-                            asyncio.create_task(discord_service.send_player_death(player_name, death_text), name="discord-player-death")
+                            self._spawn(discord_service.send_player_death(player_name, death_text), "discord-player-death")
                 else:
                     adv_m = _ADVANCEMENT_RE.search(message)
                     if adv_m:
@@ -997,7 +1104,7 @@ class MinecraftServerManager:
                         adv_title = adv_m.group(3)
                         adv_kind = "desafío" if "challenge" in adv_type_raw else ("meta" if "goal" in adv_type_raw else "logro")
                         if not self._dev_mode:
-                            asyncio.create_task(discord_service.send_advancement(player_name, adv_title, adv_kind), name="discord-player-adv")
+                            self._spawn(discord_service.send_advancement(player_name, adv_title, adv_kind), "discord-player-adv")
 
         await self._websocket_manager.broadcast_json({"type": "log", "line": asdict(line)})
 
@@ -1008,6 +1115,7 @@ class MinecraftServerManager:
                 "state": self._state,
                 "pid": self._process.pid if self._process else None,
                 "dev_mode": self._dev_mode,
+                "start_failed": self.start_failed,
             }
         )
 
