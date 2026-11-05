@@ -291,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
       allLoadedEvents = data.events || [];
       applyFiltersAndRender();
     } catch (e) {
-      crashesList.innerHTML = `<p class="py-12 text-center text-[#f3a79b]">No pudimos cargar la lista. ${esc(e.message)}</p>`;
+      crashesList.innerHTML = `<p class="py-12 text-center text-[#f3a79b]">No pudimos cargar la lista. Probá de nuevo en un momento.</p>`;
     }
   };
 
@@ -435,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `Fecha: ${selectedEvent.timestamp}`,
         `Tipo: ${b.label} [${selectedEvent.category}]`,
         `Motivo: ${selectedEvent.summary}`,
-        `Mod sospechoso: ${selectedEvent.suspected_mod || 'Ninguno identificado'}`,
+        `Mod sospechoso: ${selectedEvent.suspected_mod || 'no lo sabemos'}`,
         `Archivo fuente: ${selectedEvent.file_source}`,
         sessionFacts(selectedEvent) ? `Sesión: ${sessionFacts(selectedEvent)}` : '',
         (selectedEvent.timeline || []).length ? `\n=== QUÉ ESTABA PASANDO ===\n${selectedEvent.timeline.map((entry) => `${entry.time || ''} ${entry.text}`.trim()).join('\n')}` : '',

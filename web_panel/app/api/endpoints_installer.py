@@ -15,5 +15,5 @@ router = APIRouter(prefix="/server", tags=["installer"], dependencies=[Depends(g
 async def install_runtime() -> None:
     raise HTTPException(
         status_code=status.HTTP_410_GONE,
-        detail="Use the guided setup page to install a server and explicitly accept the Minecraft EULA.",
+        detail="Para instalar el servidor, usá la página de preparación y aceptá las reglas de Minecraft.",
     )

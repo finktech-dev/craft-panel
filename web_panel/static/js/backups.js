@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (issue) {
       empty.classList.add('hidden');
       list.classList.remove('hidden');
-      list.innerHTML = `<p class="py-6 text-[#f3a79b]">No pudimos leer las copias. ${escape(issue.message)}</p>`;
+      list.innerHTML = `<p class="py-6 text-[#f3a79b]">No pudimos leer las copias. Probá de nuevo en un momento.</p>`;
       Panel.toast(issue.message, 'error');
     }
   };
@@ -55,11 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
       target.innerHTML = `
         <p class="font-semibold text-zinc-50">${escape(report.cause)}</p>
         <p class="mt-1 leading-relaxed text-zinc-400">${escape(report.suggestion)}</p>
-        <p class="mt-3 text-sm text-zinc-500">Mod que pudo causarlo: ${escape(report.suspected_mod || 'no sabemos')} · <span class="font-mono text-xs">${escape(report.filename)}</span></p>`;
+        <p class="mt-3 text-sm text-zinc-500">Mod que pudo causarlo: ${escape(report.suspected_mod || 'no lo sabemos')} · <span class="font-mono text-xs">${escape(report.filename)}</span></p>`;
     } catch (issue) {
       target.innerHTML = issue.status === 404
         ? '<p class="text-zinc-400">No hubo cierres inesperados.</p>'
-        : `<p class="text-[#f3a79b]">No pudimos revisar. ${escape(issue.message)}</p>`;
+        : `<p class="text-[#f3a79b]">No pudimos revisar. Probá de nuevo en un momento.</p>`;
     }
   };
 

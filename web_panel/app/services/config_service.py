@@ -48,7 +48,7 @@ class ConfigService:
  def _read(self,p,rel):
   raw=p.read_text(encoding='utf-8'); fmt=p.suffix.lower().lstrip('.')
   try: data=tomlkit.parse(raw) if fmt=='toml' else (json5.loads(raw) if fmt in {'json','json5','jsonc'} else self._cfg(raw))
-  except Exception as e: raise ConfigServiceError(f'No se pudo parsear {rel}: {e}') from e
+  except Exception as e: raise ConfigServiceError(f'El archivo {rel} tiene un error de formato.') from e
   return ConfigDocument(path=rel,format=fmt,raw_content=raw,tree=self._node('root',data,'',None),fingerprint=_fingerprint(raw))
  def _cfg(self, raw):
   return {m.group(1).strip(): self._scalar(m.group(2).strip()) for m in re.finditer(r'^\s*([^#;=]+?)\s*=\s*(.*?)\s*$',raw,re.M)}
@@ -86,11 +86,11 @@ class ConfigService:
      for key in parts[:-1]: target=target[key]
      target[parts[-1]]=value
     content=tomlkit.dumps(doc)
-   except Exception as e: raise ConfigServiceError(f'No se pudo aplicar el cambio: {e}') from e
+   except Exception as e: raise ConfigServiceError('No pudimos aplicar el cambio en ese archivo.') from e
   if content is None: raise ConfigServiceError('No se recibió contenido para guardar.')
   if len(content.encode('utf-8'))>_MAX_CONFIG_BYTES: raise ConfigServiceError('El contenido es demasiado grande.')
   try: tomlkit.parse(content) if fmt=='toml' else (json5.loads(content) if fmt in {'json','json5','jsonc'} else self._cfg(content))
-  except Exception as e: raise ConfigServiceError(f'Sintaxis inválida: {e}') from e
+  except Exception as e: raise ConfigServiceError('El contenido tiene un error de formato. Revisá lo que escribiste.') from e
   self._atomic(p,content)
  def system_editor(self) -> str | None:
   """Plain name of the text editor this computer would use, or None when there is none."""

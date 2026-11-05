@@ -45,17 +45,17 @@ async def restrictions_catalog():
 async def restrictions_item_toggle(payload: RestrictionItemRequest):
     if payload.action == "remove":
         items = await restriction_service.remove_restricted_item(payload.item_id)
-        message = f"Ítem {payload.item_id} removido de la restricción."
+        message = "Objeto quitado de la lista."
     else:
         items = await restriction_service.add_restricted_item(payload.item_id)
-        message = f"Ítem {payload.item_id} restringido."
+        message = "Objeto agregado a la lista."
     return {"success": True, "items": items, "message": message}
 
 
 @router.delete("/restrictions/items/{item_id:path}")
 async def restrictions_item_delete(item_id: str):
     items = await restriction_service.remove_restricted_item(item_id)
-    return {"success": True, "items": items, "message": f"Ítem {item_id} removido de la restricción."}
+    return {"success": True, "items": items, "message": "Objeto quitado de la lista."}
 
 
 @router.post("/restrictions/mobs")
@@ -90,13 +90,13 @@ async def restrictions_villager_toggle(payload: RestrictionVillagerRequest):
 @router.get("/blacklist", response_model=BlacklistState)
 async def blacklist():
     items = restriction_service.get_restricted_items()
-    return BlacklistState(items=items, enforcement_available=True, message=f"{len(items)} ítems en la lista de bloqueo.")
+    return BlacklistState(items=items, enforcement_available=True, message=f"{len(items)} objetos bloqueados.")
 
 
 @router.post("/blacklist", response_model=BlacklistState)
 async def blacklist_add(payload: BlacklistItemRequest):
     items = await restriction_service.add_restricted_item(payload.item_id)
-    return BlacklistState(items=items, enforcement_available=True, message=f"{payload.item_id} agregado.")
+    return BlacklistState(items=items, enforcement_available=True, message="Objeto agregado a la lista.")
 
 
 @router.delete("/blacklist/{item_id:path}", response_model=BlacklistState)
@@ -105,4 +105,4 @@ async def blacklist_remove(item_id: str):
         from fastapi import HTTPException
         raise HTTPException(400, "ID de ítem inválido.")
     items = await restriction_service.remove_restricted_item(item_id)
-    return BlacklistState(items=items, enforcement_available=True, message=f"{item_id} quitado.")
+    return BlacklistState(items=items, enforcement_available=True, message="Objeto quitado de la lista.")

@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.Panel && window.Panel.toast) window.Panel.toast(label || 'Comando ejecutado con éxito.');
         if (res.message) logLP(res.message);
       } else {
-        const errMsg = (res && res.message) ? res.message : 'Error al ejecutar.';
+        const errMsg = (res && res.message) ? res.message : 'No pudimos hacerlo. Probá de nuevo en un momento.';
         if (window.Panel && window.Panel.toast) window.Panel.toast(errMsg, 'error');
         logLP(errMsg);
       }
