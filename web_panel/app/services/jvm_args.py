@@ -26,7 +26,7 @@ def apply_ram(configured: Settings, allocated_ram_gb: int) -> bool:
     target = jvm_args_path(configured)
     if not target.is_file():
         raise JvmArgsMissingError(str(target))
-    lines = target.read_text(encoding="utf-8").splitlines()
+    lines = target.read_text(encoding="utf-8", errors="surrogateescape").splitlines()
     maximum_line = f"-Xmx{allocated_ram_gb}G"
     initial_line = f"-Xms{min(2, allocated_ram_gb)}G"
     found_maximum = found_initial = False
@@ -49,7 +49,7 @@ def apply_ram(configured: Settings, allocated_ram_gb: int) -> bool:
     require_not_protected(target, configured=configured)
     temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
     try:
-        temporary.write_text("\n".join(updated) + "\n", encoding="utf-8")
+        temporary.write_text("\n".join(updated) + "\n", encoding="utf-8", errors="surrogateescape")
         os.replace(temporary, target)
     finally:
         if temporary.exists():
