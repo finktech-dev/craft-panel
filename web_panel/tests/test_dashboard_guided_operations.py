@@ -12,8 +12,10 @@ def test_dashboard_has_one_main_action_and_hides_risky_ones() -> None:
     assert 'id="hero-action"' in content
     assert 'id="create-backup"' in content
     assert 'id="graceful-restart"' in content
-    # Risky actions live inside "Más acciones", and the data-loss warning comes before the kill button.
-    assert content.index("Más acciones") < content.index('data-server-action="stop"')
+    # "Apagar" is a visible button beside the main action; the rest of the risky ones live inside "Más acciones".
+    assert content.index('id="hero-stop"') < content.index('<dialog id="server-actions"')
+    assert 'id="confirm-dialog"' in content
+    assert content.index("Más acciones") < content.index('data-server-action="kill"')
     assert content.index("se pierde") < content.index('data-server-action="kill"')
 
 
@@ -26,7 +28,8 @@ def test_dashboard_speaks_plainly() -> None:
 def test_dashboard_script_uses_existing_endpoints_with_confirmations() -> None:
     script = (_PANEL_ROOT / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
 
-    assert "window.confirm" in script
+    assert "confirmDialog(" in script
+    assert "Sí, apagar" in script and "No, seguir jugando" in script
     assert "/api/server/graceful-restart?countdown=10" in script
     assert "runJob('/api/backups'" in script
     assert "`/api/server/${action}`" in script
@@ -38,7 +41,7 @@ def test_long_operations_show_progress_where_they_started() -> None:
     templates = _PANEL_ROOT / "templates"
     scripts = _PANEL_ROOT / "static" / "js"
     jobs_script = (scripts / "jobs.js").read_text(encoding="utf-8")
-    assert "'/ws/terminal'" in jobs_script and "payload.type === 'job'" in jobs_script
+    assert "'/ws/terminal?history=0'" in jobs_script and "payload.type === 'job'" in jobs_script
     assert "/api/jobs" in jobs_script
     assert "Paso ${index + 1} de ${total}" in jobs_script
 
