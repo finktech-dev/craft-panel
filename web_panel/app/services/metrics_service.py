@@ -25,6 +25,9 @@ class MetricsService:
     ) -> None:
         self._manager = manager
         self._settings = configured_settings
+        # cpu_percent(interval=None) compares with the previous call on the SAME object:
+        # a fresh Process on every call would always report 0.0.
+        self._cached_process: psutil.Process | None = None
 
     def get_server_metrics(self) -> ServerMetrics:
         """Return zeros when no process is reachable, keeping the real status."""
@@ -33,7 +36,7 @@ class MetricsService:
             return self._empty_metrics(state)
 
         try:
-            process = self._get_java_process(self._manager.process_pid)
+            process = self._java_process(self._manager.process_pid)
             memory_info = process.memory_info()
             ram_used_mb = round(memory_info.rss / _MEBIBYTE, 2)
             ram_total_mb = float(self._settings.effective_ram_gb * 1024)
@@ -50,6 +53,19 @@ class MetricsService:
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as error:
             logger.warning("No se pudieron obtener métricas del proceso Minecraft: %s", error)
             return self._empty_metrics(state)
+
+    def _java_process(self, root_pid: int) -> psutil.Process:
+        process = self._get_java_process(root_pid)
+        cached = self._cached_process
+        # Same PID as last time: keep the old object so its CPU sample has a baseline.
+        if cached is not None and cached.pid == process.pid:
+            try:
+                if cached.is_running() and cached.create_time() == process.create_time():
+                    return cached
+            except psutil.Error:
+                pass
+        self._cached_process = process
+        return process
 
     @staticmethod
     def _get_java_process(root_pid: int) -> psutil.Process:
