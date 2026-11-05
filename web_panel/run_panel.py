@@ -47,6 +47,28 @@ def _open_browser_when_ready() -> None:
         except OSError:
             time.sleep(0.25)
 
+def _panel_url() -> str:
+    return f"http://{_browser_host(settings.panel_host)}:{settings.panel_port}"
+
+
+def _panel_already_running() -> bool:
+    """True when this panel answers on its own port, so a second copy is not needed."""
+    try:
+        with urllib.request.urlopen(f"{_panel_url()}/health", timeout=1.5) as response:
+            return response.status == 200
+    except OSError:
+        return False
+
+
+def _port_is_busy() -> bool:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.settimeout(1.0)
+            return probe.connect_ex((_browser_host(settings.panel_host).strip("[]"), settings.panel_port)) == 0
+    except OSError:
+        return False
+
+
 def _vpn_sockets() -> list[socket.socket] | None:
     """Loopback plus each VPN address, when the owner opened the panel to the VPN.
 
@@ -115,6 +137,17 @@ def _stop_server_when_window_closes() -> None:
 
 def main() -> None:
     _configure_windows_event_loop()
+
+    if _panel_already_running():
+        print(f"\n  El panel ya está abierto en {_panel_url()}")
+        print("  Abrimos el navegador para que sigas ahí.\n")
+        webbrowser.open(_panel_url())
+        return
+    if _port_is_busy():
+        print(f"\n  [Error] Otro programa está usando el puerto {settings.panel_port}, así que el panel no puede arrancar.")
+        print("  Cerrá ese programa (o otra ventana del panel) y volvé a intentarlo.\n")
+        sys.exit(1)
+
     _stop_server_when_window_closes()
 
     threading.Thread(target=_open_browser_when_ready, daemon=True, name="open-panel-browser").start()
@@ -131,6 +164,11 @@ def main() -> None:
         reload=False,
     )
     server = uvicorn.Server(config)
+
+    print("\n" + "=" * 50)
+    print(f"  Panel: {_panel_url()}")
+    print("  Si el navegador no se abre solo, copiá esa dirección.")
+    print("=" * 50 + "\n")
 
     if settings.admin_pin_generated_this_start:
         print("[Panel Web] Se generó una contraseña de administrador nueva.")

@@ -51,6 +51,9 @@ if not exist "%PYTHON%" goto :venv_error
 echo  Revisando las dependencias del panel...
 "%PYTHON%" -m pip install --disable-pip-version-check -q -r "%PANEL%\requirements.txt"
 if "%errorlevel%"=="0" goto :run_panel
+rem No Internet is fine when everything the panel needs is already installed.
+"%PYTHON%" -c "import fastapi, uvicorn" >nul 2>nul <nul
+if "%errorlevel%"=="0" goto :deps_offline
 rem A venv without a working pip cannot repair itself: create it again once.
 "%PYTHON%" -m pip --version >nul 2>nul <nul
 if "%errorlevel%"=="0" goto :deps_error
@@ -60,6 +63,10 @@ echo  El entorno de Python de la carpeta .venv esta incompleto. Se va a crear de
 rmdir /s /q "%VENV%" >nul 2>nul
 if exist "%VENV%" goto :venv_locked
 goto :create_venv
+
+:deps_offline
+echo  No se pudieron buscar actualizaciones de las dependencias (puede que no haya Internet).
+echo  Se sigue con lo que ya esta instalado.
 
 :run_panel
 
@@ -119,16 +126,19 @@ exit /b 1
 
 :deps_error
 echo.
-echo  [ERROR] No se pudieron instalar las dependencias del panel.
-echo  Revisa tu conexion a Internet y vuelve a abrir este archivo.
-echo  Si el error se repite, borra la carpeta .venv y vuelve a intentarlo.
+echo  [ERROR] No se pudo preparar el panel porque faltan piezas y no se pudieron descargar.
+echo  La primera vez hace falta Internet: conectate y vuelve a abrir este archivo.
+echo  Si ya estas conectado y sigue igual, borra la carpeta .venv y vuelve a abrirlo.
 echo.
 pause
 exit /b 1
 
 :panel_error
 echo.
-echo  [ERROR] El panel se cerro con un error. Revisa los mensajes de arriba.
+echo  [ERROR] El panel se cerro por un problema.
+echo  Mira los mensajes de arriba: la ultima linea suele decir que paso.
+echo  Si no la entendes, saca una foto de esta ventana y mostrasela a quien te ayuda.
+echo  Para volver a probar, cierra esta ventana y abre iniciar_panel.bat otra vez.
 echo.
 pause
 exit /b 1
