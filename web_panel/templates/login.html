@@ -16,6 +16,10 @@
       <code id="initial-admin-pin" class="min-w-0 flex-1 overflow-x-auto rounded-lg bg-zinc-900 px-4 py-3 font-mono text-sm text-zinc-100">{{ initial_admin_pin }}</code>
       <button id="copy-initial-pin" type="button" class="v2-button btn-quiet">Copiar</button>
     </div>
+    <label class="mt-4 flex items-start gap-3 text-sm text-zinc-300" for="initial-pin-saved">
+      <input id="initial-pin-saved" type="checkbox" class="mt-1 h-4 w-4 accent-emerald-400">
+      <span>Ya la guardé en un lugar seguro. Recién después se habilita el botón «Entrar».</span>
+    </label>
   </div>
   {% endif %}
   <form id="login-form" class="mt-8 space-y-4">
@@ -31,8 +35,18 @@
     </div>
     {% endif %}
     <p id="login-error" class="min-h-5 text-sm text-[#f3a79b]" role="alert"></p>
-    <button class="v2-button btn-primary w-full" type="submit">Entrar</button>
+    <button id="login-submit" class="v2-button btn-primary w-full" type="submit"{% if initial_admin_pin %} disabled{% endif %}>Entrar</button>
   </form>
+  <details class="mt-6 rounded-xl border border-zinc-800 p-4 text-sm text-zinc-400">
+    <summary class="cursor-pointer font-medium text-zinc-300">¿Olvidaste la contraseña?</summary>
+    <ol class="mt-3 list-decimal space-y-2 pl-5 leading-relaxed">
+      <li>Cerrá la ventana negra de <strong class="text-zinc-200">iniciar_panel.bat</strong>, si está abierta.</li>
+      <li>En la carpeta del panel, abrí el archivo <strong class="text-zinc-200">restablecer_contrasena_panel.bat</strong> con doble clic.</li>
+      <li>Dejá vacío el campo para que te cree una contraseña nueva, o escribí la que quieras. Si es nueva, se muestra una sola vez: copiala.</li>
+      <li>Volvé a abrir <strong class="text-zinc-200">iniciar_panel.bat</strong> y entrá con la nueva contraseña.</li>
+    </ol>
+    <p class="mt-3">Esto solo cambia la contraseña del panel. Tu mundo y tus archivos no se tocan.</p>
+  </details>
 </section>
 {% endblock %}
 {% block scripts %}<script defer src="/static/js/login.js"></script>{% endblock %}
