@@ -25,18 +25,23 @@ class CrashAnalyzer:
         assert self._settings.crash_reports_directory is not None
         return self._settings.crash_reports_directory
 
-    async def get_latest_crash_report(self) -> CrashReportSummary | None:
+    async def get_latest_crash_report(self, since: float | None = None) -> CrashReportSummary | None:
+        """Newest report, or ``None``; with ``since`` (epoch seconds) older reports are ignored."""
         if not self.crash_reports_directory.is_dir():
             return None
-        report = await asyncio.to_thread(self._find_latest_report)
+        report = await asyncio.to_thread(self._find_latest_report, since)
         if report is None:
             return None
         contents = await asyncio.to_thread(report.read_text, encoding="utf-8", errors="replace")
         return self._analyze(report, contents)
 
-    def _find_latest_report(self) -> Path | None:
+    def _find_latest_report(self, since: float | None = None) -> Path | None:
         reports = [path for path in self.crash_reports_directory.glob("*.txt") if path.is_file()]
-        return max(reports, key=lambda path: path.stat().st_mtime, default=None)
+        latest = max(reports, key=lambda path: path.stat().st_mtime, default=None)
+        # A report from an earlier session is not the cause of this shutdown.
+        if latest is not None and since is not None and latest.stat().st_mtime < since:
+            return None
+        return latest
 
     @staticmethod
     def _analyze(report: Path, contents: str) -> CrashReportSummary:
@@ -75,21 +80,23 @@ def _diagnose(
     evidence = f"{description or ''}\n{trace_cause or ''}\n{contents}".casefold()
     if "outofmemoryerror" in evidence or "java heap space" in evidence:
         return (
-            "El proceso se quedó sin memoria disponible.",
-            "Reducí la carga de chunks/entidades y revisá la RAM asignada antes de aumentar -Xmx.",
+            "Al juego le faltó memoria para trabajar.",
+            "Si pasa seguido, usá menos mods pesados o cerrá otros programas de la computadora.",
         )
     if any(term in evidence for term in ("zipexception", "corrupt", "invalid or corrupt jar")):
         return (
-            "Se detectó un archivo JAR corrupto o incompleto.",
-            "Volvé a descargar el mod sospechoso desde su fuente oficial y verificá que sea compatible con la versión del servidor.",
+            "Un archivo de un mod está roto o quedó incompleto.",
+            "Bajá de nuevo ese mod desde su página oficial y fijate que sea para la misma versión de tu servidor.",
         )
     if suspected_mod or any(term in evidence for term in ("modloadingexception", "mixin", "failed to load mod")):
         return (
-            f"Probable conflicto o incompatibilidad de mod{f': {suspected_mod}' if suspected_mod else ''}.",
-            "Comprobá dependencias y compatibilidad con el cargador de mods del servidor; probá desactivar el mod sospechoso y reiniciar.",
+            f"Parece que {f'el mod {suspected_mod}' if suspected_mod else 'un mod'} no es compatible.",
+            "Sacalo de la carpeta de mods, encendé de nuevo y avisales a tus amigos.",
         )
-    detail = (trace_cause or description or "No se encontró una causa específica en el reporte.").strip()
-    return (detail[:500], "Revisá el reporte completo y los últimos logs antes de cambiar mods o configuración.")
+    return (
+        "El servidor se cerró por un error que no reconocemos.",
+        "Si pasa de nuevo, no cambies varias cosas a la vez y guardá el archivo de reporte para quien te ayuda.",
+    )
 
 
 crash_analyzer = CrashAnalyzer()
