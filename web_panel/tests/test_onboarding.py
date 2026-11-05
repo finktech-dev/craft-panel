@@ -27,7 +27,7 @@ def test_installer_never_overwrites_an_existing_runtime(tmp_path):
     (configured.server_directory / "server.jar").write_bytes(b"runtime")
     service = InstallerService(configured_settings=configured, server=StoppedServer())
 
-    with pytest.raises(InstallerConflictError, match="already exists"):
+    with pytest.raises(InstallerConflictError, match="Ya hay un servidor"):
         service._assert_runtime_is_not_already_installed()
 def test_installer_allows_a_stale_launch_script_without_a_runtime(tmp_path):
     configured = Settings(project_root=tmp_path)
@@ -156,7 +156,7 @@ async def test_vanilla_manifest_network_error_is_reported_as_installer_error(mon
     monkeypatch.setattr("app.services.installer_service.httpx.AsyncClient", FailingAsyncClient)
     service = InstallerService(configured_settings=Settings(project_root=tmp_path), server=StoppedServer())
 
-    with pytest.raises(InstallerServiceError, match="official server manifest"):
+    with pytest.raises(InstallerServiceError, match="conectarnos con Mojang"):
         await service._install_vanilla("1.21.1")
 
 
@@ -167,7 +167,7 @@ async def test_fabric_manifest_network_error_is_reported_as_installer_error(monk
     monkeypatch.setattr("app.services.installer_service.httpx.AsyncClient", FailingAsyncClient)
     service = InstallerService(configured_settings=Settings(project_root=tmp_path), server=StoppedServer())
 
-    with pytest.raises(InstallerServiceError, match="Fabric installer manifest"):
+    with pytest.raises(InstallerServiceError, match="conectarnos con Fabric"):
         await service._install_fabric("1.21.1")
 
 
@@ -268,7 +268,7 @@ async def test_neoforge_download_with_a_wrong_checksum_is_discarded(monkeypatch,
     configured = Settings(project_root=tmp_path)
     service = InstallerService(configured_settings=configured, server=StoppedServer(), catalog=FakeCatalog({"1.21.1": "21.1.264"}))
 
-    with pytest.raises(InstallerServiceError, match="checksum"):
+    with pytest.raises(InstallerServiceError, match="descartamos"):
         await service._install_neoforge("1.21.1")
     assert not configured.neoforge_installer_path.exists()
 

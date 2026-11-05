@@ -113,7 +113,7 @@ async def test_login_answers_where_to_go(tmp_path: Path, monkeypatch) -> None:
         mark_admin_password_claimed=lambda: None,
     ))
     monkeypatch.setattr(endpoints_auth, "is_valid_admin_pin", lambda pin: True)
-    monkeypatch.setattr(endpoints_auth, "totp_manager", SimpleNamespace(verify_login_code=lambda code: True))
+    monkeypatch.setattr(endpoints_auth, "totp_manager", SimpleNamespace(is_enabled=False, verify_login_code=lambda code: True))
     monkeypatch.setattr(endpoints_auth, "mark_session_as_admin", lambda request: None)
     monkeypatch.setattr(endpoints_auth, "server_manager", FakeServer(False))
     request = Request({"type": "http", "headers": [(b"host", b"127.0.0.1:8080")], "client": ("127.0.0.1", 5000)})
