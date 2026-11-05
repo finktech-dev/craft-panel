@@ -37,6 +37,7 @@ from app.services.server_process import (
     ServerBusyError,
     ServerProcessError,
     ServerStartTimeoutError,
+    busy_message,
     server_manager,
 )
 from app.services.server_properties_service import server_properties_service
@@ -70,7 +71,7 @@ def _require_playit_ready() -> None:
     if settings.playit_enabled and playit_service.needs_setup and not playit_service.can_start_external_agent:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Conectá tu cuenta de Playit antes de iniciar, o elegí Solo red local en Preparar servidor.",
+            detail="Conectá tu cuenta de Playit antes de iniciar, o elegí «Jugar solo en esta casa» en Ajustes > Acceso por Internet > Revisar el acceso.",
         )
 
 
@@ -141,6 +142,7 @@ async def launch_start_job(*, dev_mode: bool = False, title: str = "Encender el 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El servidor ya está en ejecución.")
     _raise_if_busy()
     await _raise_if_settings_file_blocks_start()
+    await _raise_if_java_unusable()
     await _raise_if_external_server()
     _require_playit_ready()
 
@@ -197,12 +199,31 @@ async def _raise_if_settings_file_blocks_start() -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=problem)
 
 
+async def _raise_if_java_unusable() -> None:
+    """No Java at all: say so now instead of letting run.bat fail after the start.
+
+    Only a truly missing Java blocks the start. A present-but-"unusable" candidate is
+    left to the start script, which falls back to the configured path or PATH just like
+    a normal launch, so the preflight is never stricter than the real start.
+    """
+    from app.services.runtime_discovery import RuntimeDiscoveryService  # noqa: PLC0415 - avoids an import cycle
+
+    try:
+        java = await asyncio.to_thread(RuntimeDiscoveryService(settings).server_java)
+    except Exception:  # noqa: BLE001 - a detection failure must not block a start; the script still decides
+        logger.warning("Java preflight failed; starting anyway.", exc_info=True)
+        return
+    if java.state == "missing":
+        hint = "" if "Descargar Java" in java.message else " Con \"Descargar Java\" en el asistente de configuración lo resolvés."
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{java.message}{hint}")
+
+
 def _raise_if_busy() -> None:
     """Fail fast before side effects such as starting Playit."""
     if operation := server_manager.lifecycle_operation:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Ya hay una operación en curso ({operation}). Esperá a que termine.",
+            detail=busy_message(operation),
         )
 
 
@@ -395,7 +416,7 @@ async def download_server_log() -> Response:
     try:
         text = await asyncio.to_thread(_read_log_for_download, path)
     except OSError as error:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"No se pudo leer el registro: {error.strerror}") from error
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No pudimos leer el registro del servidor. Encendelo una vez y probá de nuevo.") from error
     return Response(
         content=text.encode("utf-8"),
         media_type="text/plain; charset=utf-8",
@@ -516,24 +537,21 @@ async def get_health_summary() -> dict[str, Any]:
     metrics = metrics_service.get_server_metrics()
     is_running = server_manager.is_running
 
-    # Estimated TPS and MSPT
-    tps = 20.0 if is_running else 0.0
-    mspt = round(min(50.0, max(15.0, metrics.cpu_percent * 0.4)), 1) if is_running else 0.0
     if not is_running:
         health_status = "DETENIDO"
         health_label = "Servidor detenido"
         health_color = "zinc"
     elif metrics.cpu_percent > 85.0 or metrics.ram_percent > 95.0:
         health_status = "CRITICO"
-        health_label = "Carga alta / Riesgo de lag"
+        health_label = "Va lento: la computadora está muy ocupada"
         health_color = "rose"
     elif metrics.cpu_percent > 60.0 or metrics.ram_percent > 85.0:
         health_status = "MODERADO"
-        health_label = "Carga moderada"
+        health_label = "Va algo lento: la computadora está bastante ocupada"
         health_color = "amber"
     else:
         health_status = "EXCELENTE"
-        health_label = "Fluido (20.0 TPS)"
+        health_label = "Funcionando bien"
         health_color = "emerald"
 
     # Latest backup
@@ -570,8 +588,6 @@ async def get_health_summary() -> dict[str, Any]:
 
     return {
         "is_running": is_running,
-        "tps": tps,
-        "mspt": mspt,
         "health_status": health_status,
         "health_label": health_label,
         "health_color": health_color,
