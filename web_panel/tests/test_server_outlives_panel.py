@@ -228,7 +228,9 @@ async def test_console_goes_to_a_file_and_a_restarted_panel_takes_the_server_bac
     # The server ends with a /stop (sent here through the first session's input): not a crash.
     await first.send_command("stop")
     await _wait_for(lambda: not second.is_running)
-    await _wait_for(lambda: second.state != ServerState.RUNNING)
+    # The console shows "Stopping the server" first, so the state passes through
+    # STOPPING; wait for the terminal state instead of just "no longer RUNNING".
+    await _wait_for(lambda: second.state == ServerState.STOPPED)
     assert second.state == ServerState.STOPPED
     assert any("Stopping the server" in message for message in _messages(second))
 
