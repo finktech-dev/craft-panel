@@ -49,7 +49,7 @@
 
   const connect = () => {
     if (socket || !wanted() || typeof WebSocket === 'undefined') return;
-    try { socket = new WebSocket(Panel.websocketUrl('/ws/terminal')); } catch { socket = null; return; }
+    try { socket = new WebSocket(Panel.websocketUrl('/ws/terminal?history=0')); } catch { socket = null; return; }
     socket.addEventListener('open', () => { list().catch(() => {}); });
     socket.addEventListener('message', (event) => {
       let payload = null;

@@ -24,15 +24,17 @@ async def terminal_socket(websocket: WebSocket) -> None:
         await websocket.close(code=1008, reason="Autenticación de administrador requerida.")
         return
     await connection_manager.connect(websocket)
-    await connection_manager.send_json(
-        websocket,
-        {
-            "type": "history",
-            "lines": server_manager.history,
-            "state": server_manager.state,
-            "session": server_manager.log_session,
-        },
-    )
+    # Pages that only follow background jobs do not need the console history.
+    if websocket.query_params.get("history") != "0":
+        await connection_manager.send_json(
+            websocket,
+            {
+                "type": "history",
+                "lines": server_manager.history,
+                "state": server_manager.state,
+                "session": server_manager.log_session,
+            },
+        )
 
     try:
         while True:
