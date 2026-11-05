@@ -162,7 +162,7 @@ def test_tools_java_wins_a_tie_because_it_is_checked_first(host) -> None:
     status = _service(configured, environ, runner).java_status("1.21.1")
 
     assert status.source == "tools/java"
-    assert status.message == "Encontramos Java 21 de Adoptium en la carpeta tools/java del panel. Sirve para Minecraft 1.21.1."
+    assert status.message == "Encontramos Java 21 de Adoptium, el que bajó el panel. Sirve para Minecraft 1.21.1."
 
 
 def test_order_is_tools_java_home_path_registry_folders_launcher(host) -> None:
