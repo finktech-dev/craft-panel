@@ -292,7 +292,7 @@ class LuckPermsService:
         try:
             await server_manager.send_command(f"/lp user {player} parent set {target}")
         except Exception as error:  # noqa: BLE001
-            return {"success": False, "message": f"Error al ejecutar: {error}"}
+            return {"success": False, "message": "No pudimos cambiar el rango. Fijate que el servidor esté encendido y probá otra vez."}
         return {"success": True, "message": f"{player} ahora tiene el rango {names.get(target, target)}."}
 
     def _is_enabled(self) -> bool:
@@ -315,7 +315,7 @@ class LuckPermsService:
             except Exception as e:
                 return LuckPermsEditorResponse(
                     success=False,
-                    message=f"No se pudo enviar el comando a la consola: {e}",
+                    message="No pudimos abrir el editor de rangos. Fijate que el servidor esté encendido y probá otra vez.",
                 )
 
             # Wait up to 8 seconds for the URL to show up in the log buffer
@@ -343,7 +343,7 @@ class LuckPermsService:
 
             return LuckPermsEditorResponse(
                 success=False,
-                message="Se envió /lp editor pero no se detectó el enlace en la consola. Podés revisar la pestaña 'Consola en vivo'.",
+                message="No pudimos abrir el editor de rangos. Fijate que el servidor esté encendido y probá otra vez en un momento.",
             )
 
     async def execute_command(self, cmd: str) -> dict[str, Any]:
@@ -372,7 +372,7 @@ class LuckPermsService:
         except Exception as e:
             return {
                 "success": False,
-                "message": f"Error al ejecutar: {e}",
+                "message": "No pudimos enviar la orden al servidor. Fijate que esté encendido y probá otra vez.",
             }
 
     @property
@@ -478,7 +478,7 @@ class LuckPermsService:
             return {
                 "success": False,
                 "enabled": enabled,
-                "message": f"Error al enviar comandos en caliente a LuckPerms: {e}",
+                "message": "No pudimos avisarle al servidor del cambio. Fijate que esté encendido y probá otra vez.",
                 "executed_live": False,
                 "last_updated": now_iso,
                 "method": "Error",

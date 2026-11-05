@@ -1,12 +1,23 @@
 document.addEventListener('DOMContentLoaded', () => {
-  document.querySelector('#copy-initial-pin')?.addEventListener('click', async () => {
-    await navigator.clipboard.writeText(document.querySelector('#initial-admin-pin').textContent);
+  const copyButton = document.querySelector('#copy-initial-pin');
+  copyButton?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.querySelector('#initial-admin-pin').textContent);
+      copyButton.textContent = 'Copiada';
+    } catch {
+      copyButton.textContent = 'Copiala a mano';
+    }
   });
   const form = document.querySelector('#login-form');
   if (!form) return;
+  const button = form.querySelector('button[type="submit"]');
+  // The first-run password is shown once: entering stays locked until the user confirms saving it.
+  const savedBox = document.querySelector('#initial-pin-saved');
+  const canSubmit = () => !savedBox || savedBox.checked;
+  savedBox?.addEventListener('change', () => { button.disabled = !canSubmit(); });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const button = form.querySelector('button');
+    if (!canSubmit()) return;
     const error = document.querySelector('#login-error');
     const fields = new FormData(form);
     const pin = String(fields.get('pin') || '');
@@ -20,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (issue) {
       error.textContent = issue.message;
     } finally {
-      button.disabled = false;
+      button.disabled = !canSubmit();
     }
   });
 });

@@ -20,6 +20,13 @@
 .btn-primary:hover:not(:disabled) { background:#a3d077; }
 .btn-quiet { border:1px solid var(--line); color:var(--text); background:transparent; }
 .btn-quiet:hover:not(:disabled) { background:var(--surface-raised); }
+/* Risky actions: outlined in red/amber when offered, solid red only on the confirming button. */
+.btn-danger-quiet { border:1px solid rgba(236,122,106,.45); color:#f3a79b; background:transparent; }
+.btn-danger-quiet:hover:not(:disabled) { background:rgba(236,122,106,.1); }
+.btn-warn-quiet { border:1px solid rgba(232,176,75,.45); color:#f0c477; background:transparent; }
+.btn-warn-quiet:hover:not(:disabled) { background:rgba(232,176,75,.1); }
+.btn-danger { background:var(--danger); color:#2a0f0b; }
+.btn-danger:hover:not(:disabled) { background:#f3a79b; }
 .link { color:#a3d077; font-weight:600; text-underline-offset:3px; }
 .link:hover { text-decoration:underline; }
 
@@ -105,6 +112,26 @@ dialog.drawer::backdrop { background:rgba(10,9,8,.6); }
 .drawer-action > div { flex:1; min-width:0; }
 @keyframes drawer-in { from { transform:translateX(2rem); opacity:0; } to { transform:none; opacity:1; } }
 @media (prefers-reduced-motion: reduce) { dialog.drawer[open] { animation:none; } }
+
+/* Confirmation dialog: centered, the safe answer first and focused. */
+dialog.confirm { margin:auto; width:min(26rem, calc(100vw - 2rem)); border:1px solid var(--line); border-radius:1rem; background:var(--surface); color:var(--text); padding:1.5rem; }
+dialog.confirm::backdrop { background:rgba(10,9,8,.65); }
+.confirm-actions { display:flex; flex-wrap:wrap; gap:.75rem; margin-top:1.25rem; }
+.confirm-actions .v2-button { flex:1 1 auto; }
+/* One plain sentence under an action, instead of a hover-only "?". */
+.action-note { margin-top:.4rem; font-size:.875rem; line-height:1.5; color:var(--text-muted); }
+/* Console shortcuts: the label fills the box, a visible "Mandar" sends it right away (no hidden double click). */
+.quick-group { display:inline-flex; overflow:hidden; border:1px solid var(--line); border-radius:.5rem; }
+.quick-cmd-chip { padding:.4rem .75rem; font-size:.875rem; color:var(--text-soft); }
+.quick-cmd-chip:hover { background:var(--surface-raised); color:var(--text); }
+.quick-send { border-left:1px solid var(--line); padding:.4rem .6rem; font-size:.875rem; font-weight:600; color:#a3d077; }
+.quick-send:hover:not(:disabled) { background:var(--surface-raised); }
+.quick-send:disabled { opacity:.5; cursor:not-allowed; }
+/* Server status in the header stays visible on phones: dot plus a short, ellipsized label. */
+.status-label { max-width:6.5rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (min-width: 640px) { .status-label { max-width:none; } }
+.dev-note { display:none; }
+@media (min-width: 1024px) { .dev-note { display:inline; } }
 
 /* "?" help: the explanation appears on hover, keyboard focus or tap. */
 .help { position:relative; display:inline-flex; vertical-align:middle; }

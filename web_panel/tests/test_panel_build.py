@@ -43,7 +43,6 @@ def test_static_and_templates_configuration():
         "worlds.html",
         "crashes.html",
         "login.html",
-        "setup.html",
         "onboarding.html",
     ]
     for tmpl in expected_templates:
@@ -52,6 +51,15 @@ def test_static_and_templates_configuration():
         # Check that Jinja2 can parse the template
         compiled = templates.get_template(tmpl)
         assert compiled is not None
+
+
+def test_old_setup_bookmark_redirects_without_a_page_of_its_own():
+    """/setup has no template; it must send the visitor to the login or the wizard."""
+    from starlette.testclient import TestClient
+
+    response = TestClient(app, base_url="http://127.0.0.1").get("/setup", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] in {"/", "/onboarding"}
 
 
 def test_dashboard_v2_is_read_only_and_uses_a_separate_asset():
@@ -64,7 +72,7 @@ def test_dashboard_v2_is_read_only_and_uses_a_separate_asset():
     assert "/api/backups" in script
     assert "document.addEventListener('DOMContentLoaded'" in script
     assert "addEventListener('click'" in script
-    assert "window.confirm" in script
+    assert "confirmDialog(" in script
     assert "method: 'POST'" in script
 
 

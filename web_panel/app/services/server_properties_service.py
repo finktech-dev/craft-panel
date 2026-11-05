@@ -497,12 +497,12 @@ class ServerPropertiesService:
         else:
             new_lines = self._merge_lines(updates)
         tmp = self.file_path.with_name(f".server.properties.{uuid.uuid4().hex}.tmp")
-        tmp.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        tmp.write_text("\n".join(new_lines) + "\n", encoding="utf-8", errors="surrogateescape")
         os.replace(tmp, self.file_path)
 
     def _merge_lines(self, updates: dict[str, str]) -> list[str]:
         """The current file with the updated keys replaced in place and new keys appended."""
-        original_lines = self.file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        original_lines = self.file_path.read_text(encoding="utf-8", errors="surrogateescape").splitlines()
         new_lines: list[str] = []
         updated_keys = set(updates.keys())
         written_keys = set()

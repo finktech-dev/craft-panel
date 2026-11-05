@@ -37,6 +37,9 @@
     const select = $('#minecraft-version');
     const versions = state?.recommended_versions?.[flavor] || [];
     select.replaceChildren(...versions.map((value) => new Option(value, value, false, value === chosenVersion[flavor])));
+    // The catalog comes back empty when it could not be reached; say so instead of showing a blank list.
+    show('#versions-unavailable', flavor !== 'import' && versions.length === 0);
+    select.classList.toggle('hidden', versions.length === 0);
     $('#install-new-server')?.classList.toggle('hidden', flavor === 'import');
     $('#import-existing-server')?.classList.toggle('hidden', flavor !== 'import');
   };
@@ -200,7 +203,10 @@
       } catch (error) { say('#install-feedback', error.message); }
     });
 
+    $('#retry-versions')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, 'Buscando…', refresh));
+
     $('#install-server')?.addEventListener('click', async ({ currentTarget }) => {
+      if (!$('#minecraft-version').value) { say('#install-feedback', 'Todavía no hay versiones para elegir. Tocá «Reintentar» cuando tengas internet.'); return; }
       if (!$('#accept-eula').checked) { say('#install-feedback', 'Para seguir tenés que aceptar las reglas de uso de Minecraft.'); return; }
       try {
         if (!(await ensureJavaFor($('#minecraft-version').value, currentTarget))) return;
@@ -281,13 +287,13 @@
         await refresh();
       } catch (error) { say('#connection-feedback', error.message); }
     });
-    $('#local-only-onboarding')?.addEventListener('click', async () => {
+    document.querySelectorAll('[data-local-only]').forEach((button) => button.addEventListener('click', async () => {
       try {
         const current = await Panel.api('/api/runtime/launch-settings');
         await Panel.api('/api/runtime/launch-settings', { method: 'PUT', body: { allocated_ram_gb: current.allocated_ram_gb, playit_enabled: false } });
         await refresh();
       } catch (error) { say('#connection-feedback', error.message); }
-    });
+    }));
 
     // The official Playit app: turn it on, read its address, or save one pasted by hand.
     $('#start-playit')?.addEventListener('click', ({ currentTarget }) => withButton(currentTarget, 'Encendiendo…', async () => {
@@ -344,12 +350,18 @@
     const afterStart = async (job, playitEnabled) => {
       if (!job || job.status !== 'succeeded') { say('#ready-feedback', ''); return; }
       let address = null;
+      let problem = '';
       if (playitEnabled) {
-        try { address = await waitForFriendAddress(); } catch (error) { say('#ready-feedback', error.message); }
+        try { address = await waitForFriendAddress(); } catch (error) { problem = error.message; }
       }
-      say('#ready-feedback', address
-        ? `¡Listo! Pasales esta dirección a tus amigos: ${address}`
-        : 'Tu servidor está encendido. En el Inicio vas a ver la dirección para tus amigos.');
+      if (address) {
+        say('#ready-feedback', `¡Listo! Pasales esta dirección a tus amigos: ${address}`);
+      } else if (playitEnabled) {
+        const hint = 'Todavía no tenemos la dirección. En Ajustes > Acceso por Internet > Revisar el acceso, tocá «Usar la dirección de mi Playit» o pegala a mano.';
+        say('#ready-feedback', `Tu servidor está encendido. ${problem ? `${problem} ` : ''}${hint}`);
+      } else {
+        say('#ready-feedback', 'Tu servidor está encendido. Solo pueden entrar los que estén en tu misma red (wifi).');
+      }
       $('#onboarding-done')?.classList.remove('hidden');
     };
 

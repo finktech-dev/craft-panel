@@ -35,7 +35,7 @@ def _endpoints():
 async def _blocked_reason() -> str | None:
     """Why an automation must not start or restart the server right now."""
     if server_manager.lifecycle_operation:
-        return f"hay otra operación en curso ({server_manager.lifecycle_operation})"
+        return "el servidor está ocupado con otra tarea"
     external = await asyncio.to_thread(external_server_detector.detect, server_manager.process_pid)
     if external is not None:
         return "hay un servidor abierto fuera del panel"

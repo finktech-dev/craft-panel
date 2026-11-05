@@ -30,3 +30,17 @@ def test_writable_panel_folder_passes_and_leaves_no_trace(tmp_path: Path) -> Non
     JavaRuntimeService(configured).preflight("1.21.1")
     assert configured.tools_directory is not None
     assert list(configured.tools_directory.iterdir()) == []
+
+
+def test_broken_java_folder_is_set_aside_instead_of_asking_to_delete_it(tmp_path: Path) -> None:
+    configured = Settings(project_root=tmp_path)
+    assert configured.tools_directory is not None
+    broken = configured.tools_directory / "java"
+    (broken / "bin").mkdir(parents=True)
+    (broken / "bin" / "leftover.txt").write_text("x", encoding="utf-8")
+
+    JavaRuntimeService(configured).preflight("1.21.1")  # no longer refuses
+    JavaRuntimeService._set_aside_broken(broken)
+
+    assert not broken.exists()
+    assert (configured.tools_directory / "java.bak" / "bin" / "leftover.txt").is_file()

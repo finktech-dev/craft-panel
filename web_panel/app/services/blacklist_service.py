@@ -31,7 +31,7 @@ class BlacklistService:
         return BlacklistState(
             items=items,
             enforcement_available=available,
-            message='Protección de ítems activa.' if available else 'Tu lista ya está guardada. Para aplicar el bloqueo real dentro del juego falta agregar el complemento de protección; el panel lo detectará automáticamente.'
+            message='El bloqueo de objetos está activo.' if available else 'Lista guardada. Para que el bloqueo funcione dentro del juego hace falta instalar el mod de protección; el panel lo detecta solo.'
         )
 
     def _items(self) -> list[str]:

@@ -22,6 +22,10 @@
   let serverRunning = false;
   let externalPid = null;
   let lastMetrics = null;
+  let lastState = 'STOPPED';
+  let stoppingSince = null;
+  let opInFlight = false;
+  let metricFailures = 0;
 
   // Start, restart and graceful restart share the hero button and its progress element.
   const LIFECYCLE = ['start', 'restart', 'graceful_restart'];
@@ -31,13 +35,18 @@
   const HERO = {
     RUNNING: { mark: 'state-on', kicker: 'Encendido', title: 'Tu servidor está encendido', summary: 'Tus amigos ya pueden entrar con la dirección de abajo.', action: 'Reiniciar' },
     STARTING: { mark: 'state-busy', kicker: 'Encendiendo', title: 'Tu servidor se está encendiendo', summary: 'Con muchos mods puede tardar unos minutos. No hace falta que hagas nada.', action: null },
+    STOPPING: { mark: 'state-busy', kicker: 'Apagando', title: 'Tu servidor se está apagando', summary: 'Apagando… guardando el mundo. No lo vuelvas a encender hasta que termine.', action: 'Apagando…', locked: true },
     CRASHED: { mark: 'state-error', kicker: 'Se cerró solo', title: 'Tu servidor se cerró solo', summary: 'Mirá abajo qué pasó antes de volver a encenderlo.', action: 'Volver a encender' },
+    START_FAILED: { mark: 'state-error', kicker: 'No llegó a encender', title: 'Tu servidor no llegó a encender', summary: 'Algo falló mientras se encendía. Mirá abajo qué pasó y probá de nuevo.', action: 'Probar de nuevo' },
     STOPPED: { mark: '', kicker: 'Apagado', title: 'Tu servidor está apagado', summary: 'Encendelo cuando quieras jugar.', action: 'Encender' },
   };
   const setHero = (metrics) => {
     lastMetrics = metrics;
     const state = String(metrics?.state || 'STOPPED').toUpperCase();
     const hero = HERO[state] || HERO.STOPPED;
+    lastState = state;
+    if (state === 'STOPPING') { if (stoppingSince === null) stoppingSince = Date.now(); } else { stoppingSince = null; }
+    setProblem(state);
     serverRunning = Boolean(metrics?.is_running);
     const holder = $('#hero-state');
     holder?.classList.remove('state-on', 'state-busy', 'state-error');
@@ -52,15 +61,67 @@
     if (!button) return;
     button.hidden = !hero.action;
     button.textContent = hero.action || '';
-    button.disabled = !hero.action || Boolean(externalPid) || lifecycleBusy();
+    button.disabled = !hero.action || hero.locked || Boolean(externalPid) || lifecycleBusy();
     // The side panel only offers what makes sense right now.
-    const busy = lifecycleBusy() || Boolean(externalPid);
+    const stopping = state === 'STOPPING';
+    const busy = lifecycleBusy() || Boolean(externalPid) || stopping;
     const starting = state === 'STARTING';
     const setEnabled = (selector, enabled) => { const node = $(selector); if (node) node.disabled = !enabled; };
     setEnabled('#graceful-restart', serverRunning && !busy);
-    setEnabled('[data-server-action="stop"]', (serverRunning || starting) && !externalPid);
+    setEnabled('[data-server-action="stop"]', (serverRunning || starting) && !stopping && !externalPid);
+    // "Apagar" sits next to the main button only while there is something to shut down.
+    const stopButton = $('#hero-stop');
+    if (stopButton) stopButton.hidden = !(serverRunning || starting) || stopping;
     setEnabled('[data-server-action="start-silent"]', !serverRunning && !starting && !busy);
-    setEnabled('[data-server-action="kill"]', (serverRunning || starting) && !externalPid);
+    setEnabled('[data-server-action="kill"]', (serverRunning || starting || stopping) && !externalPid);
+    updateSlowStop();
+  };
+
+  // Shutdown normally takes seconds; past 30 s offer the existing force-close.
+  const SLOW_STOP_MS = 30_000;
+  const updateSlowStop = () => {
+    $('#stop-slow')?.classList.toggle('hidden', !(stoppingSince !== null && Date.now() - stoppingSince > SLOW_STOP_MS));
+  };
+
+  // Plain-words notice when the server closed on its own or never finished turning on.
+  const REPORT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+  let problemFor = null;
+  const setProblem = async (state) => {
+    const box = $('#server-problem');
+    if (!box) return;
+    if (state !== 'CRASHED' && state !== 'START_FAILED') { problemFor = null; box.classList.add('hidden'); return; }
+    if (problemFor === state) return;
+    problemFor = state;
+    text('#server-problem-title', state === 'START_FAILED' ? 'El servidor no llegó a encender' : 'El servidor se cerró solo');
+    text('#server-problem-message', 'Buscando el motivo…');
+    box.classList.remove('hidden');
+    let message = 'No encontramos un motivo claro. Abrí la consola para ver los últimos mensajes.';
+    let link = '/console';
+    try {
+      const report = await Panel.api('/api/server/crash-report');
+      const age = Date.now() - new Date(report.timestamp).getTime();
+      if (report?.cause && age < REPORT_MAX_AGE_MS) {
+        message = `Motivo: ${report.cause}${report.suggestion ? ` ${report.suggestion}` : ''}`;
+        link = '/crashes';
+      }
+    } catch { /* no report: keep the generic text */ }
+    if (problemFor !== state) return;
+    text('#server-problem-message', message);
+    $('#server-problem-link')?.setAttribute('href', link);
+  };
+
+  // The panel does not answer: say so instead of pretending the server is off.
+  const setOffline = () => {
+    lastState = 'OFFLINE';
+    const holder = $('#hero-state');
+    holder?.classList.remove('state-on', 'state-error');
+    holder?.classList.add('state-busy');
+    text('#hero-kicker', 'Sin conexión');
+    text('#dashboard-title', 'No podemos hablar con el panel');
+    text('#dashboard-summary', 'Sin conexión, reintentando… Si el panel se cerró, abrilo de nuevo.');
+    text('#hero-meta', '');
+    const button = $('#hero-action');
+    if (button) button.disabled = true;
   };
 
   // One short line while anything is running, so a reload never hides ongoing work.
@@ -224,13 +285,28 @@
       query('/api/tunnel/status'),
       query('/api/server/online-players'),
     ]);
-    setExternal(external);
-    setHero(metrics);
+    if (metrics) {
+      metricFailures = 0;
+      setExternal(external);
+      setHero(metrics);
+    } else {
+      // A failed query says nothing about the server: keep the buttons as they were.
+      metricFailures += 1;
+      if (metricFailures >= 2) setOffline();
+    }
     setPlayers(online);
     setConnection(connection, tunnel);
     setBackup(backups);
     setChecks(safety);
     text('#dashboard-updated', `Actualizado a las ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+  };
+
+  // Poll faster while something is in progress so the page never lags behind the server.
+  let pollTimer = null;
+  const schedule = (delay) => {
+    window.clearTimeout(pollTimer);
+    const fast = opInFlight || lifecycleBusy() || ['STARTING', 'STOPPING', 'OFFLINE'].includes(lastState);
+    pollTimer = window.setTimeout(async () => { await refresh(); schedule(); }, delay ?? (fast ? 2500 : 15_000));
   };
 
   const setOperationFeedback = (value) => text('#operation-feedback', value);
@@ -264,38 +340,72 @@
     await refresh();
   };
 
+  // Own confirmation dialog: the safe answer is first and focused, the risky one is red.
+  // Escape, the backdrop and the safe button all mean "no".
+  const confirmDialog = ({ title, message, yes, no, danger = true }) => new Promise((resolve) => {
+    const dialog = $('#confirm-dialog');
+    if (!dialog || typeof dialog.showModal !== 'function') { resolve(window.confirm(`${title} ${message}`)); return; }
+    const yesButton = $('#confirm-yes');
+    const noButton = $('#confirm-no');
+    text('#confirm-title', title);
+    text('#confirm-message', message);
+    yesButton.textContent = yes;
+    noButton.textContent = no;
+    yesButton.classList.toggle('btn-danger', danger);
+    yesButton.classList.toggle('btn-primary', !danger);
+    noButton.classList.toggle('btn-primary', danger);
+    noButton.classList.toggle('btn-quiet', !danger);
+    let answer = false;
+    const onYes = () => { answer = true; dialog.close(); };
+    const onNo = () => dialog.close();
+    const onBackdrop = (event) => { if (event.target === dialog) dialog.close(); };
+    dialog.addEventListener('close', () => {
+      yesButton.removeEventListener('click', onYes);
+      noButton.removeEventListener('click', onNo);
+      dialog.removeEventListener('click', onBackdrop);
+      resolve(answer);
+    }, { once: true });
+    yesButton.addEventListener('click', onYes);
+    noButton.addEventListener('click', onNo);
+    dialog.addEventListener('click', onBackdrop);
+    dialog.showModal();
+    noButton.focus();
+  });
+
   const closeActions = () => $('#server-actions')?.close();
   const runServerAction = async (button, action = button.dataset.serverAction) => {
     if (action === 'start') { await runJob('/api/server/start', '#hero-progress', button); return; }
     // Same start, without the Discord announcement; progress shows under the main button.
     if (action === 'start-silent') { closeActions(); await runJob('/api/server/start?dev_mode=true', '#hero-progress', $('#hero-action')); return; }
     const prompts = {
-      stop: '¿Apagar el servidor? Quienes estén jugando se van a desconectar.',
-      kill: '¿Forzar el cierre? Lo que no se haya guardado en los últimos minutos se pierde. Usalo solo si apagar no funciona.',
+      stop: { title: '¿Apagar el servidor?', message: 'Quienes estén jugando se van a desconectar.', yes: 'Sí, apagar', no: 'No, seguir jugando' },
+      kill: { title: '¿Forzar el cierre?', message: 'Lo que no se haya guardado en los últimos minutos se pierde. Usalo solo si apagar no funciona.', yes: 'Sí, forzar el cierre', no: 'No, esperar' },
     };
-    if (prompts[action] && !window.confirm(prompts[action])) return;
+    if (prompts[action] && !await confirmDialog(prompts[action])) return;
     closeActions();
-    setOperationFeedback('');
-    await withBusy(button, null, async () => {
-      try {
-        const result = await Panel.api(`/api/server/${action}`, { method: 'POST' });
-        reportResult(result, 'Listo.');
-      } catch (error) { reportError(error); }
-    });
+    setOperationFeedback(action === 'stop' ? 'Apagando… guardando el mundo.' : '');
+    // The dialog is closed, so progress shows in the hero through fast polling.
+    opInFlight = true;
+    schedule(0);
+    try {
+      reportResult(await Panel.api(`/api/server/${action}`, { method: 'POST' }), 'Listo.');
+    } catch (error) { reportError(error); }
+    opInFlight = false;
     await refresh();
+    schedule();
   };
   const createBackup = async (button) => {
-    if (!window.confirm('¿Hacer una copia de tu mundo ahora? Se puede seguir jugando mientras tanto.')) return;
+    if (!await confirmDialog({ title: '¿Hacer una copia de tu mundo ahora?', message: 'Se puede seguir jugando mientras tanto.', yes: 'Sí, hacer la copia', no: 'Ahora no', danger: false })) return;
     await runJob('/api/backups', '#backup-progress', button);
   };
   const gracefulRestart = async (button) => {
-    if (!window.confirm('¿Reiniciar? Se avisa en el chat y se reinicia en 10 segundos.')) return;
+    if (!await confirmDialog({ title: '¿Reiniciar el servidor?', message: 'Se avisa en el chat y se reinicia en 10 segundos. Quienes estén jugando se van a desconectar un momento.', yes: 'Sí, reiniciar', no: 'No, seguir jugando' })) return;
     closeActions();
     await runJob('/api/server/graceful-restart?countdown=10', '#hero-progress', button);
   };
   const terminateExternal = async (button) => {
     if (!externalPid) return;
-    if (!window.confirm('¿Cerrar el servidor que está abierto aparte? Primero le pedimos que guarde el mundo y se cierre, como si apretaras Ctrl+C en su ventana; puede tardar hasta un minuto. Si no responde, lo cerramos a la fuerza.')) return;
+    if (!await confirmDialog({ title: '¿Cerrar el servidor que quedó abierto en otra ventana?', message: 'Primero le pedimos que guarde el mundo y se apague solo; puede tardar hasta un minuto. Si no responde, lo cerramos a la fuerza.', yes: 'Sí, cerrarlo', no: 'No, dejarlo' })) return;
     await withBusy(button, 'Guardando y cerrando…', async () => {
       try {
         const result = await Panel.api('/api/server/external/terminate', { method: 'POST', body: { pid: externalPid, confirm: true } });
@@ -361,8 +471,11 @@
     const resumed = (mount) => (job) => { if (job) { reportJob(job, mount); refresh(); } };
     PanelJobs.resume({ kinds: LIFECYCLE, mount: '#hero-progress' }).then(resumed('#hero-progress'));
     PanelJobs.resume({ kinds: ['backup'], mount: '#backup-progress', button: '#create-backup' }).then(resumed('#backup-progress'));
-    refresh();
-    window.setInterval(refresh, 15_000);
+    $('#force-stop')?.addEventListener('click', () => {
+      const kill = $('[data-server-action="kill"]');
+      if (kill) runServerAction(kill);
+    });
+    refresh().then(() => schedule());
     showUpdate();
   });
 })();

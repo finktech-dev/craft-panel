@@ -46,6 +46,10 @@ async def login(payload: LoginRequest, request: Request) -> LoginResponse:
     if retry_after:
         raise _too_many_attempts(retry_after)
     try:
+        two_factor_on = totp_manager.is_enabled
+        if two_factor_on and not payload.totp_code:
+            # Answered before the password is checked, so it reveals nothing about it and costs no attempt.
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Falta el código de la app.")
         # scrypt is CPU-bound; a worker thread keeps the console and WebSockets responsive.
         password_ok = await run_in_threadpool(is_valid_admin_pin, payload.pin)
         # The TOTP code is only checked (and consumed) once the PIN is right.
@@ -56,7 +60,12 @@ async def login(payload: LoginRequest, request: Request) -> LoginResponse:
         lockout = login_attempt_tracker.record_failure(remote_ip)
         if count_globally:
             lockout = max(lockout, global_login_failures.record_failure(GLOBAL_LOGIN_KEY))
-        detail = "PIN o código 2FA inválido."
+        # One message for both factors, so a wrong code never confirms that the password was right.
+        detail = (
+            "La contraseña o el código de la app no son correctos."
+            if two_factor_on
+            else "La contraseña no es correcta."
+        )
         headers = {"Retry-After": str(lockout)} if lockout else None
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS if lockout else status.HTTP_401_UNAUTHORIZED,

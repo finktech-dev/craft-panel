@@ -16,11 +16,11 @@
   };
 
   const messageFor = async (response) => {
-    const fallback = `La operación falló (${response.status}).`;
+    const fallback = 'Algo salió mal. Probá de nuevo en un momento.';
     try {
       const data = await response.json();
       if (Array.isArray(data.detail)) {
-        return data.detail.map((issue) => issue.msg || 'Dato inválido.').join(' ');
+        return 'Falta completar un dato o hay uno inválido. Revisá el formulario.';
       }
       if (typeof data.detail === 'object' && data.detail !== null) {
         return data.detail.message || fallback;
@@ -34,7 +34,7 @@
   const readResponse = async (response) => {
     if (response.status === 401) {
       window.location.assign('/');
-      throw Object.assign(new Error('La sesión expiró. Volvé a ingresar el PIN.'), { status: 401 });
+      throw Object.assign(new Error('La sesión expiró. Volvé a ingresar tu contraseña.'), { status: 401 });
     }
     if (!response.ok) {
       throw Object.assign(new Error(await messageFor(response)), { status: response.status });
@@ -72,11 +72,13 @@
     const target = document.querySelector('#server-status');
     if (!target) return;
     const normalized = String(state || 'STOPPED').toUpperCase();
-    const states = { RUNNING: 'state-on', STOPPED: '', CRASHED: 'state-error', STARTING: 'state-busy' };
-    const labels = { RUNNING: 'Encendido', STOPPED: 'Apagado', CRASHED: 'Se cerró solo', STARTING: 'Encendiendo…' };
+    const states = { RUNNING: 'state-on', STOPPED: '', CRASHED: 'state-error', START_FAILED: 'state-error', STARTING: 'state-busy', STOPPING: 'state-busy', OFFLINE: 'state-busy' };
+    const labels = { RUNNING: 'Encendido', STOPPED: 'Apagado', CRASHED: 'Se cerró solo', START_FAILED: 'No llegó a encender', STARTING: 'Encendiendo…', STOPPING: 'Apagando…', OFFLINE: 'Sin conexión, reintentando…' };
     target.classList.remove('state-on', 'state-busy', 'state-error');
     if (states[normalized]) target.classList.add(states[normalized]);
-    target.querySelector('span:last-child').textContent = labels[normalized] || normalized;
+    const label = target.querySelector('span:last-child');
+    label.textContent = labels[normalized] || normalized;
+    label.title = label.textContent;
   };
 
   const websocketUrl = (path) => {
@@ -111,9 +113,11 @@
     const logout = async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { window.location.assign('/'); } };
     document.querySelectorAll('#logout-button, [data-logout]').forEach((button) => button.addEventListener('click', logout));
     if (document.querySelector('#server-status')) {
+      let headerFailures = 0;
       const refreshHeaderStatus = async () => {
         try {
           const metrics = await api('/api/server/metrics');
+          headerFailures = 0;
           setStatus(metrics.state);
           const navDev = document.querySelector('#nav-dev-badge');
           if (navDev) {
@@ -125,7 +129,11 @@
               navDev.classList.remove('inline-flex');
             }
           }
-        } catch { /* The page keeps its last visible state. */ }
+        } catch {
+          // One failure keeps the last state; two in a row mean the panel is unreachable.
+          headerFailures += 1;
+          if (headerFailures >= 2) setStatus('OFFLINE');
+        }
       };
       refreshHeaderStatus();
       window.setInterval(refreshHeaderStatus, 5000);

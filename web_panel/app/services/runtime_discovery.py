@@ -61,7 +61,7 @@ _JAVA_MISSING = (
     "No encontramos Java en esta computadora. Con \"Descargar Java\" lo bajamos dentro de la carpeta "
     "del panel, sin instalar nada en Windows."
 )
-_JAVA_BROKEN = "Encontramos Java, pero no respondió bien. Probá con \"Descargar Java\"."
+_JAVA_BROKEN = "Java está instalado pero no arranca bien. Probá con \"Descargar Java\"."
 _VENDORS = (
     ("temurin", "Adoptium"),
     ("adoptium", "Adoptium"),
@@ -77,7 +77,7 @@ _VENDORS = (
 )
 _SOURCE_PHRASES: dict[str, str] = {
     "craftpanel.txt": "el que elegiste en craftpanel.txt",
-    "tools/java": "en la carpeta tools/java del panel",
+    "tools/java": "el que bajó el panel",
     "system": "en tu computadora",
     "minecraft_launcher": "el que trae el launcher de Minecraft",
 }

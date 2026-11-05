@@ -157,9 +157,8 @@ class PlayitService:
                     stderr=asyncio.subprocess.STDOUT,
                 )
             except OSError as error:
-                self._last_error = "No se pudo iniciar el ejecutable de Playit."
-                # strerror only: str(error) would include this PC's folders.
-                await self._record(f"Error al iniciar Playit: {error.strerror or 'error desconocido'}", level="error")
+                self._last_error = "No pudimos encender Playit, el programa que le da a tu servidor una dirección para que entren tus amigos. Probá de nuevo o reinstalalo."
+                await self._record(self._last_error, level="error")
                 raise PlayitServiceError(self._last_error) from error
             assert self._process.stdout is not None
             self._reader_task = asyncio.create_task(self._read_output(self._process.stdout), name="playit-output")
@@ -320,14 +319,14 @@ class PlayitService:
         assert self._settings.playit_secret_path is not None
         path = self._settings.playit_secret_path
         if not path.is_file():
-            self._last_error = "Falta vincular Playit: abrí la consola del túnel y pegá la clave del agente una sola vez."
+            self._last_error = "Falta conectar Playit, el programa que le da a tu servidor una dirección para que entren tus amigos. Seguí los pasos de conexión, es una sola vez."
             await self._record(self._last_error, level="error")
             raise PlayitServiceError(self._last_error)
         try:
             secret = (await asyncio.to_thread(path.read_text, encoding="utf-8")).strip()
         except OSError as error:
-            self._last_error = "No se pudo leer la clave local de Playit."
-            await self._record(f"Error de lectura de la clave de Playit: {error.strerror or 'error desconocido'}", level="error")
+            self._last_error = "No pudimos leer los datos de conexión de Playit. Volvé a conectarlo."
+            await self._record(self._last_error, level="error")
             raise PlayitServiceError(self._last_error) from error
         if len(secret) < 16:
             self._last_error = "La clave local de Playit no es válida. Pegala nuevamente desde tu cuenta de Playit."
@@ -379,15 +378,29 @@ class PlayitService:
         return url, sha256 if sha256 and len(sha256) == 64 else None
 
     async def _read_output(self, stream: asyncio.StreamReader) -> None:
-        async for raw_line in stream:
-            line = raw_line.decode("utf-8", errors="replace").rstrip()
-            if not line:
-                continue
-            match = _PUBLIC_ADDRESS.search(line)
-            if match:
-                self._public_address = match.group(0)
-                await self._record(f"Dirección pública detectada: {self._public_address}", level="success")
-            await self._record(line)
+        # Raw chunks instead of line iteration: a line over asyncio's 64 KiB limit would raise
+        # ValueError, end this reader and leave the pipe full.
+        buffer = b""
+        while chunk := await stream.read(64 * 1024):
+            buffer += chunk
+            *lines, buffer = buffer.split(b"\n")
+            if len(buffer) > 16 * 1024:
+                lines.append(buffer[: 16 * 1024])
+                buffer = b""
+            for raw_line in lines:
+                await self._handle_output_line(raw_line)
+        if buffer:
+            await self._handle_output_line(buffer)
+
+    async def _handle_output_line(self, raw_line: bytes) -> None:
+        line = raw_line[: 16 * 1024].decode("utf-8", errors="replace").rstrip()
+        if not line:
+            return
+        match = _PUBLIC_ADDRESS.search(line)
+        if match:
+            self._public_address = match.group(0)
+            await self._record(f"Dirección pública detectada: {self._public_address}", level="success")
+        await self._record(line)
 
     async def _watch_process(self, process: asyncio.subprocess.Process) -> None:
         exit_code = await process.wait()
@@ -410,11 +423,11 @@ class PlayitService:
         if self.is_running and self._public_address:
             return "Túnel Playit activo y dirección pública detectada."
         if self.is_running:
-            return "Playit está activo; revisá la consola del túnel para completar la vinculación o ver el progreso."
+            return "Playit está encendido. Esperá unos segundos a que aparezca la dirección para tus amigos."
         if self._last_error:
             return self._last_error
         if self.needs_setup:
-            return "Falta vincular tu cuenta de Playit con la clave de agente."
+            return "Falta conectar Playit con tu cuenta. Es una sola vez."
         return "Túnel Playit detenido."
 
     async def _record(self, message: str, level: str = "info") -> None:

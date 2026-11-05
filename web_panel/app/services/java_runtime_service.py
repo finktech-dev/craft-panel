@@ -90,12 +90,24 @@ class JavaRuntimeService:
         if self._settings.local_java_executable_path.is_file():
             return
         assert self._settings.tools_directory is not None
-        if (self._settings.tools_directory / "java").exists():
-            raise JavaRuntimeValidationError(
-                "tools/java ya existe, pero no contiene un ejecutable Java válido. "
-                "Corregilo o eliminá esa carpeta antes de descargar otro runtime."
-            )
+        # A broken copy of Java is set aside during the install, so it is not a reason to refuse here.
         self._require_writable(self._settings.tools_directory)
+
+    @staticmethod
+    def _set_aside_broken(target: Path) -> None:
+        """Move an unusable Java folder to ``java.bak`` so a fresh download can take its place."""
+        backup = target.with_name(target.name + ".bak")
+        try:
+            if backup.is_dir():
+                shutil.rmtree(backup)
+            elif backup.exists():
+                backup.unlink()
+            os.replace(target, backup)
+        except OSError as error:
+            raise JavaRuntimeServiceError(
+                "La copia de Java que había no sirve y no pudimos apartarla. "
+                "Cerrá el servidor y cualquier programa que esté usando Java, y probá de nuevo."
+            ) from error
 
     @staticmethod
     def _require_writable(folder: Path) -> None:
@@ -113,15 +125,15 @@ class JavaRuntimeService:
         required = self.required_major(minecraft_version)
         destination = self._settings.local_java_executable_path
         if destination.is_file():
-            return f"Ya existe Java local en tools/java. No se reemplazó."
+            return "Ya tenemos Java instalado para el panel."
         assert self._settings.tools_directory is not None
         target = self._settings.tools_directory / "java"
-        if target.exists():
-            raise JavaRuntimeValidationError("tools/java ya existe, pero no contiene un ejecutable Java válido. Corregilo o eliminá esa carpeta antes de descargar otro runtime.")
         async with self._lock:
             if destination.is_file():
-                return "Ya existe Java local en tools/java. No se reemplazó."
+                return "Ya tenemos Java instalado para el panel."
             await asyncio.to_thread(self._require_writable, target.parent)
+            if target.exists():
+                await asyncio.to_thread(self._set_aside_broken, target)
             # Short names keep deep JDK paths under the 260-character Windows limit.
             archive = target.parent / f".java-{uuid.uuid4().hex[:8]}.download"
             staging = target.parent / f".java-{uuid.uuid4().hex[:8]}.extract"
@@ -156,7 +168,7 @@ class JavaRuntimeService:
             finally:
                 await asyncio.to_thread(self._remove_path, archive)
                 await asyncio.to_thread(self._remove_path, staging)
-        return f"Java {required} se descargó dentro de tools/java. No se modificó la instalación de tu computadora."
+        return f"Listo: bajamos Java {required} para el panel. No cambiamos nada en tu computadora."
 
     async def _find_package(self, major: int) -> dict[str, str]:
         os_name = {"Windows": "windows", "Linux": "linux", "Darwin": "mac"}.get(platform.system())

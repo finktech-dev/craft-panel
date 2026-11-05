@@ -84,7 +84,8 @@ def updates_to_enable(properties: dict[str, str]) -> dict[str, str] | None:
 def write_properties(path: Path, updates: dict[str, str]) -> None:
     """Replace or append ``updates`` keeping every other line, atomically."""
     try:
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        # surrogateescape keeps bytes that are not UTF-8 (an ANSI motd) intact on the way back.
+        lines = path.read_text(encoding="utf-8", errors="surrogateescape").splitlines()
     except FileNotFoundError:
         lines = []
     written: set[str] = set()
@@ -99,7 +100,7 @@ def write_properties(path: Path, updates: dict[str, str]) -> None:
     merged.extend(f"{key}={value}" for key, value in updates.items() if key not in written)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     try:
-        temporary.write_text("\n".join(merged) + "\n", encoding="utf-8")
+        temporary.write_text("\n".join(merged) + "\n", encoding="utf-8", errors="surrogateescape")
         os.replace(temporary, path)
     finally:
         if temporary.exists():

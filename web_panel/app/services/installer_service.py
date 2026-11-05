@@ -126,7 +126,7 @@ class InstallerService:
         ``progress`` receives the steps in :data:`INSTALL_SERVER_STEPS`.
         """
         if not accept_eula:
-            raise InstallerValidationError("Accept the Minecraft EULA before installing a server.")
+            raise InstallerValidationError("Tildá que aceptás las reglas de uso de Minecraft (EULA) para poder instalar.")
         async with self._lock:
             # The lock serializes installs, so per-run progress can live on the instance.
             self._progress = progress
@@ -139,7 +139,7 @@ class InstallerService:
     def preflight(self, minecraft_version: str, *, accept_eula: bool) -> None:
         """Cheap checks that let a request fail right away instead of inside a job."""
         if not accept_eula:
-            raise InstallerValidationError("Accept the Minecraft EULA before installing a server.")
+            raise InstallerValidationError("Tildá que aceptás las reglas de uso de Minecraft (EULA) para poder instalar.")
         if self._lock.locked():
             raise InstallerConflictError("Ya hay una instalación en curso. Esperá a que termine.")
         try:
@@ -206,7 +206,7 @@ class InstallerService:
         )
         if any(marker.exists() for marker in runtime_markers) or any(root.glob("*.jar")):
             raise InstallerConflictError(
-                "A server runtime already exists here. Choose Import existing server instead; the wizard will not overwrite it."
+                "Ya hay un servidor en esta carpeta. Elegí «Ya tengo un servidor» para usarlo; no lo vamos a pisar."
             )
 
     async def _assert_java_is_compatible(self, minecraft_version: str) -> None:
@@ -228,26 +228,26 @@ class InstallerService:
                 versions = manifest.get("versions", []) if isinstance(manifest, dict) else []
                 selected = next((item for item in versions if item.get("id") == minecraft_version), None)
                 if not isinstance(selected, dict) or not isinstance(selected.get("url"), str):
-                    raise InstallerValidationError(f"Minecraft {minecraft_version} was not found in Mojang's official manifest.")
+                    raise InstallerValidationError(f"Mojang no tiene la versión {minecraft_version}. Elegí otra de la lista.")
                 if not selected["url"].startswith("https://"):
-                    raise InstallerServiceError("The official manifest pointed to an insecure address.")
+                    raise InstallerServiceError("La descarga oficial apuntaba a una dirección no segura, así que la cancelamos.")
                 details_response = await client.get(selected["url"])
                 details_response.raise_for_status()
                 expected_details_sha1 = selected.get("sha1")
                 if isinstance(expected_details_sha1, str) and _SHA1.match(expected_details_sha1):
                     if hashlib.sha1(details_response.content).hexdigest() != expected_details_sha1.casefold():
-                        raise InstallerServiceError("The official version details checksum did not match.")
+                        raise InstallerServiceError("Los datos descargados de esa versión no coinciden con los oficiales. Probá de nuevo en unos minutos.")
                 details = details_response.json()
                 server = details.get("downloads", {}).get("server", {}) if isinstance(details, dict) else {}
                 url, checksum = server.get("url"), server.get("sha1")
                 if not isinstance(url, str) or not isinstance(checksum, str):
-                    raise InstallerServiceError("The official manifest did not provide a server download.")
+                    raise InstallerServiceError("Mojang no ofrece el servidor para esa versión. Elegí otra.")
                 assert self._settings.server_directory is not None
                 await self._download(client, url, self._settings.server_directory / "server.jar", checksum)
         except InstallerServiceError:
             raise
         except (httpx.HTTPError, ValueError) as error:
-            raise InstallerServiceError("The official server manifest could not be reached. Check the connection and try again.") from error
+            raise InstallerServiceError("No pudimos conectarnos con Mojang. Revisá tu internet y probá de nuevo.") from error
 
     async def _resolve_neoforge_build(self, minecraft_version: str) -> str:
         """Configured override when it targets this version, else the latest stable build."""
@@ -287,7 +287,7 @@ class InstallerService:
             raise InstallerValidationError(str(error)) from error
         except VersionCatalogError as error:
             raise InstallerServiceError(
-                "The Fabric installer manifest could not be reached. Check the connection and try again."
+                "No pudimos conectarnos con Fabric. Revisá tu internet y probá de nuevo."
             ) from error
         url = f"{FABRIC_MAVEN_URL}/{version}/fabric-installer-{version}.jar"
         assert self._settings.tools_directory is not None
@@ -314,7 +314,7 @@ class InstallerService:
             )
         except OSError as error:
             raise InstallerValidationError(
-                "No se encontró Java compatible. Instalalo en el sistema o descomprimilo en tools/java, y elegí una versión de Minecraft compatible."
+                "No se encontró un Java que sirva. Tocá «Descargar Java» en el primer paso y probá de nuevo."
             ) from error
         assert process.stdout is not None
         async for raw_line in process.stdout:
@@ -322,7 +322,7 @@ class InstallerService:
             if line:
                 await self._publish(line)
         if await process.wait() != 0:
-            raise InstallerServiceError("The installer stopped with an error. No world or existing configuration was replaced.")
+            raise InstallerServiceError("El instalador se cortó por un error. No se tocó ningún mundo ni ajuste que ya tuvieras.")
 
     @staticmethod
     async def _published_sha1(client: httpx.AsyncClient, url: str) -> str:
@@ -340,7 +340,7 @@ class InstallerService:
 
     async def _download(self, client: httpx.AsyncClient, url: str, destination: Path, sha1: str | None = None) -> None:
         if not url.startswith("https://"):
-            raise InstallerServiceError("Only official HTTPS downloads are allowed.")
+            raise InstallerServiceError("Solo se permiten descargas oficiales y seguras.")
         await asyncio.to_thread(destination.parent.mkdir, parents=True, exist_ok=True)
         try:
             await download_to_file(
@@ -352,9 +352,9 @@ class InstallerService:
                 on_progress=self._download_progress if self._progress else None,
             )
         except UnsafeDownloadError as error:
-            raise InstallerServiceError("The download was rejected (unexpected host, size or checksum) and discarded.") from error
+            raise InstallerServiceError("La descarga no parecía confiable (otro origen, tamaño raro o archivo dañado) y la descartamos. Probá de nuevo.") from error
         except (httpx.HTTPError, OSError) as error:
-            raise InstallerServiceError("The official server download failed. Check the connection and try again.") from error
+            raise InstallerServiceError("Se cortó la descarga del servidor. Revisá tu internet y probá de nuevo.") from error
 
     def _write_safe_server_files(self, flavor: str) -> None:
         assert self._settings.server_directory is not None
