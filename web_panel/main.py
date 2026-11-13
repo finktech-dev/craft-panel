@@ -107,6 +107,9 @@ assert settings.panel_directory is not None
 app.mount("/static", StaticFiles(directory=str(settings.static_directory)), name="static")
 templates = Jinja2Templates(directory=str(settings.panel_directory / "templates"))
 templates.env.globals["nav_layout"] = nav_layout
+# Cache-busting token for CSS/JS: a browser (Firefox is strict here) must fetch the
+# new stylesheet after an update instead of reusing a stale or broken cached copy.
+templates.env.globals["asset_version"] = current_version()
 app.include_router(api_router)
 app.include_router(terminal_router)
 

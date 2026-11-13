@@ -123,17 +123,21 @@ class BackupService:
             return None
         return await self.create_backup()
 
-    async def create_backup(self, progress: ProgressCallback | None = None) -> BackupItem:
+    async def create_backup(
+        self, progress: ProgressCallback | None = None, *, extra_includes: tuple[str, ...] = ()
+    ) -> BackupItem:
         """Create a verified copy of the active world.
 
-        ``progress`` receives the steps in :data:`BACKUP_STEPS`.
+        ``progress`` receives the steps in :data:`BACKUP_STEPS`. ``extra_includes`` are
+        extra server-relative folders (for example ``mods`` and ``config``) to keep in
+        this copy on top of the world, used by the copy taken before changing version.
         """
         if not self.world_directory.is_dir():
             raise BackupNotFoundError("No existe el mundo para respaldar.")
         async with self._operation_lock:
             report(progress, "prepare", "Revisando que haya espacio libre.")
             await asyncio.to_thread(self.backups_directory.mkdir, parents=True, exist_ok=True)
-            await asyncio.to_thread(self._ensure_free_space_sync)
+            await asyncio.to_thread(self._ensure_free_space_sync, extra_includes)
             fingerprint = await asyncio.to_thread(self._world_fingerprint_sync)
             backup_path = self.backups_directory / f"backup_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.zip"
             if backup_path.exists():
@@ -149,7 +153,7 @@ class BackupService:
                     # The previous command is processed on the server's main thread.
                     await asyncio.sleep(0.2)
                 report(progress, "archive")
-                await asyncio.to_thread(self._create_archive_sync, temporary_path, progress)
+                await asyncio.to_thread(self._create_archive_sync, temporary_path, progress, extra_includes)
                 report(progress, "verify")
                 verification_error = await asyncio.to_thread(self._verify_archive_sync, temporary_path)
                 if verification_error:
@@ -249,8 +253,13 @@ class BackupService:
             and path.suffix.lower() not in _IGNORED_BACKUP_EXTENSIONS
         ]
 
-    def _included_server_files_sync(self) -> list[tuple[Path, Path]]:
-        """[backup_include] files as (path, name inside the zip), never the world or other copies."""
+    def _included_server_files_sync(self, extra_entries: tuple[str, ...] = ()) -> list[tuple[Path, Path]]:
+        """[backup_include] files as (path, name inside the zip), never the world or other copies.
+
+        ``extra_entries`` are extra server-relative folders (for example ``mods`` and
+        ``config``) that one specific backup wants to keep as well, such as the copy
+        taken right before changing the server version.
+        """
         server = self._settings.server_directory
         if server is None:
             return []
@@ -271,7 +280,8 @@ class BackupService:
                 return
             found.setdefault(resolved, (path, Path(SERVER_FILES_PREFIX) / path.relative_to(server)))
 
-        for entry in read_server_settings(self._settings).items("backup_include"):
+        configured = read_server_settings(self._settings).items("backup_include")
+        for entry in (*configured, *extra_entries):
             target = server.joinpath(*[part for part in entry.strip("/").split("/") if part])
             if target.is_symlink() or not target.exists():
                 continue
@@ -287,11 +297,11 @@ class BackupService:
                         add(path)
         return list(found.values())
 
-    def _archive_candidates_sync(self) -> list[tuple[Path, int, Path]]:
+    def _archive_candidates_sync(self, extra_entries: tuple[str, ...] = ()) -> list[tuple[Path, int, Path]]:
         """Everything a copy holds as (path, size, name inside the zip)."""
         candidates: list[tuple[Path, int, Path]] = []
         entries = [(path, Path("world") / path.relative_to(self.world_directory)) for path in self._world_files_sync()]
-        entries.extend(self._included_server_files_sync())
+        entries.extend(self._included_server_files_sync(extra_entries))
         for path, arcname in entries:
             try:
                 candidates.append((path, path.stat().st_size, arcname))
@@ -299,8 +309,10 @@ class BackupService:
                 candidates.append((path, 0, arcname))
         return candidates
 
-    def _create_archive_sync(self, backup_path: Path, progress: ProgressCallback | None = None) -> None:
-        candidates = self._archive_candidates_sync()
+    def _create_archive_sync(
+        self, backup_path: Path, progress: ProgressCallback | None = None, extra_entries: tuple[str, ...] = ()
+    ) -> None:
+        candidates = self._archive_candidates_sync(extra_entries)
         total_files = len(candidates)
         total_bytes = sum(size for _, size, _ in candidates) or 1
         done_bytes = 0
@@ -587,8 +599,8 @@ class BackupService:
             deleted.append(str(path))
         return deleted
 
-    def _ensure_free_space_sync(self) -> None:
-        required = self._estimated_backup_bytes_sync() + self._settings.backup_min_free_disk_gb * _GIBIBYTE
+    def _ensure_free_space_sync(self, extra_entries: tuple[str, ...] = ()) -> None:
+        required = self._estimated_backup_bytes_sync(extra_entries) + self._settings.backup_min_free_disk_gb * _GIBIBYTE
         if shutil.disk_usage(self.backups_directory).free >= required:
             return
         # Only delete what the retention policy already considers surplus.
@@ -603,13 +615,16 @@ class BackupService:
                 "Liberá espacio o mové backups a otro disco."
             )
 
-    def _estimated_backup_bytes_sync(self) -> int:
+    def _estimated_backup_bytes_sync(self, extra_entries: tuple[str, ...] = ()) -> int:
+        # Extra folders (mods, config) are not part of the usual world-only copies, so their
+        # uncompressed size is added on top of the base estimate as a safe upper bound.
+        extra = sum(path.stat().st_size for path, _arcname in self._included_server_files_sync(extra_entries)) if extra_entries else 0
         panel_paths = self._panel_backup_paths_sync()
         if panel_paths:
             newest = max(panel_paths, key=lambda path: path.stat().st_mtime)
-            return int(newest.stat().st_size * _BACKUP_SIZE_SAFETY_FACTOR)
+            return int(newest.stat().st_size * _BACKUP_SIZE_SAFETY_FACTOR) + extra
         # Without previous copies, the uncompressed size is a safe upper bound.
-        return sum(path.stat().st_size for path in self._world_files_sync())
+        return sum(path.stat().st_size for path in self._world_files_sync()) + extra
 
     def _world_fingerprint_sync(self) -> dict[str, str | int]:
         file_count = total_bytes = latest_mtime_ns = 0
