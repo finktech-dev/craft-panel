@@ -6,8 +6,8 @@
   <meta name="color-scheme" content="dark">
   {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}">{% endif %}
   <title>{% block title %}{{ brand_name or 'Craft Panel' }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/tailwind.css">
-  <link rel="stylesheet" href="/static/css/panel-v2.css">
+  <link rel="stylesheet" href="/static/css/tailwind.css?v={{ asset_version }}">
+  <link rel="stylesheet" href="/static/css/panel-v2.css?v={{ asset_version }}">
   <script defer src="/static/js/app.js"></script>
 </head>
 {%- from "_icons.html" import pixel -%}
