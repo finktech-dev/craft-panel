@@ -15,6 +15,15 @@ class InstallServerRequest(BaseModel):
     accept_eula: bool = False
 
 
+class ChangeVersionRequest(BaseModel):
+    """Change the version of a server that already exists, keeping its loader."""
+
+    minecraft_version: str = Field(pattern=r"^\d+\.\d+(?:\.\d+)?$")
+    make_backup: bool = True
+    # Start from a fresh world instead of keeping the current one.
+    delete_world: bool = False
+
+
 class InstallJavaRequest(BaseModel):
     minecraft_version: str = Field(pattern=r"^\d+\.\d+(?:\.\d+)?$")
 

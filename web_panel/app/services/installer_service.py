@@ -8,6 +8,8 @@ import hashlib
 import locale
 import os
 import re
+import shutil
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -28,7 +30,12 @@ from app.services.runtime_discovery import RuntimeDiscoveryService
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
 from app.services.protected_paths import ProtectedPathError, require_not_protected
 from app.services.server_process import MinecraftServerManager, server_manager
-from app.services.server_version_service import neoforge_to_minecraft
+from app.services.server_version_service import (
+    LOADER_NAMES,
+    ServerVersionInfo,
+    ServerVersionService,
+    neoforge_to_minecraft,
+)
 from app.services.version_catalog_service import (
     FABRIC_MAVEN_URL,
     MOJANG_MANIFEST_URL,
@@ -56,6 +63,42 @@ INSTALL_SERVER_STEPS: StepPlan = (
     ("install", "Instalando"),
     ("finish", "Dejando todo listo"),
 )
+
+# Steps for changing the version of a server that already exists. Keys are kept
+# distinct from BACKUP_STEPS so an optional backup and the change can share one job.
+CHANGE_VERSION_STEPS: StepPlan = (
+    ("check", "Revisando tu servidor"),
+    ("download", "Descargando la versión nueva"),
+    ("swap", "Cambiando los archivos del servidor"),
+    ("install", "Instalando"),
+    ("finish", "Dejando todo listo"),
+)
+
+# What counts as the "runtime" to move aside and replace when changing version.
+# The world, mods, config, server.properties, user_jvm_args.txt and eula.txt are
+# never part of this set, so they are kept untouched.
+_RUNTIME_ROOT_FILES: tuple[str, ...] = (
+    "server.jar",
+    "fabric-server-launch.jar",
+    "fabric-server-launcher.properties",
+    "paper.jar",
+    "quilt-server-launch.jar",
+    "run.bat",
+    "run.sh",
+)
+_RUNTIME_ROOT_DIRS: tuple[str, ...] = ("libraries", "versions", ".fabric")
+# A loose jar sitting in the server root is part of the runtime (minecraft_server.*.jar,
+# forge-*.jar, fabric-server-mc.*.jar, etc.); the installers never leave user files there.
+_RUNTIME_ROOT_JAR_GLOB = "*.jar"
+
+
+@dataclass
+class _StagedRuntime:
+    """A new runtime downloaded and verified before the old one is touched."""
+
+    jar: Path | None = None        # staged vanilla server.jar, outside the server folder
+    installer: Path | None = None  # loader installer jar, outside the server folder
+    loader: str | None = None      # fabric loader version to pass to the installer
 
 
 def _decode_process_line(raw_line: bytes) -> str:
@@ -386,6 +429,301 @@ class InstallerService:
             "type": "log",
             "line": {"timestamp": datetime.now(UTC).isoformat(), "stream": "installer", "message": f"[Installer] {message}"},
         })
+
+    # ----- Change the version of a server that already exists -----------------
+
+    def _current_version(self) -> ServerVersionInfo:
+        """Detect the installed runtime from a fresh reader (no shared cache)."""
+        return ServerVersionService(self._settings).detect()
+
+    def _flavor_for_change(self, info: ServerVersionInfo) -> Literal["vanilla", "neoforge", "fabric"]:
+        if not info.is_installed:
+            raise InstallerConflictError(
+                "No encontramos un servidor instalado para cambiarle la versión. Instalá uno primero."
+            )
+        if info.loader in ("vanilla", "neoforge", "fabric"):
+            return info.loader  # type: ignore[return-value]
+        kind = LOADER_NAMES.get(info.loader, info.loader)
+        raise InstallerValidationError(
+            f"Por ahora solo podemos cambiar la versión de servidores Vanilla, NeoForge o Fabric. "
+            f"El tuyo es de tipo {kind}."
+        )
+
+    def change_version_preflight(self) -> ServerVersionInfo:
+        """Cheap checks before a change-version job, mirroring install's preflight."""
+        if self._lock.locked():
+            raise InstallerConflictError("Ya hay una instalación en curso. Esperá a que termine.")
+        try:
+            require_server_stopped(self._server, "change the server version")
+        except ServerActiveError as error:
+            raise InstallerConflictError(str(error)) from error
+        info = self._current_version()
+        self._flavor_for_change(info)
+        self._verify_server_integrity(info)
+        self._assert_targets_not_protected()
+        return info
+
+    def _verify_server_integrity(self, info: ServerVersionInfo) -> None:
+        """The server/ folder must hold a complete runtime of a supported kind."""
+        assert self._settings.server_directory is not None
+        root = self._settings.server_directory
+        if not root.is_dir():
+            raise InstallerConflictError("No encontramos la carpeta del servidor.")
+        flavor = self._flavor_for_change(info)
+        if flavor == "vanilla":
+            present = (root / "server.jar").is_file()
+        elif flavor == "neoforge":
+            present = (root / "libraries" / "net" / "neoforged" / "neoforge").is_dir()
+        else:  # fabric
+            present = (root / "fabric-server-launch.jar").is_file() or (
+                root / "libraries" / "net" / "fabricmc" / "fabric-loader"
+            ).is_dir()
+        if not present:
+            raise InstallerConflictError(
+                "La carpeta del servidor parece incompleta o dañada, así que no es seguro cambiar la versión. "
+                "Revisá el servidor o reinstalalo."
+            )
+
+    async def change_version(
+        self,
+        minecraft_version: str,
+        *,
+        delete_world: bool = False,
+        progress: ProgressCallback | None = None,
+    ) -> str:
+        """Replace the runtime with another Minecraft version, keeping the same loader.
+
+        The world, mods and config are kept (unless ``delete_world`` asks for a fresh
+        world). The new runtime is downloaded and verified before the old one is moved
+        aside, and the old one is restored if the install fails. Returns the plain label
+        of the new runtime. ``progress`` receives :data:`CHANGE_VERSION_STEPS`.
+        """
+        if not _MINECRAFT_VERSION.match(minecraft_version or ""):
+            raise InstallerValidationError("Elegí una versión de Minecraft válida, por ejemplo 1.21.1.")
+        async with self._lock:
+            self._progress = progress
+            try:
+                return await self._change_version_locked(minecraft_version, delete_world)
+            finally:
+                self._progress = None
+                self._current_step = "check"
+
+    async def _change_version_locked(self, minecraft_version: str, delete_world: bool) -> str:
+        assert self._settings.server_directory is not None
+        root = self._settings.server_directory
+        self._step("check", "Revisando tu servidor.")
+        try:
+            require_server_stopped(self._server, "change the server version")
+        except ServerActiveError as error:
+            raise InstallerConflictError(str(error)) from error
+        info = self._current_version()
+        flavor = self._flavor_for_change(info)
+        self._verify_server_integrity(info)
+        self._assert_targets_not_protected()
+        if delete_world:
+            # Fail early if the world the user wants to wipe is protected.
+            world = root / self._active_level_name(root)
+            if world.is_dir():
+                try:
+                    require_not_protected(world, configured=self._settings)
+                except ProtectedPathError as error:
+                    raise InstallerConflictError(str(error)) from error
+        if flavor in {"neoforge", "fabric"}:
+            await self._assert_java_is_compatible(minecraft_version)
+
+        # 1) Download and verify the new runtime without touching the server yet.
+        self._step("download")
+        await self._publish(f"Descargando Minecraft {minecraft_version} ({flavor}).")
+        staged = await self._stage_runtime(flavor, minecraft_version)
+
+        # 2) Move the old runtime aside so it can be restored if the install fails.
+        self._step("swap", "Cambiando los archivos del servidor.")
+        aside = root / f".runtime_old_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+        moved = await asyncio.to_thread(self._move_runtime_aside, root, aside)
+        try:
+            self._step("install")
+            await self._apply_runtime(flavor, minecraft_version, staged)
+            await asyncio.to_thread(self._write_safe_server_files, flavor)
+        except BaseException:
+            await asyncio.to_thread(self._restore_runtime_aside, root, aside, moved)
+            raise
+        await asyncio.to_thread(self._remove_tree, aside)
+        await asyncio.to_thread(self._drop_staged_runtime, staged)
+
+        if delete_world:
+            await self._publish("Borrando el mundo para empezar de cero.")
+            await asyncio.to_thread(self._delete_active_world, root)
+
+        self._step("finish", "Dejando listos los archivos de inicio.")
+        new_label = self._current_version().label or f"Minecraft {minecraft_version}"
+        if delete_world:
+            await self._publish(f"Listo. Tu servidor ahora es {new_label} y vas a empezar con un mundo nuevo.")
+        else:
+            await self._publish(f"Listo. Tu servidor ahora es {new_label}. El mundo quedó igual.")
+        return new_label
+
+    async def _stage_runtime(self, flavor: str, minecraft_version: str) -> _StagedRuntime:
+        assert self._settings.tools_directory is not None
+        if flavor == "vanilla":
+            jar = await self._stage_vanilla(minecraft_version, self._settings.tools_directory / ".staging_server.jar")
+            return _StagedRuntime(jar=jar)
+        if flavor == "neoforge":
+            return _StagedRuntime(installer=await self._stage_neoforge(minecraft_version))
+        loader, installer = await self._stage_fabric(minecraft_version)
+        return _StagedRuntime(installer=installer, loader=loader)
+
+    async def _stage_vanilla(self, minecraft_version: str, destination: Path) -> Path:
+        try:
+            async with allowed_client(_INSTALLER_HOSTS, timeout=60.0) as client:
+                manifest_response = await client.get(_MOJANG_MANIFEST)
+                manifest_response.raise_for_status()
+                manifest = manifest_response.json()
+                versions = manifest.get("versions", []) if isinstance(manifest, dict) else []
+                selected = next((item for item in versions if item.get("id") == minecraft_version), None)
+                if not isinstance(selected, dict) or not isinstance(selected.get("url"), str):
+                    raise InstallerValidationError(f"Mojang no tiene la versión {minecraft_version}. Elegí otra de la lista.")
+                if not selected["url"].startswith("https://"):
+                    raise InstallerServiceError("La descarga oficial apuntaba a una dirección no segura, así que la cancelamos.")
+                details_response = await client.get(selected["url"])
+                details_response.raise_for_status()
+                details = details_response.json()
+                server = details.get("downloads", {}).get("server", {}) if isinstance(details, dict) else {}
+                url, checksum = server.get("url"), server.get("sha1")
+                if not isinstance(url, str) or not isinstance(checksum, str):
+                    raise InstallerServiceError("Mojang no ofrece el servidor para esa versión. Elegí otra.")
+                await self._download(client, url, destination, checksum)
+        except InstallerServiceError:
+            raise
+        except (httpx.HTTPError, ValueError) as error:
+            raise InstallerServiceError("No pudimos conectarnos con Mojang. Revisá tu internet y probá de nuevo.") from error
+        return destination
+
+    async def _stage_neoforge(self, minecraft_version: str) -> Path:
+        build = await self._resolve_neoforge_build(minecraft_version)
+        url = self.neoforge_installer_url(build)
+        await self._publish(f"Descargando el instalador oficial de NeoForge {build}.")
+        async with allowed_client(_INSTALLER_HOSTS, timeout=120.0) as client:
+            checksum = await self._published_sha1(client, url)
+            await self._download(client, url, self._settings.neoforge_installer_path, checksum)
+        return self._settings.neoforge_installer_path
+
+    async def _stage_fabric(self, minecraft_version: str) -> tuple[str, Path]:
+        try:
+            loader = await self._catalog.latest_fabric_loader(minecraft_version)
+            version = await self._catalog.latest_fabric_installer()
+        except VersionCatalogValidationError as error:
+            raise InstallerValidationError(str(error)) from error
+        except VersionCatalogError as error:
+            raise InstallerServiceError("No pudimos conectarnos con Fabric. Revisá tu internet y probá de nuevo.") from error
+        url = f"{FABRIC_MAVEN_URL}/{version}/fabric-installer-{version}.jar"
+        assert self._settings.tools_directory is not None
+        installer = self._settings.tools_directory / f"fabric-installer-{version}.jar"
+        await self._publish(f"Descargando el instalador de Fabric {version}.")
+        async with allowed_client(_INSTALLER_HOSTS, timeout=120.0) as client:
+            checksum = await self._published_sha1(client, url)
+            await self._download(client, url, installer, checksum)
+        return loader, installer
+
+    async def _apply_runtime(self, flavor: str, minecraft_version: str, staged: _StagedRuntime) -> None:
+        assert self._settings.server_directory is not None
+        root = self._settings.server_directory
+        if flavor == "vanilla":
+            assert staged.jar is not None
+            await self._publish("Instalando el servidor de Minecraft.")
+            await asyncio.to_thread(self._move_file, staged.jar, root / "server.jar")
+            return
+        if flavor == "neoforge":
+            assert staged.installer is not None
+            await self._publish("Instalando NeoForge. Puede tardar varios minutos.")
+            await self._run_java("-jar", str(staged.installer), "--install-server", str(root))
+            return
+        assert staged.installer is not None and staged.loader is not None
+        await self._publish(f"Instalando Fabric Loader {staged.loader}. Puede tardar unos minutos.")
+        await self._run_java(
+            "-jar", str(staged.installer), "server", "-dir", str(root),
+            "-mcversion", minecraft_version, "-loader", staged.loader, "-downloadMinecraft",
+        )
+
+    def _runtime_paths(self, root: Path) -> list[Path]:
+        paths: list[Path] = []
+        for name in (*_RUNTIME_ROOT_FILES, *_RUNTIME_ROOT_DIRS):
+            candidate = root / name
+            if candidate.exists():
+                paths.append(candidate)
+        for jar in root.glob(_RUNTIME_ROOT_JAR_GLOB):
+            if jar.is_file() and jar not in paths:
+                paths.append(jar)
+        return paths
+
+    def _move_runtime_aside(self, root: Path, aside: Path) -> list[str]:
+        targets = self._runtime_paths(root)
+        try:
+            require_not_protected(*targets, configured=self._settings)
+        except ProtectedPathError as error:
+            raise InstallerConflictError(str(error)) from error
+        aside.mkdir(parents=True, exist_ok=True)
+        moved: list[str] = []
+        for path in targets:
+            shutil.move(str(path), str(aside / path.name))
+            moved.append(path.name)
+        return moved
+
+    def _restore_runtime_aside(self, root: Path, aside: Path, moved: list[str]) -> None:
+        if not aside.is_dir():
+            return
+        # Drop whatever the failed install wrote, then put the old runtime back.
+        for path in self._runtime_paths(root):
+            self._remove_tree(path)
+        for name in moved:
+            source = aside / name
+            if source.exists():
+                with contextlib.suppress(OSError):
+                    shutil.move(str(source), str(root / name))
+        self._remove_tree(aside)
+
+    @staticmethod
+    def _move_file(source: Path, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.is_dir():
+            shutil.rmtree(destination, ignore_errors=True)
+        elif destination.exists():
+            destination.unlink()
+        shutil.move(str(source), str(destination))
+
+    @staticmethod
+    def _remove_tree(path: Path) -> None:
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            with contextlib.suppress(OSError):
+                path.unlink()
+
+    def _drop_staged_runtime(self, staged: _StagedRuntime) -> None:
+        if staged.jar is not None:
+            self._remove_tree(staged.jar)
+
+    def _delete_active_world(self, root: Path) -> None:
+        world = root / self._active_level_name(root)
+        if not world.is_dir():
+            return
+        try:
+            require_not_protected(world, configured=self._settings)
+        except ProtectedPathError as error:
+            raise InstallerConflictError(str(error)) from error
+        shutil.rmtree(world, ignore_errors=True)
+
+    @staticmethod
+    def _active_level_name(root: Path) -> str:
+        properties = root / "server.properties"
+        if properties.is_file():
+            with contextlib.suppress(OSError):
+                for raw in properties.read_text(encoding="utf-8", errors="replace").splitlines():
+                    line = raw.strip()
+                    if line.startswith("level-name=") and not line.startswith("#"):
+                        name = line.split("=", 1)[1].strip()
+                        if name and "/" not in name and "\\" not in name and ".." not in name:
+                            return name
+        return "world"
 
 
 installer_service = InstallerService()
