@@ -29,6 +29,7 @@ MOJANG_HOSTS = frozenset({
 })
 FABRIC_HOSTS = frozenset({"meta.fabricmc.net", "maven.fabricmc.net"})
 NEOFORGE_HOSTS = frozenset({"maven.neoforged.net"})
+FORGE_HOSTS = frozenset({"maven.minecraftforge.net", "files.minecraftforge.net"})
 GITHUB_RELEASE_HOSTS = frozenset({
     "api.github.com",
     "github.com",

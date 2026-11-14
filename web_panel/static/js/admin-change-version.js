@@ -16,7 +16,7 @@
   const cancelBtn = byId('change-version-cancel');
   const fromText = byId('change-version-from');
   const PROGRESS = '#change-version-progress';
-  const SUPPORTED = { vanilla: 'vanilla', neoforge: 'neoforge', fabric: 'fabric' };
+  const SUPPORTED = { vanilla: 'vanilla', neoforge: 'neoforge', fabric: 'fabric', forge: 'forge' };
 
   let env = null;       // { loader, minecraft_version, label }
   let running = false;

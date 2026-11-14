@@ -22,7 +22,7 @@ _PLAYIT_MESSAGES = {
     "broken": "Playit está instalado, pero le falta una parte. Volvé a instalarlo desde la página de Playit.",
     "not_installed": "Playit no está instalado en esta computadora.",
 }
-_INSTALL_FLAVORS: tuple[InstallFlavor, ...] = ("vanilla", "neoforge", "fabric")
+_INSTALL_FLAVORS: tuple[InstallFlavor, ...] = ("vanilla", "neoforge", "fabric", "forge")
 
 
 class OnboardingService:
@@ -94,6 +94,7 @@ class OnboardingService:
                 "vanilla": recommended.get("vanilla", []),
                 "neoforge": recommended.get("neoforge", []),
                 "fabric": recommended.get("fabric", []),
+                "forge": recommended.get("forge", []),
                 "import": [],
             },
         )

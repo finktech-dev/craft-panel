@@ -19,6 +19,7 @@ import httpx
 from app.core.config import Settings, settings
 from app.core.net_safety import (
     FABRIC_HOSTS,
+    FORGE_HOSTS,
     MOJANG_HOSTS,
     NEOFORGE_HOSTS,
     UnsafeDownloadError,
@@ -34,10 +35,12 @@ from app.services.server_version_service import (
     LOADER_NAMES,
     ServerVersionInfo,
     ServerVersionService,
+    forge_to_minecraft,
     neoforge_to_minecraft,
 )
 from app.services.version_catalog_service import (
     FABRIC_MAVEN_URL,
+    FORGE_MAVEN_URL,
     MOJANG_MANIFEST_URL,
     NEOFORGE_MAVEN_URL,
     VersionCatalogError,
@@ -52,7 +55,7 @@ _DOWNLOAD_CHUNK_SIZE = 64 * 1024
 _MOJANG_MANIFEST = MOJANG_MANIFEST_URL
 _MINECRAFT_VERSION = re.compile(r"^\d+\.\d+(?:\.\d+)?$")
 _SHA1 = re.compile(r"^[0-9a-fA-F]{40}$")
-_INSTALLER_HOSTS = MOJANG_HOSTS | FABRIC_HOSTS | NEOFORGE_HOSTS
+_INSTALLER_HOSTS = MOJANG_HOSTS | FABRIC_HOSTS | NEOFORGE_HOSTS | FORGE_HOSTS
 _MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
 
 # Steps announced through the ``progress`` callback. Vanilla has no installer
@@ -150,6 +153,12 @@ class InstallerService:
             raise InstallerValidationError("La versión de NeoForge no es válida.")
         return f"{NEOFORGE_MAVEN_URL}/{build}/neoforge-{build}-installer.jar"
 
+    @staticmethod
+    def forge_installer_url(build: str) -> str:
+        if not is_safe_version(build):
+            raise InstallerValidationError("La versión de Forge no es válida.")
+        return f"{FORGE_MAVEN_URL}/{build}/forge-{build}-installer.jar"
+
     async def install_neoforge(self, minecraft_version: str | None = None) -> None:
         """Compatibility entrypoint for the former NeoForge-only API."""
         await self.install_server(
@@ -158,7 +167,7 @@ class InstallerService:
 
     async def install_server(
         self,
-        flavor: Literal["vanilla", "neoforge", "fabric"],
+        flavor: Literal["vanilla", "neoforge", "fabric", "forge"],
         minecraft_version: str,
         *,
         accept_eula: bool,
@@ -214,7 +223,7 @@ class InstallerService:
             raise InstallerValidationError("Elegí una versión de Minecraft válida, por ejemplo 1.21.1.")
         self._assert_runtime_is_not_already_installed()
         self._assert_targets_not_protected()
-        if flavor in {"neoforge", "fabric"}:
+        if flavor in {"neoforge", "fabric", "forge"}:
             await self._assert_java_is_compatible(minecraft_version)
         assert self._settings.server_directory is not None
         await asyncio.to_thread(self._settings.server_directory.mkdir, parents=True, exist_ok=True)
@@ -223,6 +232,8 @@ class InstallerService:
             await self._install_vanilla(minecraft_version)
         elif flavor == "fabric":
             await self._install_fabric(minecraft_version)
+        elif flavor == "forge":
+            await self._install_forge(minecraft_version)
         else:
             await self._install_neoforge(minecraft_version)
         self._step("finish", "Dejando listos los archivos de inicio.")
@@ -320,6 +331,37 @@ class InstallerService:
             "-jar", str(self._settings.neoforge_installer_path), "--install-server", str(self._settings.server_directory)
         )
 
+    async def _resolve_forge_build(self, minecraft_version: str) -> str:
+        """Configured override when it targets this version, else the recommended build."""
+        override = (self._settings.forge_version or "").strip()
+        if override and forge_to_minecraft(override) == minecraft_version:
+            return override
+        try:
+            return await self._catalog.latest_forge_build(minecraft_version)
+        except VersionCatalogValidationError as error:
+            raise InstallerValidationError(str(error)) from error
+        except VersionCatalogError as error:
+            raise InstallerServiceError(str(error)) from error
+
+    async def _install_forge(self, minecraft_version: str) -> None:
+        self._step("download")
+        await self._publish("Buscando la versión oficial de Forge.")
+        build = await self._resolve_forge_build(minecraft_version)
+        url = self.forge_installer_url(build)
+        await self._publish(f"Descargando el instalador oficial de Forge {build}.")
+        async with allowed_client(_INSTALLER_HOSTS, timeout=120.0) as client:
+            checksum = await self._published_sha1(client, url)
+            await self._download(client, url, self._settings.forge_installer_path, checksum)
+        assert self._settings.server_directory is not None
+        self._step("install")
+        await self._publish("Instalando Forge. Puede tardar varios minutos.")
+        # Forge's installer uses --installServer (camelCase) and may ignore the directory
+        # argument on newer builds, so it is also run with cwd set to the server folder.
+        await self._run_java(
+            "-jar", str(self._settings.forge_installer_path), "--installServer", str(self._settings.server_directory),
+            cwd=self._settings.server_directory,
+        )
+
     async def _install_fabric(self, minecraft_version: str) -> None:
         self._step("download")
         await self._publish("Buscando el instalador de Fabric.")
@@ -346,14 +388,15 @@ class InstallerService:
             "-mcversion", minecraft_version, "-loader", loader, "-downloadMinecraft",
         )
 
-    async def _run_java(self, *args: str) -> None:
+    async def _run_java(self, *args: str, cwd: Path | None = None) -> None:
         java = self._settings.server_java_executable or self._settings.local_java_executable_path
         command = str(java) if java.is_file() else "java"
         if self._java_executable:
             command = self._java_executable
         try:
             process = await asyncio.create_subprocess_exec(
-                command, *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+                command, *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                cwd=str(cwd) if cwd else None,
             )
         except OSError as error:
             raise InstallerValidationError(
@@ -407,8 +450,23 @@ class InstallerService:
         args = root / "user_jvm_args.txt"
         if not args.exists():
             args.write_text("-Xms1G\n-Xmx5G\n", encoding="utf-8")
-        # NeoForge generates its own launch scripts; preserve them exactly.
+        # NeoForge (and modern Forge) generate their own launch scripts; preserve them.
         if flavor == "neoforge":
+            return
+        if flavor == "forge":
+            # Modern Forge (1.17+) writes run.bat/run.sh; keep them. Legacy Forge leaves a
+            # forge-*.jar in the root and no scripts, so write a launcher for that jar.
+            if (root / "run.bat").is_file() or (root / "run.sh").is_file():
+                return
+            legacy_jar = next(
+                (jar.name for jar in sorted(root.glob("forge-*.jar")) if "installer" not in jar.name),
+                None,
+            )
+            if legacy_jar is None:
+                return
+            # Legacy Forge runs on Java 8, which does not understand the @argfile syntax, so
+            # the launcher reads user_jvm_args.txt and passes the flags inline instead.
+            self._write_legacy_launcher(root, legacy_jar)
             return
         jar = "server.jar" if flavor == "vanilla" else "fabric-server-launch.jar"
         bat = f"@echo off\r\njava @user_jvm_args.txt -jar {jar} %*\r\n"
@@ -416,6 +474,32 @@ class InstallerService:
         # newline="" writes the line endings exactly as given. Text mode on
         # Windows would otherwise turn run.bat into CR CR LF and run.sh into
         # CRLF, which breaks the script when the server folder is moved to Linux.
+        (root / "run.bat").write_text(bat, encoding="utf-8", newline="")
+        shell_path = root / "run.sh"
+        shell_path.write_text(shell, encoding="utf-8", newline="")
+        with contextlib.suppress(OSError):
+            os.chmod(shell_path, 0o700)
+
+    def _write_legacy_launcher(self, root: Path, jar: str) -> None:
+        """Launcher for legacy Forge (Java 8): inline the JVM args from user_jvm_args.txt.
+
+        Java 8 predates the ``@argfile`` syntax, so ``java @user_jvm_args.txt`` is read as a
+        main class. The scripts read the file (skipping ``#`` comments) and pass the flags
+        directly, which keeps the panel's RAM setting working without the argfile.
+        """
+        bat = (
+            "@echo off\r\n"
+            "setlocal enabledelayedexpansion\r\n"
+            'set "JVM_ARGS="\r\n'
+            'for /f "usebackq eol=# tokens=* delims=" %%a in ("user_jvm_args.txt") do '
+            'set "JVM_ARGS=!JVM_ARGS! %%a"\r\n'
+            f"java!JVM_ARGS! -jar {jar} %*\r\n"
+        )
+        shell = (
+            "#!/usr/bin/env sh\n"
+            "JVM_ARGS=\"$(grep -v '^[[:space:]]*#' user_jvm_args.txt | tr '\\n' ' ')\"\n"
+            f'exec java $JVM_ARGS -jar {jar} "$@"\n'
+        )
         (root / "run.bat").write_text(bat, encoding="utf-8", newline="")
         shell_path = root / "run.sh"
         shell_path.write_text(shell, encoding="utf-8", newline="")
@@ -436,16 +520,16 @@ class InstallerService:
         """Detect the installed runtime from a fresh reader (no shared cache)."""
         return ServerVersionService(self._settings).detect()
 
-    def _flavor_for_change(self, info: ServerVersionInfo) -> Literal["vanilla", "neoforge", "fabric"]:
+    def _flavor_for_change(self, info: ServerVersionInfo) -> Literal["vanilla", "neoforge", "fabric", "forge"]:
         if not info.is_installed:
             raise InstallerConflictError(
                 "No encontramos un servidor instalado para cambiarle la versión. Instalá uno primero."
             )
-        if info.loader in ("vanilla", "neoforge", "fabric"):
+        if info.loader in ("vanilla", "neoforge", "fabric", "forge"):
             return info.loader  # type: ignore[return-value]
         kind = LOADER_NAMES.get(info.loader, info.loader)
         raise InstallerValidationError(
-            f"Por ahora solo podemos cambiar la versión de servidores Vanilla, NeoForge o Fabric. "
+            f"Por ahora solo podemos cambiar la versión de servidores Vanilla, NeoForge, Fabric o Forge. "
             f"El tuyo es de tipo {kind}."
         )
 
@@ -474,6 +558,10 @@ class InstallerService:
             present = (root / "server.jar").is_file()
         elif flavor == "neoforge":
             present = (root / "libraries" / "net" / "neoforged" / "neoforge").is_dir()
+        elif flavor == "forge":
+            present = (root / "libraries" / "net" / "minecraftforge" / "forge").is_dir() or any(
+                "installer" not in jar.name for jar in root.glob("forge-*.jar")
+            )
         else:  # fabric
             present = (root / "fabric-server-launch.jar").is_file() or (
                 root / "libraries" / "net" / "fabricmc" / "fabric-loader"
@@ -528,7 +616,7 @@ class InstallerService:
                     require_not_protected(world, configured=self._settings)
                 except ProtectedPathError as error:
                     raise InstallerConflictError(str(error)) from error
-        if flavor in {"neoforge", "fabric"}:
+        if flavor in {"neoforge", "fabric", "forge"}:
             await self._assert_java_is_compatible(minecraft_version)
 
         # 1) Download and verify the new runtime without touching the server yet.
@@ -569,6 +657,8 @@ class InstallerService:
             return _StagedRuntime(jar=jar)
         if flavor == "neoforge":
             return _StagedRuntime(installer=await self._stage_neoforge(minecraft_version))
+        if flavor == "forge":
+            return _StagedRuntime(installer=await self._stage_forge(minecraft_version))
         loader, installer = await self._stage_fabric(minecraft_version)
         return _StagedRuntime(installer=installer, loader=loader)
 
@@ -607,6 +697,15 @@ class InstallerService:
             await self._download(client, url, self._settings.neoforge_installer_path, checksum)
         return self._settings.neoforge_installer_path
 
+    async def _stage_forge(self, minecraft_version: str) -> Path:
+        build = await self._resolve_forge_build(minecraft_version)
+        url = self.forge_installer_url(build)
+        await self._publish(f"Descargando el instalador oficial de Forge {build}.")
+        async with allowed_client(_INSTALLER_HOSTS, timeout=120.0) as client:
+            checksum = await self._published_sha1(client, url)
+            await self._download(client, url, self._settings.forge_installer_path, checksum)
+        return self._settings.forge_installer_path
+
     async def _stage_fabric(self, minecraft_version: str) -> tuple[str, Path]:
         try:
             loader = await self._catalog.latest_fabric_loader(minecraft_version)
@@ -636,6 +735,11 @@ class InstallerService:
             assert staged.installer is not None
             await self._publish("Instalando NeoForge. Puede tardar varios minutos.")
             await self._run_java("-jar", str(staged.installer), "--install-server", str(root))
+            return
+        if flavor == "forge":
+            assert staged.installer is not None
+            await self._publish("Instalando Forge. Puede tardar varios minutos.")
+            await self._run_java("-jar", str(staged.installer), "--installServer", str(root), cwd=root)
             return
         assert staged.installer is not None and staged.loader is not None
         await self._publish(f"Instalando Fabric Loader {staged.loader}. Puede tardar unos minutos.")

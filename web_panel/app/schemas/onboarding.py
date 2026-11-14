@@ -5,8 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-ServerFlavor = Literal["vanilla", "neoforge", "fabric", "import"]
-InstallFlavor = Literal["vanilla", "neoforge", "fabric"]
+ServerFlavor = Literal["vanilla", "neoforge", "fabric", "forge", "import"]
+InstallFlavor = Literal["vanilla", "neoforge", "fabric", "forge"]
 
 
 class InstallServerRequest(BaseModel):
