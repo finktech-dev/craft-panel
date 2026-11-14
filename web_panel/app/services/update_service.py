@@ -43,6 +43,19 @@ def current_version(path: Path = VERSION_FILE) -> str:
     return text if parse_version(text) else "0.0.0"
 
 
+_MAX_NOTES_CHARS = 20_000
+
+
+def _release_notes(body: Any) -> str | None:
+    """The release body (Markdown), trimmed and length-capped; None when empty."""
+    if not isinstance(body, str):
+        return None
+    text = body.replace("\r\n", "\n").strip()
+    if not text:
+        return None
+    return text[:_MAX_NOTES_CHARS]
+
+
 @dataclass(frozen=True, slots=True)
 class UpdateStatus:
     current: str
@@ -50,6 +63,7 @@ class UpdateStatus:
     latest: str | None = None
     available: bool = False
     url: str | None = None
+    notes: str | None = None
 
 
 class UpdateService:
@@ -68,7 +82,7 @@ class UpdateService:
         self._transport = transport
         self._clock = clock
         self._lock = asyncio.Lock()
-        self._latest: tuple[str, str] | None = None
+        self._latest: tuple[str, str, str | None] | None = None
         self._next_check = 0.0
 
     @property
@@ -84,9 +98,12 @@ class UpdateService:
                 await self._refresh()
         if self._latest is None:
             return UpdateStatus(current=current, enabled=True)
-        latest, url = self._latest
+        latest, url, notes = self._latest
         newer = (parse_version(latest) or (0, 0, 0)) > (parse_version(current) or (0, 0, 0))
-        return UpdateStatus(current=current, enabled=True, latest=latest, available=newer, url=url)
+        return UpdateStatus(
+            current=current, enabled=True, latest=latest, available=newer, url=url,
+            notes=notes if newer else None,
+        )
 
     async def _refresh(self) -> None:
         try:
@@ -106,7 +123,7 @@ class UpdateService:
             logger.info("Could not check for a newer panel version: %s", error)
             self._next_check = self._clock() + RETRY_AFTER_ERROR_SECONDS
 
-    def _read_release(self, data: Any) -> tuple[str, str] | None:
+    def _read_release(self, data: Any) -> tuple[str, str, str | None] | None:
         if not isinstance(data, dict) or data.get("draft") or data.get("prerelease"):
             return None
         tag = str(data.get("tag_name") or "")
@@ -117,7 +134,7 @@ class UpdateService:
         url = str(data.get("html_url") or "")
         if not url.startswith(f"{self.releases_page}/"):
             url = f"{self.releases_page}/tag/{tag}"
-        return ".".join(map(str, version)), url
+        return ".".join(map(str, version)), url, _release_notes(data.get("body"))
 
 
 update_service = UpdateService()

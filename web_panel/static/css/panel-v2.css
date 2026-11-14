@@ -155,3 +155,17 @@ dialog.confirm::backdrop { background:rgba(10,9,8,.65); }
 .segmented { display:inline-flex; border:1px solid var(--line); border-radius:.6rem; padding:.15rem; }
 .segmented button { border-radius:.45rem; padding:.3rem .65rem; font-size:.85rem; font-weight:600; color:var(--text-muted); }
 .segmented button[aria-pressed="true"] { background:var(--surface-raised); color:var(--text); }
+
+/* Rendered Markdown of a release's notes, shown in the "new version" notice. */
+.release-notes { font-size:.9rem; line-height:1.55; color:var(--text-muted); }
+.release-notes > :first-child { margin-top:0; }
+.release-notes h4 { margin:1rem 0 .35rem; font-size:1rem; font-weight:700; color:var(--text); }
+.release-notes h5, .release-notes h6 { margin:.85rem 0 .3rem; font-size:.9rem; font-weight:700; color:var(--text); }
+.release-notes p { margin:.4rem 0; }
+.release-notes ul, .release-notes ol { margin:.4rem 0; padding-left:1.25rem; }
+.release-notes ul { list-style:disc; }
+.release-notes ol { list-style:decimal; }
+.release-notes li { margin:.2rem 0; }
+.release-notes code { background:var(--surface-raised); border-radius:.3rem; padding:.05rem .3rem; font-size:.85em; }
+.release-notes a { color:#a3d077; font-weight:600; text-underline-offset:3px; }
+.release-notes a:hover { text-decoration:underline; }
