@@ -188,6 +188,14 @@
     text('#update-latest', update.latest);
     text('#update-current', update.current);
     if (update.url) $('#update-link')?.setAttribute('href', update.url);
+    const notesWrap = $('#update-notes-wrap');
+    const notesBox = $('#update-notes');
+    if (update.notes && notesWrap && notesBox && window.CraftMarkdown) {
+      notesBox.replaceChildren(window.CraftMarkdown.render(update.notes));
+      notesWrap.classList.remove('hidden');
+    } else if (notesWrap) {
+      notesWrap.classList.add('hidden');
+    }
     $('#update-notice')?.classList.remove('hidden');
     $('#update-dismiss')?.addEventListener('click', () => {
       try { window.localStorage.setItem(UPDATE_KEY, update.latest); } catch { /* hidden until reload */ }

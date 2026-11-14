@@ -51,6 +51,21 @@ async def test_a_newer_release_is_announced_with_its_page(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
+async def test_release_notes_are_exposed_only_for_a_newer_release(tmp_path: Path) -> None:
+    service, _, _ = make_service(tmp_path, lambda _: release("v1.2.0", body="## Novedades\n- Algo nuevo"))
+    status = await service.status(enabled=True)
+    assert status.available and status.notes == "## Novedades\n- Algo nuevo"
+
+    # The same version is not an update, so there are no notes to show.
+    service, _, _ = make_service(tmp_path, lambda _: release("v1.0.0", body="## Novedades"))
+    assert (await service.status(enabled=True)).notes is None
+
+    # An empty body yields no notes even when newer.
+    service, _, _ = make_service(tmp_path, lambda _: release("v1.2.0", body="   "))
+    assert (await service.status(enabled=True)).notes is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("tag", ["v1.0.0", "v0.9.9", "v2.0.0-beta.1", "nightly"])
 async def test_no_notice_for_the_same_an_older_or_an_unusual_release(tmp_path: Path, tag: str) -> None:
     service, _, _ = make_service(tmp_path, lambda _: release(tag))
