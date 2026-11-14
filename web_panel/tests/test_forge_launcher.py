@@ -20,7 +20,7 @@ def test_legacy_forge_launcher_inlines_jvm_args(tmp_path: Path) -> None:
     # Legacy Forge leaves a forge-*.jar in the root and no run scripts of its own.
     (root / "forge-1.12.2-14.23.5.2859.jar").write_bytes(b"x")
 
-    _installer(configured)._write_safe_server_files("forge")
+    _installer(configured)._write_safe_server_files("forge", "1.12.2")
 
     bat = (root / "run.bat").read_text(encoding="utf-8")
     shell = (root / "run.sh").read_text(encoding="utf-8")
@@ -39,6 +39,6 @@ def test_modern_forge_keeps_its_own_scripts(tmp_path: Path) -> None:
     # Modern Forge generates its own run.bat; the panel must not overwrite it.
     (root / "run.bat").write_text("@echo off\r\nforge-generated\r\n", encoding="utf-8", newline="")
 
-    _installer(configured)._write_safe_server_files("forge")
+    _installer(configured)._write_safe_server_files("forge", "1.21.1")
 
     assert "forge-generated" in (root / "run.bat").read_text(encoding="utf-8")
