@@ -13,6 +13,7 @@ from app.core.config import Settings, settings
 from app.core.path_safety import is_safe_component
 from app.services.server_process import server_manager
 from app.services.server_properties_service import server_properties_service
+from app.services.whitelist_service import offline_uuid
 
 
 def _friendly_name(adv_id: str) -> str:
@@ -187,7 +188,7 @@ class AdvancementService:
         clean_user = username.strip().lower()
         player_uuid = uuid_map.get(clean_user)
         if not player_uuid:
-            player_uuid = str(uuid.uuid3(uuid.NAMESPACE_DNS, f"OfflinePlayer:{username}"))
+            player_uuid = offline_uuid(username)
 
         world_dir, is_active = self._resolve_world_dir(world_name)
         adv_file = world_dir / "advancements" / f"{player_uuid}.json"
@@ -260,7 +261,7 @@ class AdvancementService:
             uuid_map = await asyncio.to_thread(self._get_uuid_map)
             player_uuid = uuid_map.get(clean_user.lower())
             if not player_uuid:
-                player_uuid = str(uuid.uuid3(uuid.NAMESPACE_DNS, f"OfflinePlayer:{clean_user}"))
+                player_uuid = offline_uuid(clean_user)
 
             adv_file = world_dir / "advancements" / f"{player_uuid}.json"
             if not adv_file.is_file():
@@ -311,7 +312,7 @@ class AdvancementService:
             uuid_map = await asyncio.to_thread(self._get_uuid_map)
             player_uuid = uuid_map.get(clean_user.lower())
             if not player_uuid:
-                player_uuid = str(uuid.uuid3(uuid.NAMESPACE_DNS, f"OfflinePlayer:{clean_user}"))
+                player_uuid = offline_uuid(clean_user)
 
             adv_file = world_dir / "advancements" / f"{player_uuid}.json"
             adv_file.parent.mkdir(parents=True, exist_ok=True)
