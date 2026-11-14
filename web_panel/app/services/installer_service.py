@@ -464,14 +464,42 @@ class InstallerService:
             )
             if legacy_jar is None:
                 return
-            jar = legacy_jar
-        else:
-            jar = "server.jar" if flavor == "vanilla" else "fabric-server-launch.jar"
+            # Legacy Forge runs on Java 8, which does not understand the @argfile syntax, so
+            # the launcher reads user_jvm_args.txt and passes the flags inline instead.
+            self._write_legacy_launcher(root, legacy_jar)
+            return
+        jar = "server.jar" if flavor == "vanilla" else "fabric-server-launch.jar"
         bat = f"@echo off\r\njava @user_jvm_args.txt -jar {jar} %*\r\n"
         shell = f"#!/usr/bin/env sh\nexec java @user_jvm_args.txt -jar {jar} \"$@\"\n"
         # newline="" writes the line endings exactly as given. Text mode on
         # Windows would otherwise turn run.bat into CR CR LF and run.sh into
         # CRLF, which breaks the script when the server folder is moved to Linux.
+        (root / "run.bat").write_text(bat, encoding="utf-8", newline="")
+        shell_path = root / "run.sh"
+        shell_path.write_text(shell, encoding="utf-8", newline="")
+        with contextlib.suppress(OSError):
+            os.chmod(shell_path, 0o700)
+
+    def _write_legacy_launcher(self, root: Path, jar: str) -> None:
+        """Launcher for legacy Forge (Java 8): inline the JVM args from user_jvm_args.txt.
+
+        Java 8 predates the ``@argfile`` syntax, so ``java @user_jvm_args.txt`` is read as a
+        main class. The scripts read the file (skipping ``#`` comments) and pass the flags
+        directly, which keeps the panel's RAM setting working without the argfile.
+        """
+        bat = (
+            "@echo off\r\n"
+            "setlocal enabledelayedexpansion\r\n"
+            'set "JVM_ARGS="\r\n'
+            'for /f "usebackq eol=# tokens=* delims=" %%a in ("user_jvm_args.txt") do '
+            'set "JVM_ARGS=!JVM_ARGS! %%a"\r\n'
+            f"java!JVM_ARGS! -jar {jar} %*\r\n"
+        )
+        shell = (
+            "#!/usr/bin/env sh\n"
+            "JVM_ARGS=\"$(grep -v '^[[:space:]]*#' user_jvm_args.txt | tr '\\n' ' ')\"\n"
+            f'exec java $JVM_ARGS -jar {jar} "$@"\n'
+        )
         (root / "run.bat").write_text(bat, encoding="utf-8", newline="")
         shell_path = root / "run.sh"
         shell_path.write_text(shell, encoding="utf-8", newline="")
