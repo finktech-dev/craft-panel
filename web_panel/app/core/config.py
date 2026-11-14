@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     # Optional overrides; by default the panel reads both from the installed server.
     minecraft_version: str | None = None
     neoforge_version: str | None = None
+    forge_version: str | None = None
     allocated_ram_gb: int = Field(default=5, ge=1, le=64)
     playit_enabled: bool = True
     graceful_stop_timeout_seconds: int = Field(default=30, ge=1, le=300)
@@ -386,6 +387,11 @@ class Settings(BaseSettings):
     def neoforge_installer_path(self) -> Path:
         assert self.tools_directory is not None
         return self.tools_directory / "neoforge-installer.jar"
+
+    @property
+    def forge_installer_path(self) -> Path:
+        assert self.tools_directory is not None
+        return self.tools_directory / "forge-installer.jar"
 
     @property
     def playit_executable_path(self) -> Path:
