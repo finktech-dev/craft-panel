@@ -263,6 +263,21 @@
           <button type="button" id="change-version-open" class="v2-button btn-quiet mt-3" hidden>Cambiar versión</button>
           <div id="change-version-progress" class="mt-3"></div>
         </div>
+
+        <div class="mt-8 border-t border-zinc-800 pt-6">
+          <h3 class="font-semibold text-zinc-100">Imagen del servidor</h3>
+          <p class="mt-1 text-sm text-zinc-400">La foto que ven tus amigos al lado del servidor en la lista de Minecraft. Elegí cualquier imagen: la recortamos y achicamos sola. Se ve cuando reinicies el servidor.</p>
+          <div class="mt-3 flex items-center gap-4">
+            <img id="server-icon-preview" alt="Imagen del servidor" width="64" height="64" class="hidden h-16 w-16 rounded-lg border border-zinc-700 bg-zinc-900 object-cover">
+            <span id="server-icon-empty" class="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900 text-xs text-zinc-500">Sin foto</span>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" id="server-icon-pick" class="v2-button btn-quiet">Elegir imagen</button>
+              <button type="button" id="server-icon-remove" class="v2-button btn-quiet hidden">Quitar</button>
+            </div>
+          </div>
+          <input type="file" id="server-icon-file" accept="image/png,image/jpeg,image/webp" class="hidden">
+          <p id="server-icon-status" class="mt-2 text-sm text-zinc-500" aria-live="polite"></p>
+        </div>
         </div>
 
         {{ subpanel('myserver', 'copias', cls='pt-6') }}
@@ -1014,6 +1029,7 @@
 </dialog>
 <script defer src="/static/js/jobs.js"></script>
 <script defer src="/static/js/admin-change-version.js"></script>
+<script defer src="/static/js/admin-server-icon.js"></script>
 <script defer src="/static/js/admin-two-factor.js"></script>
 <script src="/static/js/admin-tabs.js"></script>
 <script src="/static/js/admin-configs.js"></script>
