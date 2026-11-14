@@ -146,12 +146,27 @@ def test_generated_launch_scripts_keep_native_line_endings(tmp_path: Path) -> No
     configured.server_directory.mkdir(parents=True)
     service = InstallerService(configured_settings=configured, server=StoppedServer())
 
-    service._write_safe_server_files("vanilla")
+    service._write_safe_server_files("vanilla", "1.21.1")
 
     run_bat = (configured.server_directory / "run.bat").read_bytes()
     run_sh = (configured.server_directory / "run.sh").read_bytes()
     assert run_bat == b"@echo off\r\njava @user_jvm_args.txt -jar server.jar %*\r\n"
     assert b"\r" not in run_sh
+
+
+def test_legacy_vanilla_launcher_avoids_the_java8_argfile(tmp_path: Path) -> None:
+    configured = Settings(project_root=tmp_path)
+    assert configured.server_directory is not None
+    configured.server_directory.mkdir(parents=True)
+    service = InstallerService(configured_settings=configured, server=StoppedServer())
+
+    # 1.12.2 runs on Java 8, which cannot read the @user_jvm_args.txt argfile.
+    service._write_safe_server_files("vanilla", "1.12.2")
+
+    run_bat = (configured.server_directory / "run.bat").read_text(encoding="utf-8")
+    assert "@user_jvm_args.txt" not in run_bat
+    assert "user_jvm_args.txt" in run_bat  # still read, just inlined
+    assert "server.jar" in run_bat
 
 
 def test_installer_output_falls_back_to_the_windows_ansi_code_page(monkeypatch) -> None:

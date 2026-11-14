@@ -26,6 +26,7 @@ from app.core.net_safety import (
     allowed_client,
     download_to_file,
 )
+from app.services.java_runtime_service import JavaRuntimeService, JavaRuntimeServiceError
 from app.services.progress import ProgressCallback, StepPlan, download_message, report
 from app.services.runtime_discovery import RuntimeDiscoveryService
 from app.services.runtime_guard import ServerActiveError, require_server_stopped
@@ -237,7 +238,7 @@ class InstallerService:
         else:
             await self._install_neoforge(minecraft_version)
         self._step("finish", "Dejando listos los archivos de inicio.")
-        await asyncio.to_thread(self._write_safe_server_files, flavor)
+        await asyncio.to_thread(self._write_safe_server_files, flavor, minecraft_version)
         await self._publish("Servidor instalado. No se reemplazaron mundos ni ajustes existentes.")
 
     def _step(self, key: str, message: str | None = None) -> None:
@@ -442,7 +443,7 @@ class InstallerService:
         except (httpx.HTTPError, OSError) as error:
             raise InstallerServiceError("Se cortó la descarga del servidor. Revisá tu internet y probá de nuevo.") from error
 
-    def _write_safe_server_files(self, flavor: str) -> None:
+    def _write_safe_server_files(self, flavor: str, minecraft_version: str) -> None:
         assert self._settings.server_directory is not None
         root = self._settings.server_directory
         # EULA is only written after the explicit checkbox in the wizard.
@@ -469,6 +470,10 @@ class InstallerService:
             self._write_legacy_launcher(root, legacy_jar)
             return
         jar = "server.jar" if flavor == "vanilla" else "fabric-server-launch.jar"
+        # Legacy Vanilla/Fabric (<=1.16.5) also run on Java 8, which predates @argfile.
+        if self._needs_inline_jvm_args(minecraft_version):
+            self._write_legacy_launcher(root, jar)
+            return
         bat = f"@echo off\r\njava @user_jvm_args.txt -jar {jar} %*\r\n"
         shell = f"#!/usr/bin/env sh\nexec java @user_jvm_args.txt -jar {jar} \"$@\"\n"
         # newline="" writes the line endings exactly as given. Text mode on
@@ -479,6 +484,14 @@ class InstallerService:
         shell_path.write_text(shell, encoding="utf-8", newline="")
         with contextlib.suppress(OSError):
             os.chmod(shell_path, 0o700)
+
+    @staticmethod
+    def _needs_inline_jvm_args(minecraft_version: str) -> bool:
+        """Legacy (<=1.16.5, Java 8) can't read run.bat's @user_jvm_args.txt argfile."""
+        try:
+            return JavaRuntimeService.required_major(minecraft_version) <= 8
+        except JavaRuntimeServiceError:
+            return False  # unknown version: keep the modern launcher, never regress it
 
     def _write_legacy_launcher(self, root: Path, jar: str) -> None:
         """Launcher for legacy Forge (Java 8): inline the JVM args from user_jvm_args.txt.
@@ -631,7 +644,7 @@ class InstallerService:
         try:
             self._step("install")
             await self._apply_runtime(flavor, minecraft_version, staged)
-            await asyncio.to_thread(self._write_safe_server_files, flavor)
+            await asyncio.to_thread(self._write_safe_server_files, flavor, minecraft_version)
         except BaseException:
             await asyncio.to_thread(self._restore_runtime_aside, root, aside, moved)
             raise

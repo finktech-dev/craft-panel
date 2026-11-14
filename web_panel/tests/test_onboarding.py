@@ -47,7 +47,7 @@ def test_installer_generates_cross_platform_scripts_without_replacing_properties
     properties.write_text("motd=Keep mine\n", encoding="utf-8")
     service = InstallerService(configured_settings=configured, server=StoppedServer())
 
-    service._write_safe_server_files("vanilla")
+    service._write_safe_server_files("vanilla", "1.21.1")
 
     assert properties.read_text(encoding="utf-8") == "motd=Keep mine\n"
     assert (configured.server_directory / "eula.txt").read_text(encoding="utf-8") == "eula=true\n"
@@ -117,7 +117,7 @@ def test_neoforge_scripts_are_preserved(tmp_path):
     launch_script.write_text("keep this script", encoding="utf-8")
     service = InstallerService(configured_settings=configured, server=StoppedServer())
 
-    service._write_safe_server_files("neoforge")
+    service._write_safe_server_files("neoforge", "1.21.1")
 
     assert launch_script.read_text(encoding="utf-8") == "keep this script"
 
