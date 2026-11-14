@@ -17,13 +17,16 @@ from typing import Any, Literal
 import httpx
 
 from app.services.java_runtime_service import JavaRuntimeService, JavaRuntimeValidationError
-from app.services.server_version_service import neoforge_to_minecraft, version_key
+from app.services.server_version_service import forge_to_minecraft, neoforge_to_minecraft, version_key
 
-CatalogFlavor = Literal["vanilla", "neoforge", "fabric"]
+CatalogFlavor = Literal["vanilla", "neoforge", "fabric", "forge"]
 
 MOJANG_MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 NEOFORGE_METADATA_URL = "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"
 NEOFORGE_MAVEN_URL = "https://maven.neoforged.net/releases/net/neoforged/neoforge"
+FORGE_METADATA_URL = "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml"
+FORGE_MAVEN_URL = "https://maven.minecraftforge.net/net/minecraftforge/forge"
+FORGE_PROMOTIONS_URL = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json"
 FABRIC_GAME_URL = "https://meta.fabricmc.net/v2/versions/game"
 FABRIC_LOADER_URL = "https://meta.fabricmc.net/v2/versions/loader/{minecraft_version}"
 FABRIC_INSTALLER_URL = "https://meta.fabricmc.net/v2/versions/installer"
@@ -173,6 +176,60 @@ def neoforge_catalog_entries(
     return entries
 
 
+_FORGE_VERSION = re.compile(r"^(\d+\.\d+(?:\.\d+)?)-(\d+(?:\.\d+)+)$")
+
+
+def parse_forge_metadata(xml_text: str) -> dict[str, list[str]]:
+    """Group Forge builds by Minecraft version: ``{mc: [forge builds newest first]}``.
+
+    Only plain ``<mc>-<forge>`` builds are kept (branch-suffixed or pre-release builds
+    are ignored), and each Minecraft version's builds are sorted newest first.
+    """
+    if "<metadata" not in xml_text:
+        raise VersionCatalogError("La lista de versiones de Forge llegó con un formato inesperado.")
+    grouped: dict[str, list[str]] = {}
+    for build in _MAVEN_VERSION.findall(xml_text):
+        match = _FORGE_VERSION.match(build)
+        if not match or not is_safe_version(build):
+            continue
+        grouped.setdefault(match.group(1), []).append(build)
+    for builds in grouped.values():
+        builds.sort(key=lambda b: version_key(b.split("-", 1)[1]), reverse=True)
+    return grouped
+
+
+def parse_forge_promotions(payload: Any) -> dict[str, dict[str, str]]:
+    """Forge's recommended/latest build per Minecraft version from promotions_slim.json."""
+    promos = payload.get("promos") if isinstance(payload, dict) else None
+    if not isinstance(promos, dict):
+        raise VersionCatalogError("La lista de versiones recomendadas de Forge llegó con un formato inesperado.")
+    result: dict[str, dict[str, str]] = {}
+    for key, forge in promos.items():
+        if not isinstance(key, str) or not isinstance(forge, str):
+            continue
+        minecraft, _, channel = key.rpartition("-")
+        if channel in {"recommended", "latest"} and minecraft and is_safe_version(forge):
+            result.setdefault(minecraft, {})[channel] = f"{minecraft}-{forge}"
+    return result
+
+
+def forge_catalog_entries(
+    grouped: dict[str, list[str]], promos: dict[str, dict[str, str]], include_snapshots: bool = False
+) -> list[CatalogEntry]:
+    entries: list[CatalogEntry] = []
+    for minecraft, builds in grouped.items():
+        promo = promos.get(minecraft, {})
+        recommended = promo.get("recommended")
+        if recommended and recommended in builds:
+            entries.append(CatalogEntry(minecraft, True, _java_major(minecraft), recommended))
+        elif include_snapshots:
+            latest = promo.get("latest")
+            build = latest if latest in builds else builds[0]
+            entries.append(CatalogEntry(minecraft, False, _java_major(minecraft), build))
+    entries.sort(key=lambda entry: version_key(entry.minecraft_version), reverse=True)
+    return entries
+
+
 # Service ---------------------------------------------------------------------
 
 class VersionCatalogService:
@@ -194,6 +251,11 @@ class VersionCatalogService:
             grouped = parse_neoforge_metadata(await self._get_text(NEOFORGE_METADATA_URL, "NeoForge"))
             entries = neoforge_catalog_entries(grouped, include_snapshots)
             source = NEOFORGE_METADATA_URL
+        elif flavor == "forge":
+            forge_grouped = parse_forge_metadata(await self._get_text(FORGE_METADATA_URL, "Forge"))
+            promos = parse_forge_promotions(await self._get_json(FORGE_PROMOTIONS_URL, "Forge"))
+            entries = forge_catalog_entries(forge_grouped, promos, include_snapshots)
+            source = FORGE_METADATA_URL
         else:
             raise VersionCatalogValidationError("Tipo de servidor no soportado.")
         if not entries:
@@ -210,6 +272,20 @@ class VersionCatalogService:
                 f"NeoForge todavía no tiene una versión estable para Minecraft {minecraft_version}. Elegí otra versión."
             )
         return channels["stable"][0]
+
+    async def latest_forge_build(self, minecraft_version: str) -> str:
+        if not is_safe_version(minecraft_version):
+            raise VersionCatalogValidationError("La versión de Minecraft no es válida.")
+        grouped = parse_forge_metadata(await self._get_text(FORGE_METADATA_URL, "Forge"))
+        builds = grouped.get(minecraft_version)
+        if not builds:
+            raise VersionCatalogValidationError(f"Forge no tiene versiones para Minecraft {minecraft_version}.")
+        promos = parse_forge_promotions(await self._get_json(FORGE_PROMOTIONS_URL, "Forge"))
+        promo = promos.get(minecraft_version, {})
+        for build in (promo.get("recommended"), promo.get("latest")):
+            if build and build in builds:
+                return build
+        return builds[0]
 
     async def latest_fabric_loader(self, minecraft_version: str) -> str:
         if not is_safe_version(minecraft_version):

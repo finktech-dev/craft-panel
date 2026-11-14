@@ -100,6 +100,12 @@ def neoforge_to_minecraft(neoforge_version: str) -> str | None:
     return None
 
 
+def forge_to_minecraft(forge_build: str) -> str | None:
+    """Map a Forge build to its Minecraft release; the build is ``<mc>-<forge>``."""
+    minecraft, _, forge = forge_build.partition("-")
+    return minecraft if forge and re.match(r"^\d+\.\d+(?:\.\d+)?$", minecraft) else None
+
+
 # Data pack ``pack_format`` by the first Minecraft release that introduced it.
 _DATA_PACK_FORMATS: tuple[tuple[tuple[int, ...], int], ...] = (
     ((1, 13), 4),
