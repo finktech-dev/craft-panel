@@ -241,6 +241,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     container.innerHTML = filtered.map((p) => {
       const currentVal = modifiedProperties[p.key] !== undefined ? modifiedProperties[p.key] : p.current_value;
+      // online-mode (premium/no-premium) changes players' internal identity, so it goes
+      // through a guided flow (warning + optional backup + progress migration), not the
+      // generic save. It is intentionally rendered without a data-prop-key input.
+      if (p.key === 'online-mode') {
+        const premium = String(currentVal).toLowerCase() === 'true';
+        return `
+          <div class="flex flex-col gap-3 border-b border-zinc-800 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+            <div class="min-w-0">
+              <h3 class="font-semibold text-zinc-50">¿Tus amigos tienen Minecraft oficial?</h3>
+              <p class="mt-0.5 text-sm leading-relaxed text-zinc-400">En <strong>premium</strong> solo entran cuentas oficiales de Minecraft. En <strong>no premium</strong> entran también las no oficiales, para jugar con amigos que no lo compraron.</p>
+              <p class="mt-1 text-sm text-zinc-500">Ahora: <strong class="text-zinc-300">${premium ? 'premium (cuentas oficiales)' : 'no premium (entran todos)'}</strong></p>
+            </div>
+            <div class="shrink-0">
+              <button type="button" id="account-mode-open" data-premium="${premium ? '1' : '0'}" class="v2-button btn-quiet">Cambiar</button>
+            </div>
+          </div>
+          <div id="account-mode-progress" class="pb-2"></div>
+        `;
+      }
       const fieldLabel = `aria-label="${esc(p.label)}"`;
       let inputHtml = '';
       if (p.type === 'boolean') {
@@ -406,6 +425,54 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.disabled = false;
     }
   };
+
+  // Premium / no-premium: a guided change that can keep every player's progress.
+  const accountModeDialog = () => $('#account-mode-dialog');
+
+  function openAccountMode(trigger) {
+    const dialog = accountModeDialog();
+    if (!dialog) return;
+    const targetOnline = trigger.dataset.premium !== '1'; // switch to the opposite mode
+    dialog.dataset.online = targetOnline ? '1' : '0';
+    const explain = $('#account-mode-explain');
+    if (explain) {
+      explain.textContent = targetOnline
+        ? 'Vas a pasar a PREMIUM: solo van a poder entrar cuentas oficiales de Minecraft (los amigos sin cuenta oficial no van a poder entrar). Movemos el progreso de cada jugador a su cuenta oficial para que no pierdan nada.'
+        : 'Vas a pasar a NO PREMIUM: van a poder entrar también las cuentas no oficiales. Los que tienen cuenta oficial cambian de identidad interna, así que movemos su progreso para que no aparezcan como nuevos ni pierdan sus cosas.';
+    }
+    const migrate = $('#account-mode-migrate'); if (migrate) migrate.checked = true;
+    const backup = $('#account-mode-backup'); if (backup) backup.checked = true;
+    if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+  }
+
+  const closeAccountMode = () => { const d = accountModeDialog(); if (d && d.open) d.close(); };
+
+  $('#props-container').addEventListener('click', (e) => {
+    const trigger = e.target.closest('#account-mode-open');
+    if (trigger) openAccountMode(trigger);
+  });
+  if ($('#account-mode-cancel')) $('#account-mode-cancel').onclick = closeAccountMode;
+  if ($('#account-mode-confirm')) {
+    $('#account-mode-confirm').onclick = async () => {
+      const dialog = accountModeDialog();
+      const body = {
+        online_mode: dialog.dataset.online === '1',
+        make_backup: Boolean($('#account-mode-backup') && $('#account-mode-backup').checked),
+        migrate_progress: Boolean($('#account-mode-migrate') && $('#account-mode-migrate').checked),
+      };
+      try {
+        await PanelJobs.start('/api/server/account-mode', {
+          mount: '#account-mode-progress',
+          button: $('#account-mode-open'),
+          body,
+          onAccepted: () => closeAccountMode(),
+        });
+        await loadProperties();
+      } catch (err) {
+        Panel.toast((err && err.message) || 'No pudimos cambiar el modo del servidor.', 'error');
+      }
+    };
+  }
 
   // ==========================================
   // 3. WHITELIST AND WAYPOINTS

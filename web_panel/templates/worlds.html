@@ -358,5 +358,16 @@
 {% endblock %}
 
 {% block scripts %}
+<dialog id="account-mode-dialog" class="confirm" aria-labelledby="account-mode-title">
+  <h2 id="account-mode-title" class="text-lg font-semibold text-zinc-50">Cambiar premium / no premium</h2>
+  <p id="account-mode-explain" class="mt-2 text-sm leading-relaxed text-zinc-400"></p>
+  <label class="mt-4 flex items-start gap-2 text-sm text-zinc-300"><input type="checkbox" id="account-mode-migrate" checked class="mt-0.5"><span>Mover el progreso de los jugadores a su nueva cuenta, así no pierden inventario ni avances (recomendado).</span></label>
+  <label class="mt-2 flex items-start gap-2 text-sm text-zinc-300"><input type="checkbox" id="account-mode-backup" checked class="mt-0.5"><span>Hacer una copia del mundo antes, por las dudas.</span></label>
+  <div class="confirm-actions mt-5">
+    <button type="button" id="account-mode-cancel" class="v2-button btn-quiet">No, dejar como está</button>
+    <button type="button" id="account-mode-confirm" class="v2-button btn-danger">Cambiar</button>
+  </div>
+</dialog>
+<script src="/static/js/jobs.js"></script>
 <script src="/static/js/worlds.js"></script>
 {% endblock %}

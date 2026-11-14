@@ -33,7 +33,8 @@ from app.websocket.manager import ConnectionManager, connection_manager
 logger = logging.getLogger("jobs")
 
 JobKind = Literal[
-    "backup", "restore", "install_server", "change_version", "install_java", "restart", "graceful_restart", "start"
+    "backup", "restore", "install_server", "change_version", "account_mode",
+    "install_java", "restart", "graceful_restart", "start",
 ]
 JobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 StepState = Literal["pending", "running", "done", "failed", "skipped"]
@@ -52,16 +53,19 @@ _LIFECYCLE: frozenset[str] = frozenset({"start", "restart", "graceful_restart"})
 # Which kinds may not run at the same time. Lifecycle operations must not overlap
 # each other, a restore or a runtime install; backups and restores share one lock.
 _CONFLICTS: dict[str, frozenset[str]] = {
-    "backup": frozenset({"backup", "restore", "change_version"}),
-    "restore": frozenset({"backup", "restore", "install_server", "change_version"}) | _LIFECYCLE,
+    "backup": frozenset({"backup", "restore", "change_version", "account_mode"}),
+    "restore": frozenset({"backup", "restore", "install_server", "change_version", "account_mode"}) | _LIFECYCLE,
     "install_server": frozenset({"install_server", "restore", "change_version"}) | _LIFECYCLE,
     # Changing version reinstalls the runtime and may back up first, so it must not
     # overlap a backup, a restore, another install, a Java install or any lifecycle.
     "change_version": frozenset({"change_version", "backup", "restore", "install_server", "install_java"}) | _LIFECYCLE,
+    # Changing premium/no-premium writes server.properties and moves player files, so it
+    # must not overlap a backup, restore, install, version change or any lifecycle.
+    "account_mode": frozenset({"account_mode", "backup", "restore", "install_server", "change_version"}) | _LIFECYCLE,
     "install_java": frozenset({"install_java", "change_version"}),
-    "start": frozenset({"restore", "install_server", "change_version"}) | _LIFECYCLE,
-    "restart": frozenset({"restore", "install_server", "change_version"}) | _LIFECYCLE,
-    "graceful_restart": frozenset({"restore", "install_server", "change_version"}) | _LIFECYCLE,
+    "start": frozenset({"restore", "install_server", "change_version", "account_mode"}) | _LIFECYCLE,
+    "restart": frozenset({"restore", "install_server", "change_version", "account_mode"}) | _LIFECYCLE,
+    "graceful_restart": frozenset({"restore", "install_server", "change_version", "account_mode"}) | _LIFECYCLE,
 }
 
 # What to do next when a job fails, in the same plain voice as the rest of the panel.
@@ -70,6 +74,7 @@ NEXT_STEPS: dict[str, str] = {
     "restore": "Probá de nuevo con el servidor apagado, o elegí otra copia.",
     "install_server": "No se reemplazó nada. Revisá tu conexión a Internet y probá de nuevo.",
     "change_version": "Tu servidor quedó como estaba. Revisá tu conexión a Internet y probá de nuevo.",
+    "account_mode": "El modo de tu servidor quedó como estaba. Probá de nuevo con el servidor apagado.",
     "install_java": "Revisá tu conexión a Internet y probá de nuevo, o instalá Java a mano.",
     "start": "Mirá la consola o la sección Problemas para ver qué pasó, y probá encenderlo de nuevo.",
     "restart": "Mirá la consola o la sección Problemas para ver qué pasó, y probá encenderlo de nuevo.",

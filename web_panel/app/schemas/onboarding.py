@@ -24,6 +24,14 @@ class ChangeVersionRequest(BaseModel):
     delete_world: bool = False
 
 
+class AccountModeRequest(BaseModel):
+    """Switch the server between premium (online-mode) and no-premium, moving progress."""
+
+    online_mode: bool
+    make_backup: bool = True
+    migrate_progress: bool = True
+
+
 class InstallJavaRequest(BaseModel):
     minecraft_version: str = Field(pattern=r"^\d+\.\d+(?:\.\d+)?$")
 
